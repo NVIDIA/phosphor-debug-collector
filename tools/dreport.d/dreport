@@ -19,7 +19,7 @@ Options:
                               Identifiers include numeric characters.
                               Default dump identifier is 0
         -t, —-type <type>     Data collection type. Valid types are
-                              "user", "core", "elog".
+                              "user", "core", "elog", "system".
                               Default type is "user" initiated.
         -p, —-path <path>     Optional contents to be included in the archive.
                               Valid paths are absolute file path or d-bus path
@@ -29,6 +29,8 @@ Options:
         -s, --size <size>     Maximum allowed size(in KB) of the archive.
                               Report will be truncated in case size exceeds
                               this limit. Default size is unlimited.
+        -a, --args <args>     Additional <key>=<value> pair argument for
+                              dump plugins.
         -v, —-verbose         Increase logging verbosity.
         -V, --version         Output version information.
         -q, —-quiet           Only log fatal errors to stderr
@@ -44,6 +46,7 @@ declare -rx TYPE_USER="user"
 declare -rx TYPE_CORE="core"
 declare -rx TYPE_ELOG="elog"
 declare -rx TYPE_CHECKSTOP="checkstop"
+declare -rx TYPE_SYSTEM="system"
 declare -rx SUMMARY_LOG="summary.log"
 declare -rx DREPORT_LOG="dreport.log"
 declare -rx TMP_DIR="/tmp"
@@ -71,6 +74,7 @@ declare -x quiet=$FALSE
 declare -x dump_size="unlimited"
 declare -x name_dir=""
 declare -x optional_path=""
+declare -a plugin_args=()
 declare -x dreport_log=""
 declare -x summary_log=""
 declare -x cur_dump_size=0
@@ -101,7 +105,8 @@ function collect_data()
             elog_id=$(basename "$optional_path")
             set_elog_pid
             ;;
-
+        $TYPE_SYSTEM)
+            ;;
         $SUMMARY_DUMP)
             #No data collection is required.
             return
@@ -122,7 +127,11 @@ function collect_data()
 
     #Executes plugins based on the type.
     for i in $plugin_path/* ; do
-       $i
+        if [ ${#plugin_args[@]} -ne 0 ]; then
+            $i ${plugin_args[@]}
+        else
+            $i
+        fi
     done
 }
 
@@ -198,7 +207,8 @@ function initialize()
     if [[ ! ($dump_type = $TYPE_USER || \
              $dump_type = $TYPE_CORE || \
              $dump_type = $TYPE_ELOG || \
-             $dump_type = $TYPE_CHECKSTOP) ]]; then
+             $dump_type = $TYPE_CHECKSTOP || \
+             $dump_type = $TYPE_SYSTEM) ]]; then
        log_error "Invalid -type, Only summary log is available"
        dump_type=$SUMMARY_DUMP
     fi
@@ -292,8 +302,8 @@ function main()
     fi
 }
 
-TEMP=`getopt -o n:d:i:t:s:p:vVqh \
-      --long name:,dir:,dumpid:,type:,size:,path:,verbose,version,quiet,help \
+TEMP=`getopt -o n:d:i:t:s:p:a:vVqh \
+      --long name:,dir:,dumpid:,type:,size:,path:,args:,verbose,version,quiet,help \
       -- "$@"`
 
 if [ $? -ne 0 ]
@@ -324,6 +334,13 @@ while [[ $# -gt 1 ]]; do
             shift 2;;
         -p|--path)
             optional_path=$2
+            shift 2;;
+        -a|--args)
+            if [[ $2 == *"="* ]]; then
+                k=$(echo $2 | cut -f1 -d=)
+                v=$(echo $2 | cut -f2 -d=)
+                plugin_args=( "${plugin_args[@]}" "$v" )
+            fi
             shift 2;;
         -v|—-verbose)
             verbose=$TRUE
