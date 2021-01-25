@@ -30,10 +30,35 @@ namespace internal
 
 void Manager::create(Type type, std::vector<std::string> fullPaths)
 {
+    // Limit dumps to max allowed entries
+    dumpMgr.phosphor::dump::bmc::Manager::limitDumpEntries();
+
     dumpMgr.phosphor::dump::bmc::Manager::captureDump(type, fullPaths);
 }
 
 } // namespace internal
+
+void Manager::limitDumpEntries()
+{
+    // Delete dumps on reaching allowed entries
+    int totalDumps = entries.size();
+    if (totalDumps < maxAllowedDumpEntries)
+    {
+        // Do nothing - Its within allowed entries
+        return;
+    }
+    // Get the oldest dumps
+    int excessDumps = totalDumps - (maxAllowedDumpEntries-1);
+    // Delete the oldest dumps
+    for (auto d = entries.begin(); d != entries.end() && excessDumps;
+            d++) {
+        auto& entry = d->second;
+        entry->delete_();
+        --excessDumps;
+    }
+
+    return;
+}
 
 sdbusplus::message::object_path
     Manager::createDump(std::map<std::string, std::string> params)
@@ -42,6 +67,8 @@ sdbusplus::message::object_path
     {
         log<level::WARNING>("BMC dump accepts no additional parameters");
     }
+    // Limit dumps to max allowed entries
+    limitDumpEntries();
     std::vector<std::string> paths;
     auto id = captureDump(Type::UserRequested, paths);
 
