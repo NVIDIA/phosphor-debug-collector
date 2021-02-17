@@ -64,6 +64,9 @@ conf_data.set('BMC_DUMP_MIN_SPACE_REQD', get_option('BMC_DUMP_MIN_SPACE_REQD'),
 conf_data.set('BMC_DUMP_TOTAL_SIZE', get_option('BMC_DUMP_TOTAL_SIZE'),
                description : 'Total size of the dump in kilo bytes'
              )
+conf_data.set('BMC_DUMP_MAX_LIMIT', get_option('BMC_DUMP_MAX_LIMIT'),
+               description : 'Total dumps to be retained on bmc'
+             )
 conf_data.set_quoted('SYSTEM_DUMP_PATH', get_option('SYSTEM_DUMP_PATH'),
                      description : 'Directory where system dumps are placed')
 conf_data.set('SYSTEM_DUMP_MAX_SIZE', get_option('SYSTEM_DUMP_MAX_SIZE'),

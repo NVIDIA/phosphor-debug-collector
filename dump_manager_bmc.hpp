@@ -40,9 +40,6 @@ static const std::map<Type, std::string> TypeMap = {
     {Type::InternalFailure, "elog"},
     {Type::Checkstop, "checkstop"}};
 
-// Max dump entries allowed
-static const uint8_t maxAllowedDumpEntries = 2;
-
 /** @class Manager
  *  @brief OpenBMC Dump  manager implementation.
  *  @details A concrete implementation for the

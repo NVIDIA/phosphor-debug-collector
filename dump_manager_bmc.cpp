@@ -40,15 +40,21 @@ void Manager::create(Type type, std::vector<std::string> fullPaths)
 
 void Manager::limitDumpEntries()
 {
+    // Delete dumps only when bmc dump max limit is configured
+    if (BMC_DUMP_MAX_LIMIT == 0)
+    {
+        // Do nothing - bmc dump max limit is not configured
+        return;
+    }
     // Delete dumps on reaching allowed entries
     int totalDumps = entries.size();
-    if (totalDumps < maxAllowedDumpEntries)
+    if (totalDumps < BMC_DUMP_MAX_LIMIT)
     {
         // Do nothing - Its within allowed entries
         return;
     }
     // Get the oldest dumps
-    int excessDumps = totalDumps - (maxAllowedDumpEntries-1);
+    int excessDumps = totalDumps - (BMC_DUMP_MAX_LIMIT-1);
     // Delete the oldest dumps
     for (auto d = entries.begin(); d != entries.end() && excessDumps;
             d++) {

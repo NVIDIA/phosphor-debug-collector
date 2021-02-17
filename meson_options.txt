@@ -83,6 +83,11 @@ option('BMC_DUMP_TOTAL_SIZE', type : 'integer',
         description : 'Total size of the dump in kilo bytes'
       )
 
+option('BMC_DUMP_MAX_LIMIT', type : 'integer',
+        value : 0,
+        description : 'Total dumps to be retained on bmc, 0 represents unlimited dumps'
+      )
+
 option('ELOG_ID_PERSIST_PATH', type : 'string',
         value : '/var/lib/phosphor-debug-collector/elogid',
         description : 'Path of file for storing elog id\'s, which have associated dumps'
