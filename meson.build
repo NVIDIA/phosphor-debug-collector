@@ -78,6 +78,9 @@ conf_data.set('SYSTEM_DUMP_MIN_SPACE_REQD', get_option('SYSTEM_DUMP_MIN_SPACE_RE
 conf_data.set('SYSTEM_DUMP_TOTAL_SIZE', get_option('SYSTEM_DUMP_TOTAL_SIZE'),
                description : 'Total size of the dump in kilo bytes'
              )
+conf_data.set('SYSTEM_DUMP_MAX_LIMIT', get_option('SYSTEM_DUMP_MAX_LIMIT'),
+               description : 'Total system dumps to be retained on bmc'
+             )
 conf_data.set_quoted('OBJ_LOGGING', '/xyz/openbmc_project/logging',
                       description : 'The log manager DBus object path'
                     )

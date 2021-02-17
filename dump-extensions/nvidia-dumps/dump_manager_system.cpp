@@ -28,15 +28,21 @@ using namespace phosphor::logging;
 
 void Manager::limitDumpEntries()
 {
+    // Delete dumps only when system dump max limit is configured
+    if (SYSTEM_DUMP_MAX_LIMIT == 0)
+    {
+        // Do nothing - system dump max limit is not configured
+        return;
+    }
     // Delete dumps on reaching allowed entries
     auto totalDumps = entries.size();
-    if (totalDumps < maxAllowedDumpEntries)
+    if (totalDumps < SYSTEM_DUMP_MAX_LIMIT)
     {
         // Do nothing - Its within allowed entries
         return;
     }
     // Get the oldest dumps
-    int excessDumps = totalDumps - (maxAllowedDumpEntries-1);
+    int excessDumps = totalDumps - (SYSTEM_DUMP_MAX_LIMIT-1);
     // Delete the oldest dumps
     for (auto d = entries.begin(); d != entries.end() && excessDumps;
             d++) {

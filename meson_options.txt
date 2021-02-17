@@ -136,3 +136,8 @@ option('SYSTEM_DUMP_TOTAL_SIZE', type : 'integer',
         value : 1024,
         description : 'Total size of the dump in kilo bytes'
       )
+
+option('SYSTEM_DUMP_MAX_LIMIT', type : 'integer',
+        value : 0,
+        description : 'Total system dumps to be retained on bmc, 0 represents unlimited dumps'
+      )
