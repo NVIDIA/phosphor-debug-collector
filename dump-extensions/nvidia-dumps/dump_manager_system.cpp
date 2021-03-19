@@ -1,8 +1,8 @@
 #include "config.h"
 
-#include "dump_manager_bmc.hpp"
+#include "dump_manager_system.hpp"
 
-#include "bmc_dump_entry.hpp"
+#include "system_dump_entry.hpp"
 #include "dump_internal.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
@@ -10,7 +10,6 @@
 #include <sys/inotify.h>
 #include <unistd.h>
 
-#include <ctime>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <regex>
@@ -19,42 +18,31 @@ namespace phosphor
 {
 namespace dump
 {
-namespace bmc
+namespace system
 {
 
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using namespace phosphor::logging;
 
-namespace internal
-{
-
-void Manager::create(Type type, std::vector<std::string> fullPaths)
-{
-    // Limit dumps to max allowed entries
-    dumpMgr.phosphor::dump::bmc::Manager::limitDumpEntries();
-
-    dumpMgr.phosphor::dump::bmc::Manager::captureDump(type, fullPaths);
-}
-
-} // namespace internal
+// TODO: Merge system dump with bmc dump to avoid code duplication.
 
 void Manager::limitDumpEntries()
 {
-    // Delete dumps only when bmc dump max limit is configured
-    if (BMC_DUMP_MAX_LIMIT == 0)
+    // Delete dumps only when system dump max limit is configured
+    if (SYSTEM_DUMP_MAX_LIMIT == 0)
     {
-        // Do nothing - bmc dump max limit is not configured
+        // Do nothing - system dump max limit is not configured
         return;
     }
     // Delete dumps on reaching allowed entries
-    int totalDumps = entries.size();
-    if (totalDumps < BMC_DUMP_MAX_LIMIT)
+    auto totalDumps = entries.size();
+    if (totalDumps < SYSTEM_DUMP_MAX_LIMIT)
     {
         // Do nothing - Its within allowed entries
         return;
     }
     // Get the oldest dumps
-    int excessDumps = totalDumps - (BMC_DUMP_MAX_LIMIT-1);
+    int excessDumps = totalDumps - (SYSTEM_DUMP_MAX_LIMIT-1);
     // Delete the oldest dumps
     for (auto d = entries.begin(); d != entries.end() && excessDumps;
             d++) {
@@ -69,14 +57,9 @@ void Manager::limitDumpEntries()
 sdbusplus::message::object_path
     Manager::createDump(std::map<std::string, std::string> params)
 {
-    if (!params.empty())
-    {
-        log<level::WARNING>("BMC dump accepts no additional parameters");
-    }
     // Limit dumps to max allowed entries
     limitDumpEntries();
-    std::vector<std::string> paths;
-    auto id = captureDump(Type::UserRequested, paths);
+    auto id = captureDump(params);
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
@@ -85,14 +68,14 @@ sdbusplus::message::object_path
     {
         std::time_t timeStamp = std::time(nullptr);
         entries.insert(std::make_pair(
-            id, std::make_unique<bmc::Entry>(
+            id, std::make_unique<system::Entry>(
                     bus, objPath.c_str(), id, timeStamp, 0, std::string(),
                     phosphor::dump::OperationStatus::InProgress, *this)));
     }
     catch (const std::invalid_argument& e)
     {
         log<level::ERR>(e.what());
-        log<level::ERR>("Error in creating dump entry",
+        log<level::ERR>("Error in creating system dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
                         entry("ID=%d", id));
         elog<InternalFailure>();
@@ -101,8 +84,7 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
-uint32_t Manager::captureDump(Type type,
-                              const std::vector<std::string>& fullPaths)
+uint32_t Manager::captureDump(std::map<std::string, std::string> params)
 {
     // Get Dump size.
     auto size = getAllowedSize();
@@ -114,18 +96,51 @@ uint32_t Manager::captureDump(Type type,
         fs::path dumpPath(dumpDir);
         auto id = std::to_string(lastEntryId + 1);
         dumpPath /= id;
+        auto sizeStr = std::to_string(size);
 
-        // get dreport type map entry
-        auto tempType = TypeMap.find(type);
+        std::string dumpType = "system";
 
-        execl("/usr/bin/dreport", "dreport", "-d", dumpPath.c_str(), "-i",
-              id.c_str(), "-s", std::to_string(size).c_str(), "-q", "-v", "-p",
-              fullPaths.empty() ? "" : fullPaths.front().c_str(), "-t",
-              tempType->second.c_str(), nullptr);
+        // Construct additional arguments from params
+        std::map<std::string, std::string>::iterator itr;
+        std::vector<std::string> addArgs;
+        for (itr = params.begin(); itr != params.end(); ++itr) {
+            addArgs.push_back(itr->first + "=" + itr->second);
+        }
+
+        // Construct dreport arguments
+        std::vector<char*> arg_v;
+        std::string fPath = "/usr/bin/dreport";
+        arg_v.push_back(&fPath[0]);
+        std::string dOption = "-d";
+        arg_v.push_back(&dOption[0]);
+        arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+        std::string iOption = "-i";
+        arg_v.push_back(&iOption[0]);
+        arg_v.push_back(const_cast<char*>(id.c_str()));
+        std::string sOption = "-s";
+        arg_v.push_back(&sOption[0]);
+        arg_v.push_back(const_cast<char*>(sizeStr.c_str()));
+        std::string qOption = "-q";
+        arg_v.push_back(&qOption[0]);
+        std::string vOption = "-v";
+        arg_v.push_back(&vOption[0]);
+        std::string tOption = "-t";
+        arg_v.push_back(&tOption[0]);
+        arg_v.push_back(const_cast<char*>(dumpType.c_str()));
+        // Add additional arguments
+        std::string aOption = "-a";
+        for(int i=0; i < (int) addArgs.size(); i++)
+        {
+            arg_v.push_back(&aOption[0]);
+            arg_v.push_back(const_cast<char*>((addArgs.at(i)).c_str()));
+        }
+        arg_v.push_back(nullptr);
+
+        execv(arg_v[0], &arg_v[0]);
 
         // dreport script execution is failed.
         auto error = errno;
-        log<level::ERR>("Error occurred during dreport function execution",
+        log<level::ERR>("System dump: Error occurred during dreport function execution",
                         entry("ERRNO=%d", error));
         elog<InternalFailure>();
     }
@@ -136,7 +151,7 @@ uint32_t Manager::captureDump(Type type,
         if (0 > rc)
         {
             // Failed to add to event loop
-            log<level::ERR>("Error occurred during the sd_event_add_child call",
+            log<level::ERR>("System dump: Error occurred during the sd_event_add_child call",
                             entry("RC=%d", rc));
             elog<InternalFailure>();
         }
@@ -144,7 +159,7 @@ uint32_t Manager::captureDump(Type type,
     else
     {
         auto error = errno;
-        log<level::ERR>("Error occurred during fork", entry("ERRNO=%d", error));
+        log<level::ERR>("System dump: Error occurred during fork", entry("ERRNO=%d", error));
         elog<InternalFailure>();
     }
 
@@ -163,7 +178,7 @@ void Manager::createEntry(const fs::path& file)
 
     if (!((std::regex_search(name, match, file_regex)) && (match.size() > 0)))
     {
-        log<level::ERR>("Invalid Dump file name",
+        log<level::ERR>("System dump: Invalid Dump file name",
                         entry("FILENAME=%s", file.filename().c_str()));
         return;
     }
@@ -177,7 +192,7 @@ void Manager::createEntry(const fs::path& file)
     auto dumpEntry = entries.find(id);
     if (dumpEntry != entries.end())
     {
-        dynamic_cast<phosphor::dump::bmc::Entry*>(dumpEntry->second.get())
+        dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())
             ->update(stoull(msString), fs::file_size(file), file);
         return;
     }
@@ -187,16 +202,16 @@ void Manager::createEntry(const fs::path& file)
 
     try
     {
-        entries.insert(std::make_pair(
-            id,
-            std::make_unique<bmc::Entry>(
+        entries.insert(
+            std::make_pair(id, std::make_unique<system::Entry>(
                 bus, objPath.c_str(), id, stoull(msString), fs::file_size(file),
                 file, phosphor::dump::OperationStatus::Completed, *this)));
+
     }
     catch (const std::invalid_argument& e)
     {
         log<level::ERR>(e.what());
-        log<level::ERR>("Error in creating dump entry",
+        log<level::ERR>("Error in creating system dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
                         entry("ID=%d", id),
                         entry("TIMESTAMP=%ull", stoull(msString)),
@@ -224,7 +239,7 @@ void Manager::watchCallback(const UserMap& fileInfo)
             auto watchObj = std::make_unique<Watch>(
                 eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE, EPOLLIN, i.first,
                 std::bind(
-                    std::mem_fn(&phosphor::dump::bmc::Manager::watchCallback),
+                    std::mem_fn(&phosphor::dump::system::Manager::watchCallback),
                     this, std::placeholders::_1));
 
             childWatchMap.emplace(i.first, std::move(watchObj));
@@ -290,21 +305,21 @@ size_t Manager::getAllowedSize()
     // Set the Dump size to Maximum  if the free space is greater than
     // Dump max size otherwise return the available size.
 
-    size = (size > BMC_DUMP_TOTAL_SIZE ? 0 : BMC_DUMP_TOTAL_SIZE - size);
+    size = (size > SYSTEM_DUMP_TOTAL_SIZE ? 0 : SYSTEM_DUMP_TOTAL_SIZE - size);
 
-    if (size < BMC_DUMP_MIN_SPACE_REQD)
+    if (size < SYSTEM_DUMP_MIN_SPACE_REQD)
     {
         // Reached to maximum limit
         elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
     }
-    if (size > BMC_DUMP_MAX_SIZE)
+    if (size > SYSTEM_DUMP_MAX_SIZE)
     {
-        size = BMC_DUMP_MAX_SIZE;
+        size = SYSTEM_DUMP_MAX_SIZE;
     }
 
     return size;
 }
 
-} // namespace bmc
+} // namespace system
 } // namespace dump
 } // namespace phosphor

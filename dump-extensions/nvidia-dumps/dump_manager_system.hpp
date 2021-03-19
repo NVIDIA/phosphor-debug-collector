@@ -3,8 +3,10 @@
 #include "dump_manager.hpp"
 #include "dump_utils.hpp"
 #include "watch.hpp"
-#include "xyz/openbmc_project/Dump/Internal/Create/server.hpp"
+#include "xyz/openbmc_project/Dump/NewDump/server.hpp"
 
+#include <sdbusplus/bus.hpp>
+#include <sdbusplus/server/object.hpp>
 #include <experimental/filesystem>
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
 
@@ -12,44 +14,26 @@ namespace phosphor
 {
 namespace dump
 {
-namespace bmc
+namespace system
 {
-namespace internal
-{
-
-class Manager;
-
-} // namespace internal
 
 using CreateIface = sdbusplus::server::object::object<
     sdbusplus::xyz::openbmc_project::Dump::server::Create>;
 
 using UserMap = phosphor::dump::inotify::UserMap;
 
-using Type =
-    sdbusplus::xyz::openbmc_project::Dump::Internal::server::Create::Type;
-
 namespace fs = std::experimental::filesystem;
 
 using Watch = phosphor::dump::inotify::Watch;
 
-// Type to dreport type  string map
-static const std::map<Type, std::string> TypeMap = {
-    {Type::ApplicationCored, "core"},
-    {Type::UserRequested, "user"},
-    {Type::InternalFailure, "elog"},
-    {Type::Checkstop, "checkstop"}};
-
 /** @class Manager
- *  @brief OpenBMC Dump  manager implementation.
+ *  @brief OpenBMC Dump manager implementation.
  *  @details A concrete implementation for the
  *  xyz.openbmc_project.Dump.Create DBus API
  */
 class Manager : virtual public CreateIface,
                 virtual public phosphor::dump::Manager
 {
-    friend class internal::Manager;
-
   public:
     Manager() = delete;
     Manager(const Manager&) = default;
@@ -73,7 +57,7 @@ class Manager : virtual public CreateIface,
         dumpWatch(
             eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE | IN_CREATE, EPOLLIN,
             filePath,
-            std::bind(std::mem_fn(&phosphor::dump::bmc::Manager::watchCallback),
+            std::bind(std::mem_fn(&phosphor::dump::system::Manager::watchCallback),
                       this, std::placeholders::_1)),
         dumpDir(filePath)
     {
@@ -90,7 +74,7 @@ class Manager : virtual public CreateIface,
     void restore() override;
 
     /** @brief Implementation for CreateDump
-     *  Method to create a BMC dump entry when user requests for a new BMC dump
+     *  Method to create system dump.
      *
      *  @return object_path - The object path of the new dump entry.
      */
@@ -103,13 +87,11 @@ class Manager : virtual public CreateIface,
      */
     void createEntry(const fs::path& fullPath);
 
-    /**  @brief Capture BMC Dump based on the Dump type.
-     *  @param[in] type - Type of the Dump.
-     *  @param[in] fullPaths - List of absolute paths to the files
-     *             to be included as part of Dump package.
+    /** @brief Capture System Dump.
+     *  @param[in] parama - Additional arguments for system dump.
      *  @return id - The Dump entry id number.
      */
-    uint32_t captureDump(Type type, const std::vector<std::string>& fullPaths);
+    uint32_t captureDump(std::map<std::string, std::string> params);
 
     /** @brief sd_event_add_child callback
      *
@@ -156,9 +138,8 @@ class Manager : virtual public CreateIface,
      *         entries.
      */
     void limitDumpEntries();
-
 };
 
-} // namespace bmc
+} // namespace system
 } // namespace dump
 } // namespace phosphor

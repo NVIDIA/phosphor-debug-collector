@@ -63,6 +63,11 @@ option('BMC_DUMP_PATH', type : 'string',
         description : 'Directory where bmc dumps are placed'
       )
 
+option('SYSTEM_DUMP_PATH', type : 'string',
+        value : '/var/lib/phosphor-debug-collector/system/dumps/',
+        description : 'Directory where system dumps are placed'
+      )
+
 option('BMC_DUMP_MAX_SIZE', type : 'integer',
         value : 200,
         description : 'Maximum size of one bmc dump in kilo bytes'
@@ -76,6 +81,11 @@ option('BMC_DUMP_MIN_SPACE_REQD', type : 'integer',
 option('BMC_DUMP_TOTAL_SIZE', type : 'integer',
         value : 1024,
         description : 'Total size of the dump in kilo bytes'
+      )
+
+option('BMC_DUMP_MAX_LIMIT', type : 'integer',
+        value : 0,
+        description : 'Total dumps to be retained on bmc, 0 represents unlimited dumps'
       )
 
 option('ELOG_ID_PERSIST_PATH', type : 'string',
@@ -100,4 +110,34 @@ option('host-transport', type : 'string',
 option('openpower-dumps-extension', type: 'feature',
         value : 'disabled',
         description : 'Enable Open Power specific dumps'
+      )
+
+option('nvidia-dumps-extension', type: 'feature',
+        value : 'disabled',
+        description : 'Enable Nvidia system specific dumps'
+      )
+
+option('SYSTEM_DUMP_PATH', type : 'string',
+        value : '/var/lib/phosphor-debug-collector/system/dumps/',
+        description : 'Directory where system dumps are placed'
+      )
+
+option('SYSTEM_DUMP_MAX_SIZE', type : 'integer',
+        value : 500,
+        description : 'Maximum size of one system dump in kilo bytes'
+      )
+
+option('SYSTEM_DUMP_MIN_SPACE_REQD', type : 'integer',
+        value : 50,
+        description : 'Minimum space required for one system dump in kilo bytes'
+      )
+
+option('SYSTEM_DUMP_TOTAL_SIZE', type : 'integer',
+        value : 1024,
+        description : 'Total size of the dump in kilo bytes'
+      )
+
+option('SYSTEM_DUMP_MAX_LIMIT', type : 'integer',
+        value : 0,
+        description : 'Total system dumps to be retained on bmc, 0 represents unlimited dumps'
       )

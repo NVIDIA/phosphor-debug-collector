@@ -135,10 +135,6 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
     using PathOpen = xyz::openbmc_project::Common::File::Open::PATH;
     using ErrnoWrite = xyz::openbmc_project::Common::File::Write::ERRNO;
     using PathWrite = xyz::openbmc_project::Common::File::Write::PATH;
-    // open a dump file for a transfer.
-    fs::path dumpPath(BMC_DUMP_PATH);
-    dumpPath /= std::to_string(dumpId);
-    dumpPath /= file.filename();
 
     try
     {
@@ -174,15 +170,15 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
                 throw std::runtime_error(msg);
             }
 
-            std::ifstream infile{dumpPath, std::ios::in | std::ios::binary};
+            std::ifstream infile{file, std::ios::in | std::ios::binary};
             if (!infile.good())
             {
                 // Unable to open the dump file
                 log<level::ERR>("Failed to open the dump from file ",
                                 entry("ERR=%d", errno),
-                                entry("DUMPFILE=%s", dumpPath.c_str()),
+                                entry("DUMPFILE=%s", file.c_str()),
                                 entry("DUMP ID=%d", dumpId));
-                elog<Open>(ErrnoOpen(errno), PathOpen(dumpPath.c_str()));
+                elog<Open>(ErrnoOpen(errno), PathOpen(file.c_str()));
             }
 
             infile.exceptions(std::ifstream::failbit | std::ifstream::badbit |
@@ -211,9 +207,9 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
         std::remove(writePath.c_str());
         auto err = errno;
         log<level::ERR>("Failed to open", entry("ERR=%s", oe.what()),
-                        entry("OPENINTERFACE=%s", dumpPath.c_str()),
+                        entry("OPENINTERFACE=%s", file.c_str()),
                         entry("DUMP ID=%d", dumpId));
-        elog<Open>(ErrnoOpen(err), PathOpen(dumpPath.c_str()));
+        elog<Open>(ErrnoOpen(err), PathOpen(file.c_str()));
     }
     catch (const std::exception& e)
     {
