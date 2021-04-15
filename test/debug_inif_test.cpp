@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-#include <dump_serialize.hpp>
-
 #include <cstdlib>
+#include <dump_serialize.hpp>
 #include <exception>
 #include <filesystem>
 #include <set>
@@ -15,7 +14,8 @@ class TestDumpSerial : public ::testing::Test
 {
   public:
     TestDumpSerial()
-    {}
+    {
+    }
 
     void SetUp()
     {

@@ -18,9 +18,9 @@ void Entry::delete_()
     // Delete Dump file from Permanent location
     try
     {
-        std::filesystem::remove_all(file.parent_path());
+        fs::remove_all(file.parent_path());
     }
-    catch (std::filesystem::filesystem_error& e)
+    catch (fs::filesystem_error& e)
     {
         // Log Error message and continue
         log<level::ERR>(e.what());

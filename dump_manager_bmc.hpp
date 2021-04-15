@@ -5,9 +5,8 @@
 #include "watch.hpp"
 #include "xyz/openbmc_project/Dump/Internal/Create/server.hpp"
 
+#include <experimental/filesystem>
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
-
-#include <filesystem>
 
 namespace phosphor
 {
@@ -30,6 +29,8 @@ using UserMap = phosphor::dump::inotify::UserMap;
 using Type =
     sdbusplus::xyz::openbmc_project::Dump::Internal::server::Create::Type;
 
+namespace fs = std::experimental::filesystem;
+
 using Watch = phosphor::dump::inotify::Watch;
 
 // Type to dreport type  string map
@@ -44,9 +45,8 @@ static const std::map<Type, std::string> TypeMap = {
  *  @details A concrete implementation for the
  *  xyz.openbmc_project.Dump.Create DBus API
  */
-class Manager :
-    virtual public CreateIface,
-    virtual public phosphor::dump::Manager
+class Manager : virtual public CreateIface,
+                virtual public phosphor::dump::Manager
 {
     friend class internal::Manager;
 
@@ -76,7 +76,8 @@ class Manager :
             std::bind(std::mem_fn(&phosphor::dump::bmc::Manager::watchCallback),
                       this, std::placeholders::_1)),
         dumpDir(filePath)
-    {}
+    {
+    }
 
     /** @brief Implementation of dump watch call back
      *  @param [in] fileInfo - map of file info  path:event
@@ -100,7 +101,7 @@ class Manager :
     /** @brief Create Dump entry d-bus object
      *  @param[in] fullPath - Full path of the Dump file name
      */
-    void createEntry(const std::filesystem::path& fullPath);
+    void createEntry(const fs::path& fullPath);
 
     /**  @brief Capture BMC Dump based on the Dump type.
      *  @param[in] type - Type of the Dump.
@@ -128,7 +129,7 @@ class Manager :
      *        watch map and associated entry from the map.
      *        @param[in] path - unique identifier of the map
      */
-    void removeWatch(const std::filesystem::path& path);
+    void removeWatch(const fs::path& path);
 
     /** @brief Calculate per dump allowed size based on the available
      *        size in the dump location.
@@ -148,7 +149,6 @@ class Manager :
     /** @brief Child directory path and its associated watch object map
      *        [path:watch object]
      */
-<<<<<<< HEAD
     std::map<fs::path, std::unique_ptr<Watch>> childWatchMap;
 
     /** @brief Erase BMC dump entry and delete respective dump file
@@ -157,9 +157,6 @@ class Manager :
      */
     void limitDumpEntries();
 
-=======
-    std::map<std::filesystem::path, std::unique_ptr<Watch>> childWatchMap;
->>>>>>> origin/master
 };
 
 } // namespace bmc

@@ -3,10 +3,9 @@
 #include <systemd/sd-event.h>
 #include <unistd.h>
 
+#include <memory>
 #include <sdbusplus/bus.hpp>
 #include <xyz/openbmc_project/State/Boot/Progress/server.hpp>
-
-#include <memory>
 
 namespace phosphor
 {
@@ -48,7 +47,8 @@ struct CustomFd
      *  @param[in] fd - File descriptor
      */
     CustomFd(int fd) : fd(fd)
-    {}
+    {
+    }
 
     ~CustomFd()
     {

@@ -7,8 +7,6 @@
 #include <cereal/access.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server.hpp>
-
-#include <filesystem>
 #include <set>
 
 namespace phosphor
@@ -80,7 +78,7 @@ class Watch
      */
     inline EId getEid(const std::string& objectPath)
     {
-        std::filesystem::path path(objectPath);
+        fs::path path(objectPath);
         return std::stoul(path.filename());
     }
 

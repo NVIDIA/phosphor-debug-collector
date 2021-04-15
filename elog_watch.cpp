@@ -8,10 +8,9 @@
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
 #include <cereal/cereal.hpp>
+#include <fstream>
 #include <phosphor-logging/elog.hpp>
 #include <sdbusplus/exception.hpp>
-
-#include <fstream>
 
 // Register class version with Cereal
 CEREAL_CLASS_VERSION(phosphor::dump::elog::Watch, CLASS_VERSION)
@@ -46,8 +45,8 @@ Watch::Watch(sdbusplus::bus::bus& bus, IMgr& iMgr) :
                        std::placeholders::_1))
 {
 
-    std::filesystem::path file(ELOG_ID_PERSIST_PATH);
-    if (std::filesystem::exists(file))
+    fs::path file(ELOG_ID_PERSIST_PATH);
+    if (fs::exists(file))
     {
         if (!deserialize(ELOG_ID_PERSIST_PATH, elogList))
         {
