@@ -8,11 +8,12 @@
 #include <unistd.h>
 
 #include <dump_utils.hpp>
-#include <fstream>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <xyz/openbmc_project/Common/File/error.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
+
+#include <fstream>
 
 namespace phosphor
 {
@@ -128,13 +129,21 @@ int socketInit(const std::string& sockPath)
     return unixSocket;
 }
 
-void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
+void requestOffload(std::filesystem::path file, uint32_t dumpId,
+                    std::string writePath)
 {
     using namespace sdbusplus::xyz::openbmc_project::Common::File::Error;
     using ErrnoOpen = xyz::openbmc_project::Common::File::Open::ERRNO;
     using PathOpen = xyz::openbmc_project::Common::File::Open::PATH;
     using ErrnoWrite = xyz::openbmc_project::Common::File::Write::ERRNO;
     using PathWrite = xyz::openbmc_project::Common::File::Write::PATH;
+<<<<<<< HEAD
+=======
+    // open a dump file for a transfer.
+    std::filesystem::path dumpPath(BMC_DUMP_PATH);
+    dumpPath /= std::to_string(dumpId);
+    dumpPath /= file.filename();
+>>>>>>> origin/master
 
     try
     {
