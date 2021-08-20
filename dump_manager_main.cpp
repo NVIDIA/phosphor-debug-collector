@@ -8,7 +8,13 @@
 #include "watch.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 
+<<<<<<< HEAD
 #include <memory>
+||||||| 0af74a5
+=======
+#include <fmt/core.h>
+
+>>>>>>> origin/master
 #include <phosphor-logging/elog-errors.hpp>
 #include <sdbusplus/bus.hpp>
 #include <vector>
@@ -24,8 +30,10 @@ int main()
     auto rc = sd_event_default(&event);
     if (rc < 0)
     {
-        log<level::ERR>("Error occurred during the sd_event_default",
-                        entry("RC=%d", rc));
+        log<level::ERR>(
+            fmt::format("Error occurred during the sd_event_default, rc({})",
+                        rc)
+                .c_str());
         report<InternalFailure>();
         return rc;
     }
@@ -36,22 +44,25 @@ int main()
     sigset_t mask;
     if (sigemptyset(&mask) < 0)
     {
-        log<level::ERR>("Unable to initialize signal set",
-                        entry("ERRNO=%d", errno));
+        log<level::ERR>(
+            fmt::format("Unable to initialize signal set, errno({})", errno)
+                .c_str());
         return EXIT_FAILURE;
     }
 
     if (sigaddset(&mask, SIGCHLD) < 0)
     {
-        log<level::ERR>("Unable to add signal to signal set",
-                        entry("ERRNO=%d", errno));
+        log<level::ERR>(
+            fmt::format("Unable to add signal to signal set, errno({})", errno)
+                .c_str());
         return EXIT_FAILURE;
     }
 
     // Block SIGCHLD first, so that the event loop can handle it
     if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0)
     {
-        log<level::ERR>("Unable to block signal", entry("ERRNO=%d", errno));
+        log<level::ERR>(
+            fmt::format("Unable to block signal, errno({})", errno).c_str());
         return EXIT_FAILURE;
     }
 
@@ -85,8 +96,10 @@ int main()
         auto rc = sd_event_loop(eventP.get());
         if (rc < 0)
         {
-            log<level::ERR>("Error occurred during the sd_event_loop",
-                            entry("RC=%d", rc));
+            log<level::ERR>(
+                fmt::format("Error occurred during the sd_event_loop, rc({})",
+                            rc)
+                    .c_str());
             elog<InternalFailure>();
         }
     }

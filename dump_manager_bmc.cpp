@@ -7,12 +7,22 @@
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
+#include <fmt/core.h>
 #include <sys/inotify.h>
 #include <unistd.h>
 
 #include <ctime>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
+<<<<<<< HEAD
+||||||| 0af74a5
+
+#include <ctime>
+=======
+
+#include <cmath>
+#include <ctime>
+>>>>>>> origin/master
 #include <regex>
 
 namespace phosphor
@@ -67,7 +77,7 @@ void Manager::limitDumpEntries()
 }
 
 sdbusplus::message::object_path
-    Manager::createDump(std::map<std::string, std::string> params)
+    Manager::createDump(phosphor::dump::DumpCreateParams params)
 {
     if (!params.empty())
     {
@@ -91,10 +101,10 @@ sdbusplus::message::object_path
     }
     catch (const std::invalid_argument& e)
     {
-        log<level::ERR>(e.what());
-        log<level::ERR>("Error in creating dump entry",
-                        entry("OBJECTPATH=%s", objPath.c_str()),
-                        entry("ID=%d", id));
+        log<level::ERR>(fmt::format("Error in creating dump entry, "
+                                    "errormsg({}), OBJECTPATH({}), ID({})",
+                                    e.what(), objPath.c_str(), id)
+                            .c_str());
         elog<InternalFailure>();
     }
 
@@ -125,8 +135,11 @@ uint32_t Manager::captureDump(Type type,
 
         // dreport script execution is failed.
         auto error = errno;
-        log<level::ERR>("Error occurred during dreport function execution",
-                        entry("ERRNO=%d", error));
+        log<level::ERR>(
+            fmt::format(
+                "Error occurred during dreport function execution, errno({})",
+                error)
+                .c_str());
         elog<InternalFailure>();
     }
     else if (pid > 0)
@@ -136,15 +149,20 @@ uint32_t Manager::captureDump(Type type,
         if (0 > rc)
         {
             // Failed to add to event loop
-            log<level::ERR>("Error occurred during the sd_event_add_child call",
-                            entry("RC=%d", rc));
+            log<level::ERR>(
+                fmt::format(
+                    "Error occurred during the sd_event_add_child call, rc({})",
+                    rc)
+                    .c_str());
             elog<InternalFailure>();
         }
     }
     else
     {
         auto error = errno;
-        log<level::ERR>("Error occurred during fork", entry("ERRNO=%d", error));
+        log<level::ERR>(
+            fmt::format("Error occurred during fork, errno({})", error)
+                .c_str());
         elog<InternalFailure>();
     }
 
@@ -163,8 +181,9 @@ void Manager::createEntry(const fs::path& file)
 
     if (!((std::regex_search(name, match, file_regex)) && (match.size() > 0)))
     {
-        log<level::ERR>("Invalid Dump file name",
-                        entry("FILENAME=%s", file.filename().c_str()));
+        log<level::ERR>(fmt::format("Invalid Dump file name, FILENAME({})",
+                                    file.filename().c_str())
+                            .c_str());
         return;
     }
 
@@ -195,6 +214,7 @@ void Manager::createEntry(const fs::path& file)
     }
     catch (const std::invalid_argument& e)
     {
+<<<<<<< HEAD
         log<level::ERR>(e.what());
         log<level::ERR>("Error in creating dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
@@ -202,6 +222,23 @@ void Manager::createEntry(const fs::path& file)
                         entry("TIMESTAMP=%ull", stoull(msString)),
                         entry("SIZE=%d", fs::file_size(file)),
                         entry("FILENAME=%s", file.c_str()));
+||||||| 0af74a5
+        log<level::ERR>(e.what());
+        log<level::ERR>("Error in creating dump entry",
+                        entry("OBJECTPATH=%s", objPath.c_str()),
+                        entry("ID=%d", id),
+                        entry("TIMESTAMP=%ull", stoull(msString)),
+                        entry("SIZE=%d", std::filesystem::file_size(file)),
+                        entry("FILENAME=%s", file.c_str()));
+=======
+        log<level::ERR>(
+            fmt::format(
+                "Error in creating dump entry, errormsg({}), OBJECTPATH({}), "
+                "ID({}), TIMESTAMP({}), SIZE({}), FILENAME({})",
+                e.what(), objPath.c_str(), id, stoull(msString),
+                std::filesystem::file_size(file), file.filename().c_str())
+                .c_str());
+>>>>>>> origin/master
         return;
     }
 }
@@ -280,12 +317,15 @@ size_t Manager::getAllowedSize()
     {
         if (!fs::is_directory(p))
         {
+<<<<<<< HEAD
             size += fs::file_size(p);
+||||||| 0af74a5
+            size += std::filesystem::file_size(p);
+=======
+            size += std::ceil(std::filesystem::file_size(p) / 1024.0);
+>>>>>>> origin/master
         }
     }
-
-    // Convert size into KB
-    size = size / 1024;
 
     // Set the Dump size to Maximum  if the free space is greater than
     // Dump max size otherwise return the available size.

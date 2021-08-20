@@ -38,7 +38,8 @@ static const std::map<Type, std::string> TypeMap = {
     {Type::ApplicationCored, "core"},
     {Type::UserRequested, "user"},
     {Type::InternalFailure, "elog"},
-    {Type::Checkstop, "checkstop"}};
+    {Type::Checkstop, "checkstop"},
+    {Type::Ramoops, "ramoops"}};
 
 /** @class Manager
  *  @brief OpenBMC Dump  manager implementation.
@@ -95,7 +96,7 @@ class Manager : virtual public CreateIface,
      *  @return object_path - The object path of the new dump entry.
      */
     sdbusplus::message::object_path
-        createDump(std::map<std::string, std::string> params) override;
+        createDump(phosphor::dump::DumpCreateParams params) override;
 
   private:
     /** @brief Create Dump entry d-bus object

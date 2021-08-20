@@ -46,7 +46,12 @@ declare -rx TYPE_USER="user"
 declare -rx TYPE_CORE="core"
 declare -rx TYPE_ELOG="elog"
 declare -rx TYPE_CHECKSTOP="checkstop"
+<<<<<<< HEAD
 declare -rx TYPE_SYSTEM="system"
+||||||| 0af74a5
+=======
+declare -rx TYPE_RAMOOPS="ramoops"
+>>>>>>> origin/master
 declare -rx SUMMARY_LOG="summary.log"
 declare -rx DREPORT_LOG="dreport.log"
 declare -rx TMP_DIR="/tmp"
@@ -94,6 +99,9 @@ function collect_data()
         $TYPE_CORE)
             log_summary "Core: $optional_path"
             set_core_pid
+            ;;
+        $TYPE_RAMOOPS)
+            log_summary "Ramoops: $optional_path"
             ;;
         $TYPE_ELOG)
             log_summary "ELOG: $optional_path"
@@ -207,8 +215,15 @@ function initialize()
     if [[ ! ($dump_type = $TYPE_USER || \
              $dump_type = $TYPE_CORE || \
              $dump_type = $TYPE_ELOG || \
+<<<<<<< HEAD
              $dump_type = $TYPE_CHECKSTOP || \
              $dump_type = $TYPE_SYSTEM) ]]; then
+||||||| 0af74a5
+             $dump_type = $TYPE_CHECKSTOP) ]]; then
+=======
+             $dump_type = $TYPE_RAMOOPS || \
+             $dump_type = $TYPE_CHECKSTOP) ]]; then
+>>>>>>> origin/master
        log_error "Invalid -type, Only summary log is available"
        dump_type=$SUMMARY_DUMP
     fi

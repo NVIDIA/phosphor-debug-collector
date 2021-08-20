@@ -2,7 +2,13 @@
 
 #include "core_manager.hpp"
 
+<<<<<<< HEAD
 #include <experimental/filesystem>
+||||||| 0af74a5
+=======
+#include <fmt/core.h>
+
+>>>>>>> origin/master
 #include <phosphor-logging/log.hpp>
 #include <regex>
 #include <sdbusplus/exception.hpp>
@@ -62,23 +68,17 @@ void Manager::createHelper(const vector<string>& files)
                                     MAPPER_INTERFACE, "GetObject");
     mapper.append(OBJ_INTERNAL, vector<string>({IFACE_INTERNAL}));
 
-    auto mapperResponseMsg = b.call(mapper);
-    if (mapperResponseMsg.is_method_error())
-    {
-        log<level::ERR>("Error in mapper call");
-        return;
-    }
-
     map<string, vector<string>> mapperResponse;
     try
     {
+        auto mapperResponseMsg = b.call(mapper);
         mapperResponseMsg.read(mapperResponse);
     }
     catch (const sdbusplus::exception::SdBusError& e)
     {
         log<level::ERR>(
-            "Failed to parse dump create message", entry("ERROR=%s", e.what()),
-            entry("REPLY_SIG=%s", mapperResponseMsg.get_signature()));
+            fmt::format("Failed to GetObject on Dump.Internal: {}", e.what())
+                .c_str());
         return;
     }
     if (mapperResponse.empty())
@@ -91,7 +91,15 @@ void Manager::createHelper(const vector<string>& files)
     auto m =
         b.new_method_call(host.c_str(), OBJ_INTERNAL, IFACE_INTERNAL, "Create");
     m.append(APPLICATION_CORED, files);
-    b.call_noreply(m);
+    try
+    {
+        b.call_noreply(m);
+    }
+    catch (const sdbusplus::exception::SdBusError& e)
+    {
+        log<level::ERR>(
+            fmt::format("Failed to create dump: {}", e.what()).c_str());
+    }
 }
 
 } // namespace core
