@@ -38,18 +38,10 @@ bool deserialize(const fs::path& path, ElogList& list)
     }
     catch (cereal::Exception& e)
     {
-<<<<<<< HEAD
-        log<level::ERR>(e.what());
-        fs::remove(path);
-||||||| 0af74a5
-        log<level::ERR>(e.what());
-        std::filesystem::remove(path);
-=======
         log<level::ERR>(
             fmt::format("Failed to deserialize, errormsg({})", e.what())
                 .c_str());
         std::filesystem::remove(path);
->>>>>>> origin/master
         return false;
     }
 }

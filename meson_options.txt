@@ -41,20 +41,16 @@ option('BMC_DUMP_PATH', type : 'string',
         description : 'Directory where bmc dumps are placed'
       )
 
-<<<<<<< HEAD
-option('SYSTEM_DUMP_PATH', type : 'string',
-        value : '/var/lib/phosphor-debug-collector/system/dumps/',
-        description : 'Directory where system dumps are placed'
-      )
-
-||||||| 0af74a5
-=======
 option('SYSTEMD_PSTORE_PATH', type : 'string',
         value : '/var/lib/systemd/pstore/',
         description : 'Path to the systemd pstore directory'
 )
 
->>>>>>> origin/master
+option('SYSTEM_DUMP_PATH', type : 'string',
+        value : '/var/lib/phosphor-debug-collector/system/dumps/',
+        description : 'Directory where system dumps are placed'
+)
+
 option('BMC_DUMP_MAX_SIZE', type : 'integer',
         value : 200,
         description : 'Maximum size of one bmc dump in kilo bytes'
@@ -98,7 +94,6 @@ option('openpower-dumps-extension', type: 'feature',
         value : 'disabled',
         description : 'Enable Open Power specific dumps'
       )
-<<<<<<< HEAD
 
 option('nvidia-dumps-extension', type: 'feature',
         value : 'disabled',
@@ -129,8 +124,6 @@ option('SYSTEM_DUMP_MAX_LIMIT', type : 'integer',
         value : 0,
         description : 'Total system dumps to be retained on bmc, 0 represents unlimited dumps'
       )
-||||||| 0af74a5
-=======
 
 # Configurations for openpower-dump extension
 
@@ -157,4 +150,3 @@ option('RESOURCE_DUMP_OBJ_ENTRY', type : 'string',
         value : '/xyz/openbmc_project/dump/resource/entry',
         description : 'The resource dump entry D-Bus object path'
       )
->>>>>>> origin/master

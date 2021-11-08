@@ -7,18 +7,12 @@
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
 
-<<<<<<< HEAD
-||||||| 0af74a5
-#include <chrono>
-
-=======
 #include <chrono>
 
 #ifndef SDBUSPP_NEW_CAMELCASE
 #define vspString vSPString
 #endif
 
->>>>>>> origin/master
 namespace openpower
 {
 namespace dump

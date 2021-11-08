@@ -14,15 +14,9 @@
 #include <ctime>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
-<<<<<<< HEAD
-||||||| 0af74a5
-
-#include <ctime>
-=======
 
 #include <cmath>
 #include <ctime>
->>>>>>> origin/master
 #include <regex>
 
 namespace phosphor
@@ -214,23 +208,6 @@ void Manager::createEntry(const fs::path& file)
     }
     catch (const std::invalid_argument& e)
     {
-<<<<<<< HEAD
-        log<level::ERR>(e.what());
-        log<level::ERR>("Error in creating dump entry",
-                        entry("OBJECTPATH=%s", objPath.c_str()),
-                        entry("ID=%d", id),
-                        entry("TIMESTAMP=%ull", stoull(msString)),
-                        entry("SIZE=%d", fs::file_size(file)),
-                        entry("FILENAME=%s", file.c_str()));
-||||||| 0af74a5
-        log<level::ERR>(e.what());
-        log<level::ERR>("Error in creating dump entry",
-                        entry("OBJECTPATH=%s", objPath.c_str()),
-                        entry("ID=%d", id),
-                        entry("TIMESTAMP=%ull", stoull(msString)),
-                        entry("SIZE=%d", std::filesystem::file_size(file)),
-                        entry("FILENAME=%s", file.c_str()));
-=======
         log<level::ERR>(
             fmt::format(
                 "Error in creating dump entry, errormsg({}), OBJECTPATH({}), "
@@ -238,7 +215,6 @@ void Manager::createEntry(const fs::path& file)
                 e.what(), objPath.c_str(), id, stoull(msString),
                 std::filesystem::file_size(file), file.filename().c_str())
                 .c_str());
->>>>>>> origin/master
         return;
     }
 }
@@ -317,13 +293,7 @@ size_t Manager::getAllowedSize()
     {
         if (!fs::is_directory(p))
         {
-<<<<<<< HEAD
-            size += fs::file_size(p);
-||||||| 0af74a5
-            size += std::filesystem::file_size(p);
-=======
             size += std::ceil(std::filesystem::file_size(p) / 1024.0);
->>>>>>> origin/master
         }
     }
 

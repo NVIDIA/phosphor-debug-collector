@@ -8,13 +8,8 @@
 #include "watch.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 
-<<<<<<< HEAD
-#include <memory>
-||||||| 0af74a5
-=======
 #include <fmt/core.h>
 
->>>>>>> origin/master
 #include <phosphor-logging/elog-errors.hpp>
 #include <sdbusplus/bus.hpp>
 #include <vector>

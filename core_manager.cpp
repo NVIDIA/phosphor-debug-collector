@@ -2,13 +2,8 @@
 
 #include "core_manager.hpp"
 
-<<<<<<< HEAD
-#include <experimental/filesystem>
-||||||| 0af74a5
-=======
 #include <fmt/core.h>
 
->>>>>>> origin/master
 #include <phosphor-logging/log.hpp>
 #include <regex>
 #include <sdbusplus/exception.hpp>

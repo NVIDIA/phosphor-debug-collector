@@ -186,26 +186,12 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
             if (!infile.good())
             {
                 // Unable to open the dump file
-<<<<<<< HEAD
-                log<level::ERR>("Failed to open the dump from file ",
-                                entry("ERR=%d", errno),
-                                entry("DUMPFILE=%s", file.c_str()),
-                                entry("DUMP ID=%d", dumpId));
-                elog<Open>(ErrnoOpen(errno), PathOpen(file.c_str()));
-||||||| 0af74a5
-                log<level::ERR>("Failed to open the dump from file ",
-                                entry("ERR=%d", errno),
-                                entry("DUMPFILE=%s", dumpPath.c_str()),
-                                entry("DUMP ID=%d", dumpId));
-                elog<Open>(ErrnoOpen(errno), PathOpen(dumpPath.c_str()));
-=======
                 log<level::ERR>(
                     fmt::format("Failed to open the dump from file, errno({}), "
                                 "DUMPFILE({}), DUMP_ID({})",
                                 errno, file.c_str(), dumpId)
                         .c_str());
                 elog<Open>(ErrnoOpen(errno), PathOpen(file.c_str()));
->>>>>>> origin/master
             }
 
             infile.exceptions(std::ifstream::failbit | std::ifstream::badbit |
@@ -234,24 +220,12 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
     {
         std::remove(writePath.c_str());
         auto err = errno;
-<<<<<<< HEAD
-        log<level::ERR>("Failed to open", entry("ERR=%s", oe.what()),
-                        entry("OPENINTERFACE=%s", file.c_str()),
-                        entry("DUMP ID=%d", dumpId));
-        elog<Open>(ErrnoOpen(err), PathOpen(file.c_str()));
-||||||| 0af74a5
-        log<level::ERR>("Failed to open", entry("ERR=%s", oe.what()),
-                        entry("OPENINTERFACE=%s", dumpPath.c_str()),
-                        entry("DUMP ID=%d", dumpId));
-        elog<Open>(ErrnoOpen(err), PathOpen(dumpPath.c_str()));
-=======
         log<level::ERR>(
             fmt::format(
                 "Failed to open, errormsg({}), OPENINTERFACE({}), DUMP_ID({})",
                 oe.what(), file.c_str(), dumpId)
                 .c_str());
         elog<Open>(ErrnoOpen(err), PathOpen(file.c_str()));
->>>>>>> origin/master
     }
     catch (const std::exception& e)
     {
