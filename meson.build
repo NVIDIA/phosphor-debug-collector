@@ -2,8 +2,9 @@
 
 project('phosphor-debug-collector',
         'cpp',
+        meson_version: '>= 0.57.0',
         default_options: [
-                          'cpp_std=c++17',
+                          'cpp_std=c++20',
                           'warning_level=3',
                           'werror=true'
                          ],
@@ -11,9 +12,10 @@ project('phosphor-debug-collector',
         license: 'Apache-2.0'
        )
 
+cpp = meson.get_compiler('cpp')
+
 # Checking dependency external library
 
-cppfs = meson.get_compiler('cpp').find_library('stdc++fs')
 libsystemd = dependency('libsystemd', version : '>=221')
 
 sdbusplus_dep = dependency('sdbusplus', required: false)
@@ -54,6 +56,30 @@ if not fmt_dep.found()
     required: false)
   assert(fmt_proj.found(), 'fmtlib is required')
   fmt_dep = fmt_proj.dependency('fmt')
+endif
+
+# Get Cereal dependency.
+cereal_dep = dependency('cereal', required: false)
+has_cereal = cpp.has_header_symbol(
+    'cereal/cereal.hpp',
+    'cereal::specialize',
+    dependencies: cereal_dep,
+    required: false)
+if not has_cereal
+    cereal_opts = import('cmake').subproject_options()
+    cereal_opts.add_cmake_defines({'BUILD_TESTS': 'OFF'})
+    cereal_proj = import('cmake').subproject(
+        'cereal',
+        options: cereal_opts,
+        required: false)
+    assert(cereal_proj.found(), 'cereal is required')
+    cereal_dep = cereal_proj.dependency('cereal')
+endif
+
+# Disable FORTIFY_SOURCE when compiling with no optimization
+if(get_option('optimization') == '0')
+  add_project_arguments('-U_FORTIFY_SOURCE',language:['cpp','c'])
+  message('Disabling FORTIFY_SOURCE as optimization is set to 0')
 endif
 
 # Configuration header file(config.h) generation
@@ -131,7 +157,7 @@ configure_file(configuration : conf_data,
 subdir('xyz/openbmc_project/Dump/Internal/Create')
 
 python = find_program('python3')
-errors_map_gen_file_loc = meson.source_root()
+errors_map_gen_file_loc = meson.project_source_root()
 errors_map_gen_file_loc += '/errors_map_gen.py'
 
 errors_map_hpp = custom_target(
@@ -169,8 +195,8 @@ phosphor_dump_manager_dependency = [
         phosphor_dbus_interfaces_dep,
         sdbusplus_dep,
         phosphor_logging_dep,
-        cppfs,
-        fmt_dep
+        fmt_dep,
+        cereal_dep,
     ]
 
 phosphor_dump_manager_install = true
@@ -194,7 +220,6 @@ phosphor_dump_monitor_sources = [
 phosphor_dump_monitor_dependency = [
         phosphor_dbus_interfaces_dep,
         phosphor_logging_dep,
-        cppfs,
         fmt_dep
     ]
 
@@ -211,7 +236,6 @@ phosphor_ramoops_monitor_sources = [
 phosphor_ramoops_monitor_dependency = [
         phosphor_dbus_interfaces_dep,
         phosphor_logging_dep,
-        cppfs,
         fmt_dep
     ]
 

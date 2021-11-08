@@ -216,7 +216,7 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
             writeOnUnixSocket(socketFD(), buffer.get(), size);
         }
     }
-    catch (std::ifstream::failure& oe)
+    catch (const std::ifstream::failure& oe)
     {
         std::remove(writePath.c_str());
         auto err = errno;

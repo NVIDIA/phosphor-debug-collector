@@ -68,7 +68,7 @@ void Watch::addCallback(sdbusplus::message::message& msg)
     {
         msg.read(objectPath, propertyMap);
     }
-    catch (const sdbusplus::exception::SdBusError& e)
+    catch (const sdbusplus::exception::exception& e)
     {
         log<level::ERR>(
             fmt::format(
@@ -150,7 +150,7 @@ void Watch::addCallback(sdbusplus::message::message& msg)
             iMgr.IMgr::create((*item).first, fullPaths);
         }
     }
-    catch (QuotaExceeded& e)
+    catch (const QuotaExceeded& e)
     {
         // No action now
     }
@@ -164,7 +164,7 @@ void Watch::delCallback(sdbusplus::message::message& msg)
     {
         msg.read(objectPath);
     }
-    catch (const sdbusplus::exception::SdBusError& e)
+    catch (const sdbusplus::exception::exception& e)
     {
         log<level::ERR>(
             fmt::format(
