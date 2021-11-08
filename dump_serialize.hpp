@@ -2,7 +2,7 @@
 
 #include "config.h"
 
-#include <experimental/filesystem>
+#include <filesystem>
 #include <set>
 
 namespace phosphor
@@ -14,7 +14,7 @@ namespace elog
 using EId = uint32_t;
 using ElogList = std::set<EId>;
 
-namespace fs = std::experimental::filesystem;
+namespace fs = std::filesystem;
 
 /** @brief Serialize and persist list of ids.
  *  @param[in] list - elog id list.
