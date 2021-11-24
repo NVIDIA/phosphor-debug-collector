@@ -68,7 +68,7 @@ class Manager : virtual public NotifyIface,
      *  @return object_path - The object path of the new entry.
      */
     sdbusplus::message::object_path
-        createDump(phosphor::dump::DumpCreateParams params) override;
+        createDump(std::map<std::string, std::string> params) override;
 };
 
 } // namespace resource

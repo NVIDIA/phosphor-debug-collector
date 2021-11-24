@@ -96,7 +96,7 @@ class Manager : virtual public CreateIface,
      *  @return object_path - The object path of the new dump entry.
      */
     sdbusplus::message::object_path
-        createDump(phosphor::dump::DumpCreateParams params) override;
+        createDump(std::map<std::string, std::string> params) override;
 
   private:
     /** @brief Create Dump entry d-bus object

@@ -71,7 +71,7 @@ void Manager::limitDumpEntries()
 }
 
 sdbusplus::message::object_path
-    Manager::createDump(phosphor::dump::DumpCreateParams params)
+    Manager::createDump(std::map<std::string, std::string> params)
 {
     if (!params.empty())
     {

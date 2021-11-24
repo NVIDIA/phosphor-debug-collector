@@ -11,8 +11,6 @@ namespace phosphor
 namespace dump
 {
 
-using DumpCreateParams =
-    std::map<std::string, std::variant<std::string, uint64_t>>;
 using Iface = sdbusplus::server::object::object<
     sdbusplus::xyz::openbmc_project::Collection::server::DeleteAll>;
 
