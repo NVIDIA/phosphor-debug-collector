@@ -2,6 +2,10 @@
 
 option('tests', type: 'feature', description: 'Build tests')
 
+option('create-dump-dbus', type: 'feature', description: 
+        'Tool allows the service user create a dump via dbus', value: 'enabled'
+      )
+
 option('jffs-workaround', type: 'feature',
         description : 'Turn on jffs workaround for core file'
       )

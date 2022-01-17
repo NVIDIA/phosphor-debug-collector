@@ -273,6 +273,8 @@ foreach executable : executables
                        )
 endforeach
 
+subdir('create-dump-dbus')
+
 if get_option('tests').enabled()
   subdir('test')
 endif
