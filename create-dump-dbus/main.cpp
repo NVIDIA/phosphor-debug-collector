@@ -33,6 +33,9 @@ int main(int argc, char** argv)
         sigaction(SIGTERM, &sigIntHandler, NULL);
         sigaction(SIGTSTP, &sigIntHandler, NULL);
 
+        // make sure socket file is cleaned up
+        remove(SOCKET_PATH);
+
         server->launchServer();
     }
     else if (argc < 2)

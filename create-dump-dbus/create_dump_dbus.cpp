@@ -37,12 +37,13 @@ CreateDumpDbus::~CreateDumpDbus()
 void CreateDumpDbus::dispose()
 {
     if (fd > 0)
+    {
         close(fd);
+        remove(SOCKET_PATH);
+    }
 
     if (dataSocket > 0)
         close(dataSocket);
-
-    remove(SOCKET_PATH);
 }
 
 int CreateDumpDbus::copyDumpToTmpDir(string dPath, string& response)
@@ -125,6 +126,8 @@ int CreateDumpDbus::createDump(string& response)
     }
 
     response = (string)entry;
+
+    b.close();
 
     return 0;
 }
