@@ -2,7 +2,7 @@
 
 option('tests', type: 'feature', description: 'Build tests')
 
-option('create-dump-dbus', type: 'feature', description: 
+option('create-dump-dbus', type: 'feature', description:
         'Tool allows the service user create a dump via dbus', value: 'enabled'
       )
 
@@ -41,7 +41,7 @@ option('BMC_DUMP_OBJ_ENTRY', type : 'string',
       )
 
 option('BMC_DUMP_PATH', type : 'string',
-        value : '/var/lib/phosphor-debug-collector/dumps/',
+        value : '/var/lib/logging/dumps/bmc/',
         description : 'Directory where bmc dumps are placed'
       )
 
@@ -51,7 +51,7 @@ option('SYSTEMD_PSTORE_PATH', type : 'string',
 )
 
 option('SYSTEM_DUMP_PATH', type : 'string',
-        value : '/var/lib/phosphor-debug-collector/system/dumps/',
+        value : '/var/lib/logging/dumps/system/',
         description : 'Directory where system dumps are placed'
 )
 
@@ -76,7 +76,7 @@ option('BMC_DUMP_MAX_LIMIT', type : 'integer',
       )
 
 option('ELOG_ID_PERSIST_PATH', type : 'string',
-        value : '/var/lib/phosphor-debug-collector/elogid',
+        value : '/var/lib/logging/dumps/elogid',
         description : 'Path of file for storing elog id\'s, which have associated dumps'
       )
 
@@ -104,10 +104,6 @@ option('nvidia-dumps-extension', type: 'feature',
         description : 'Enable Nvidia system specific dumps'
       )
 
-option('SYSTEM_DUMP_PATH', type : 'string',
-        value : '/var/lib/phosphor-debug-collector/system/dumps/',
-        description : 'Directory where system dumps are placed'
-      )
 
 option('SYSTEM_DUMP_MAX_SIZE', type : 'integer',
         value : 500,
@@ -125,7 +121,7 @@ option('SYSTEM_DUMP_TOTAL_SIZE', type : 'integer',
       )
 
 option('SYSTEM_DUMP_MAX_LIMIT', type : 'integer',
-        value : 0,
+        value : 10,
         description : 'Total system dumps to be retained on bmc, 0 represents unlimited dumps'
       )
 

@@ -21,7 +21,7 @@ constexpr auto TIMEOUT = 1000 * 60 * 5;
 constexpr auto SOCKET_PATH = "/tmp/dump_sock.socket";
 
 /** path where phosphor-dbug-collector keeps dumps */
-constexpr auto DUMPS_PATH = "/var/lib/phosphor-debug-collector/dumps/";
+constexpr auto DUMPS_PATH = "/var/lib/logging/dumps/";
 
 /** command by which the client asks for a dump */
 constexpr string_view CREATE_DUMP_CMD = "CREATE_DUMP";
