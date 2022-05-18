@@ -1,7 +1,7 @@
 #include "config.h"
 
 #include "dump-extensions.hpp"
-
+#include "nvidia_dumps_config.hpp"
 #include "dump_manager_system.hpp"
 
 #include <phosphor-logging/elog-errors.hpp>
@@ -31,8 +31,7 @@ void loadExtensions(sdbusplus::bus::bus& bus, DumpManagerList& dumpList)
     phosphor::dump::EventPtr eventP{event};
     event = nullptr;
 
-    namespace fs = std::experimental::filesystem;
-    fs::create_directories(SYSTEM_DUMP_PATH);
+    std::filesystem::create_directories(SYSTEM_DUMP_PATH);
 
     dumpList.push_back(std::make_unique<phosphor::dump::system::Manager>(
         bus, eventP, SYSTEM_DUMP_OBJPATH, SYSTEM_DUMP_OBJ_ENTRY, SYSTEM_DUMP_PATH));

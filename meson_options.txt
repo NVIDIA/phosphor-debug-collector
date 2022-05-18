@@ -104,7 +104,6 @@ option('nvidia-dumps-extension', type: 'feature',
         description : 'Enable Nvidia system specific dumps'
       )
 
-
 option('SYSTEM_DUMP_MAX_SIZE', type : 'integer',
         value : 500,
         description : 'Maximum size of one system dump in kilo bytes'

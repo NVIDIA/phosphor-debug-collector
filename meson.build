@@ -122,6 +122,12 @@ conf_data.set('BMC_DUMP_MAX_LIMIT', get_option('BMC_DUMP_MAX_LIMIT'),
              )
 conf_data.set_quoted('SYSTEM_DUMP_PATH', get_option('SYSTEM_DUMP_PATH'),
                      description : 'Directory where system dumps are placed')
+conf_data.set_quoted('SYSTEM_DUMP_OBJPATH', get_option('SYSTEM_DUMP_OBJPATH'),
+                      description : 'The system dump manager D-Bus object path'
+                    )
+conf_data.set_quoted('SYSTEM_DUMP_OBJ_ENTRY', get_option('SYSTEM_DUMP_OBJ_ENTRY'),
+                      description : 'The system dump entry D-Bus object path'
+                    )
 conf_data.set('SYSTEM_DUMP_MAX_SIZE', get_option('SYSTEM_DUMP_MAX_SIZE'),
                description : 'Maximum size of one system dump in kilo bytes'
              )

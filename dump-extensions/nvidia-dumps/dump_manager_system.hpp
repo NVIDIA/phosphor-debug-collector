@@ -4,6 +4,7 @@
 #include "dump_utils.hpp"
 #include "watch.hpp"
 #include "xyz/openbmc_project/Dump/NewDump/server.hpp"
+#include "nvidia_dumps_config.hpp"
 
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
@@ -22,7 +23,7 @@ using CreateIface = sdbusplus::server::object::object<
 
 using UserMap = phosphor::dump::inotify::UserMap;
 
-namespace fs = std::experimental::filesystem;
+namespace fs = std::filesystem;
 
 using Watch = phosphor::dump::inotify::Watch;
 

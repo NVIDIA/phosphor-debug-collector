@@ -13,6 +13,7 @@
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <regex>
+#include <chrono>
 
 namespace phosphor
 {
@@ -29,11 +30,10 @@ using namespace phosphor::logging;
 void Manager::limitDumpEntries()
 {
     // Delete dumps only when system dump max limit is configured
-    if (SYSTEM_DUMP_MAX_LIMIT == 0)
-    {
-        // Do nothing - system dump max limit is not configured
-        return;
-    }
+#if SYSTEM_DUMP_MAX_LIMIT == 0
+    // Do nothing - system dump max limit is not configured
+    return;
+#else // #if SYSTEM_DUMP_MAX_LIMIT == 0
     // Delete dumps on reaching allowed entries
     auto totalDumps = entries.size();
     if (totalDumps < SYSTEM_DUMP_MAX_LIMIT)
@@ -52,6 +52,7 @@ void Manager::limitDumpEntries()
     }
 
     return;
+#endif // #if SYSTEM_DUMP_MAX_LIMIT == 0
 }
 
 sdbusplus::message::object_path
@@ -84,6 +85,110 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
+// captureDump helper functions
+uint32_t executeDreport
+(
+    const std::string& dumpType,
+    const std::string& dumpId,
+    const std::string& dumpPath,
+    const size_t size,
+    const std::vector<std::string>& addArgs
+)
+{
+    // Construct dreport arguments
+    std::vector<char*> arg_v;
+    std::string fPath = "/usr/bin/dreport";
+    arg_v.push_back(&fPath[0]);
+    std::string dOption = "-d";
+    arg_v.push_back(&dOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    std::string sOption = "-s";
+    arg_v.push_back(&sOption[0]);
+    arg_v.push_back(const_cast<char*>(std::to_string(size).c_str()));
+    std::string qOption = "-q";
+    arg_v.push_back(&qOption[0]);
+    std::string vOption = "-v";
+    arg_v.push_back(&vOption[0]);
+    std::string tOption = "-t";
+    arg_v.push_back(&tOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpType.c_str()));
+    // Add additional arguments
+    std::string aOption = "-a";
+    for(int i=0; i < (int) addArgs.size(); i++)
+    {
+        arg_v.push_back(&aOption[0]);
+        arg_v.push_back(const_cast<char*>((addArgs.at(i)).c_str()));
+    }
+    arg_v.push_back(nullptr);
+
+    execv(arg_v[0], &arg_v[0]);
+
+    // dreport script execution is failed.
+    auto error = errno;
+    log<level::ERR>("System dump: Error occurred during dreport function execution",
+                    entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
+uint32_t selfTest
+(
+    const std::string& dumpId,
+    const std::string& dumpPath
+)
+{
+    // Construct selftest dump arguments
+    std::vector<char*> arg_v;
+    std::string fPath = SELFTEST_BIN_PATH;
+    arg_v.push_back(&fPath[0]);
+    std::string pOption = "-p";
+    arg_v.push_back(&pOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    std::string dOption = "-v";
+    arg_v.push_back(&dOption[0]);
+
+    arg_v.push_back(nullptr);
+    execv(arg_v[0], &arg_v[0]);
+
+    // self test execution is failed.
+    auto error = errno;
+    log<level::ERR>("System dump: Error occurred during self test execution",
+                    entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
+uint32_t fpgaRegDump
+(
+    const std::string& dumpId,
+    const std::string& dumpPath
+)
+{
+    // Construct fpga dump arguments
+    std::vector<char*> arg_v;
+    std::string fPath = FPGA_DUMP_BIN_PATH;
+    arg_v.push_back(&fPath[0]);
+    std::string pOption = "-p";
+    arg_v.push_back(&pOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+
+    arg_v.push_back(nullptr);
+    execv(arg_v[0], &arg_v[0]);
+
+    // FPGA register dump execution is failed.
+    auto error = errno;
+    log<level::ERR>("System dump: Error occurred during FPGA register dump execution",
+                    entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
 uint32_t Manager::captureDump(std::map<std::string, std::string> params)
 {
     // Get Dump size.
@@ -96,53 +201,37 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
         fs::path dumpPath(dumpDir);
         auto id = std::to_string(lastEntryId + 1);
         dumpPath /= id;
-        auto sizeStr = std::to_string(size);
 
         std::string dumpType = "system";
 
+        // Extract dump configs
+        auto diagnosticType = params["DiagnosticType"];
+        params.erase("DiagnosticType");
+
         // Construct additional arguments from params
-        std::map<std::string, std::string>::iterator itr;
         std::vector<std::string> addArgs;
+        std::map<std::string, std::string>::iterator itr;
         for (itr = params.begin(); itr != params.end(); ++itr) {
             addArgs.push_back(itr->first + "=" + itr->second);
         }
 
-        // Construct dreport arguments
-        std::vector<char*> arg_v;
-        std::string fPath = "/usr/bin/dreport";
-        arg_v.push_back(&fPath[0]);
-        std::string dOption = "-d";
-        arg_v.push_back(&dOption[0]);
-        arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-        std::string iOption = "-i";
-        arg_v.push_back(&iOption[0]);
-        arg_v.push_back(const_cast<char*>(id.c_str()));
-        std::string sOption = "-s";
-        arg_v.push_back(&sOption[0]);
-        arg_v.push_back(const_cast<char*>(sizeStr.c_str()));
-        std::string qOption = "-q";
-        arg_v.push_back(&qOption[0]);
-        std::string vOption = "-v";
-        arg_v.push_back(&vOption[0]);
-        std::string tOption = "-t";
-        arg_v.push_back(&tOption[0]);
-        arg_v.push_back(const_cast<char*>(dumpType.c_str()));
-        // Add additional arguments
-        std::string aOption = "-a";
-        for(int i=0; i < (int) addArgs.size(); i++)
+        if (diagnosticType.empty())
         {
-            arg_v.push_back(&aOption[0]);
-            arg_v.push_back(const_cast<char*>((addArgs.at(i)).c_str()));
+            executeDreport(dumpType, id, dumpPath, size, addArgs);
         }
-        arg_v.push_back(nullptr);
-
-        execv(arg_v[0], &arg_v[0]);
-
-        // dreport script execution is failed.
-        auto error = errno;
-        log<level::ERR>("System dump: Error occurred during dreport function execution",
-                        entry("ERRNO=%d", error));
-        elog<InternalFailure>();
+        else if (diagnosticType == "SelfTest")
+        {
+            selfTest(id, dumpPath);
+        }
+        else if (diagnosticType == "FpgaRegDump")
+        {
+            fpgaRegDump(id, dumpPath);
+        }
+        else
+        {
+            log<level::ERR>("System dump: Invalid DiagnosticType");
+            elog<InternalFailure>();
+        }
     }
     else if (pid > 0)
     {
