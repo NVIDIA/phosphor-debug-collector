@@ -98,6 +98,11 @@ class Manager : virtual public CreateIface,
     sdbusplus::message::object_path
         createDump(std::map<std::string, std::string> params) override;
 
+    /** @brief Checks if any BMC dump creation is in progress
+     *  @return 0 if no dump creation is in progress, 1 if otherwise 
+     */
+    bool checkDumpCreationInProgress();    
+
   private:
     /** @brief Create Dump entry d-bus object
      *  @param[in] fullPath - Full path of the Dump file name

@@ -29,6 +29,10 @@ namespace bmc
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using namespace phosphor::logging;
 
+// Timeout is kept similar to bmcweb dump creation task timeout
+// Max time taken for BMC dump creation is around 10 minutes + 50% threshold
+constexpr auto bmcDumpMaxTimeLimitInSec = 1200;
+
 namespace internal
 {
 
@@ -70,6 +74,25 @@ void Manager::limitDumpEntries()
     return;
 }
 
+bool Manager::checkDumpCreationInProgress()
+{
+    for (auto d = entries.begin(); d != entries.end(); d++)
+    {
+        auto& entry = d->second;
+        uint64_t elapsed = static_cast<uint64_t>(
+            difftime(std::time(nullptr), entry->startTime()));
+        // Time check is required because if dump creation fails due to external
+        // plug-in erros then status would remain as InProgress with the current
+        // desing
+        if (entry->status() == phosphor::dump::OperationStatus::InProgress &&
+            elapsed < bmcDumpMaxTimeLimitInSec)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 sdbusplus::message::object_path
     Manager::createDump(std::map<std::string, std::string> params)
 {
@@ -77,6 +100,17 @@ sdbusplus::message::object_path
     {
         log<level::WARNING>("BMC dump accepts no additional parameters");
     }
+    // don't allows simultaneously dump creation 
+    if (checkDumpCreationInProgress())
+    {
+        using NotAllowed =
+            sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed;
+        using Reason = xyz::openbmc_project::Common::NotAllowed::REASON;
+        elog<NotAllowed>(
+            Reason("BMC dump creation in progress"));
+        return std::string();
+    }
+
     // Limit dumps to max allowed entries
     limitDumpEntries();
     std::vector<std::string> paths;
