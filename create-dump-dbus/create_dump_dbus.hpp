@@ -20,14 +20,36 @@ constexpr auto TIMEOUT = 1000 * 60 * 5;
 /** path of domain socket */
 constexpr auto SOCKET_PATH = "/tmp/dump_sock.socket";
 
-/** path where phosphor-dbug-collector keeps dumps */
-constexpr auto DUMPS_PATH = "/var/lib/logging/dumps/";
-
 /** command by which the client asks for a dump */
 constexpr string_view CREATE_DUMP_CMD = "CREATE_DUMP";
 
 /** command responded by server ends communication */
 constexpr string_view END_CMD = "END";
+
+/**
+ * @brief handles error message in CreateDumpDbus
+ *
+ */
+class CreateDumpDbusException : std::exception
+{
+  public:
+    CreateDumpDbusException(std::string error) : errorMsg(error)
+    {
+    }
+
+    /**
+     * @brief
+     *
+     * @return error message
+     */
+    std::string what()
+    {
+        return this->errorMsg;
+    }
+
+  protected:
+    std::string errorMsg;
+};
 
 /** @class CreateDumpDbus
  *  @brief calls CreateDump dbus method
@@ -42,6 +64,8 @@ class CreateDumpDbus
 
     /** @brief launches create-dump-dbus server that waits for request */
     void launchServer();
+
+    static char* bmcDumpsPath;
 
   private:
     /** @brief closes connection and free resources */
@@ -77,6 +101,14 @@ class CreateDumpDbus
      *  @return on success 0, on failure -1
      */
     static int createDump(string& response);
+
+    /**
+     * @brief check dump creation status by checking dump entry progress
+     * interface. Method is blocking.
+     *
+     * @param [in] entryPath - path of entry's dbus object
+     */
+    static void waitForDumpCreation(string entryPath);
 
     /** @brief socket descriptors */
     int fd = -1;

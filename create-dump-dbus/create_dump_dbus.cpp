@@ -19,6 +19,8 @@
 #include <vector>
 #include <functional>
 
+#include "../config.h"
+
 namespace phosphor
 {
 namespace dump
@@ -29,6 +31,8 @@ namespace create
 using namespace std;
 using namespace sdbusplus;
 using namespace phosphor::logging;
+
+char* CreateDumpDbus::bmcDumpsPath = (char*)BMC_DUMP_PATH;
 
 CreateDumpDbus::~CreateDumpDbus()
 {
@@ -47,14 +51,87 @@ void CreateDumpDbus::dispose()
         close(dataSocket);
 }
 
+void CreateDumpDbus::waitForDumpCreation(string entryPath)
+{
+    constexpr auto MAPPER_BUSNAME = "xyz.openbmc_project.Dump.Manager";
+    constexpr auto MAPPER_INTERFACE = "xyz.openbmc_project.Common.Progress";
+    constexpr auto PROPERTY_NAME = "Status";
+    constexpr auto STATUS_IN_PROGRESS =
+        "xyz.openbmc_project.Common.Progress.OperationStatus.InProgress";
+    constexpr auto STATUS_COMPLEATED =
+        "xyz.openbmc_project.Common.Progress.OperationStatus.Completed";
+
+    int fails = 0;
+    unsigned time_p = 0;
+
+    while (true)
+    {
+        this_thread::sleep_for(chrono::milliseconds(50));
+
+        // if dump collector will not change status after 30 minutes throws
+        // exception
+        if (time_p > 1000 * 60 * 30)
+        {
+            throw CreateDumpDbusException("Dump creation timed out.");
+        }
+
+        try
+        {
+            auto b = bus::new_default();
+            auto m =
+                b.new_method_call(MAPPER_BUSNAME, entryPath.c_str(),
+                                  "org.freedesktop.DBus.Properties", "Get");
+            m.append(MAPPER_INTERFACE, PROPERTY_NAME);
+            auto reply = b.call(m);
+
+            std::variant<std::monostate, std::string> entry;
+            reply.read(entry);
+
+            if (std::get<1>(entry) != STATUS_IN_PROGRESS)
+            {
+                if (std::get<1>(entry) == STATUS_COMPLEATED)
+                {
+                    return;
+                }
+                else
+                {
+                    throw CreateDumpDbusException("Dump creation failed.");
+                }
+            }
+        }
+        catch (const exception::exception& e)
+        {
+            fails++;
+
+            if (fails >= 3)
+            {
+                throw CreateDumpDbusException("Failed to get progress.");
+            }
+        }
+
+        time_p += 50;
+    }
+}
+
 int CreateDumpDbus::copyDumpToTmpDir(string dPath, string& response)
 {
     constexpr auto TMP_DIR_PATH = "/tmp/";
     const auto copyOptions = filesystem::copy_options::update_existing;
     auto dName = filesystem::path(dPath).filename().string();
-    auto fPath = string(DUMPS_PATH) + dName;
+    auto fPath = string(CreateDumpDbus::bmcDumpsPath) + "/" + dName;
 
-    // wait for collector creates dump file
+    try
+    {
+        // wait for collector create dump file
+        CreateDumpDbus::waitForDumpCreation(response);
+    }
+    catch (CreateDumpDbusException& e)
+    {
+        log<level::ERR>(e.what().c_str());
+        response = e.what();
+        return -1;
+    }
+
     unsigned time_p = 0;
     while (true)
     {
@@ -121,7 +198,7 @@ int CreateDumpDbus::createDump(string& response)
     }
     catch (const exception::exception& e)
     {
-        auto response = string("Failed to CreateDump: ") + e.what();
+        response = string("Failed to CreateDump: ") + e.what();
 
         return -1;
     }

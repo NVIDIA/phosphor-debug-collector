@@ -19,6 +19,12 @@ int main(int argc, char** argv)
 {
     if (argc > 1 && (strncmp(argv[1], "-s", 2) == 0))
     {
+
+        if (argc > 3 && (strncmp(argv[2], "-p", 2) == 0))
+        {
+            CreateDumpDbus::bmcDumpsPath = argv[3];
+        }
+
         server = new CreateDumpDbus();
 
         struct sigaction sigIntHandler;
