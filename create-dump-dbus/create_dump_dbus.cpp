@@ -17,6 +17,7 @@
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/exception.hpp>
 #include <vector>
+#include <functional>
 
 namespace phosphor
 {
