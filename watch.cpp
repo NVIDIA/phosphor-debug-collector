@@ -94,8 +94,9 @@ int Watch::callback(sd_event_source*, int fd, uint32_t revents, void* userdata)
     // Maximum inotify events supported in the buffer
     constexpr auto maxBytes = sizeof(struct inotify_event) + NAME_MAX + 1;
     uint8_t buffer[maxBytes];
+    memset(buffer, '\0', maxBytes);
 
-    auto bytes = read(fd, buffer, maxBytes);
+    auto bytes = read(fd, buffer, maxBytes - 1);
     if (0 > bytes)
     {
         // Failed to read inotify event

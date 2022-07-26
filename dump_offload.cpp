@@ -218,7 +218,14 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
     }
     catch (const std::ifstream::failure& oe)
     {
-        std::remove(writePath.c_str());
+        if (std::remove(writePath.c_str()) < 0)
+        {
+            log<level::ERR>(fmt::format("Failed to remove, errormsg({}), "
+                                        "OPENINTERFACE({}), DUMP_ID({})",
+                                        oe.what(), file.c_str(), dumpId)
+                                .c_str());
+        }
+
         auto err = errno;
         log<level::ERR>(
             fmt::format(

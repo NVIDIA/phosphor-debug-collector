@@ -18,7 +18,14 @@ int main()
         return EXIT_FAILURE;
     }
 
-    phosphor::dump::ramoops::Manager manager(SYSTEMD_PSTORE_PATH);
+    try
+    {
+        phosphor::dump::ramoops::Manager manager(SYSTEMD_PSTORE_PATH);
+    }
+    catch (std::exception& e)
+    {
+        log<level::ERR>(e.what());
+    }
 
     return EXIT_SUCCESS;
 }

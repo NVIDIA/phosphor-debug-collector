@@ -12,12 +12,12 @@
 
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <phosphor-logging/log.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/exception.hpp>
 #include <vector>
-#include <functional>
 
 #include "../config.h"
 
@@ -44,7 +44,11 @@ void CreateDumpDbus::dispose()
     if (fd > 0)
     {
         close(fd);
-        remove(SOCKET_PATH);
+        if (remove(SOCKET_PATH) < 0)
+        {
+            cerr << "remove called failed on socket" << endl;
+            exit(EXIT_FAILURE);
+        }
     }
 
     if (dataSocket > 0)
@@ -281,7 +285,11 @@ void CreateDumpDbus::launchServer()
         goto finish;
     }
 
-    chmod(SOCKET_PATH, target_mode);
+    if (chmod(SOCKET_PATH, target_mode) < 0)
+    {
+        log<level::ERR>("Failed to change mode chmod: chmod returned error.");
+        goto finish;
+    }
 
     r = listen(fd, 4);
     if (r < 0)
