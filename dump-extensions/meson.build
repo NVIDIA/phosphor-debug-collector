@@ -7,3 +7,7 @@ elif get_option('nvidia-dumps-extension').enabled()
 else
     subdir('default')
 endif
+
+if get_option('faultlog-dump-extension').enabled()
+    subdir('faultlog-dump')
+endif

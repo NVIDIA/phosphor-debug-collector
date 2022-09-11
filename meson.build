@@ -155,6 +155,10 @@ conf_data.set('ERROR_MAP_YAML', get_option('ERROR_MAP_YAML'),
 conf_data.set('JFFS_CORE_FILE_WORKAROUND', get_option('jffs-workaround').enabled(),
                description : 'Turn on jffs workaround for core file'
              )
+ 
+conf_data.set('FAULTLOG_DUMP_EXTENSION', get_option('faultlog-dump-extension').enabled(),
+               description : 'FaultLog dump extension'
+             )  
 
 configure_file(configuration : conf_data,
                output : 'config.h'

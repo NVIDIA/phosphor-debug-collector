@@ -1,6 +1,7 @@
 #include "config.h"
 
 #include "dump-extensions.hpp"
+#include "dump-extensions/faultlog-dump/faultlog-dump-extensions.hpp"
 #include "dump_internal.hpp"
 #include "dump_manager.hpp"
 #include "dump_manager_bmc.hpp"
@@ -78,6 +79,10 @@ int main()
         dumpMgrList.push_back(std::move(bmcDumpMgr));
 
         phosphor::dump::loadExtensions(bus, dumpMgrList);
+
+#ifdef FAULTLOG_DUMP_EXTENSION
+        phosphor::dump::loadExtensionsFaultLog(bus, dumpMgrList);
+#endif
 
         // Restore dbus objects of all dumps
         for (auto& dmpMgr : dumpMgrList)

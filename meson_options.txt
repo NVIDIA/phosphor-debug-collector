@@ -149,3 +149,53 @@ option('RESOURCE_DUMP_OBJ_ENTRY', type : 'string',
         value : '/xyz/openbmc_project/dump/resource/entry',
         description : 'The resource dump entry D-Bus object path'
       )
+
+# FaultLog dump options
+option('CPER_DUMP_BIN_PATH', type : 'string',
+        value : '/usr/bin/cper_dump.sh',
+        description : 'The path of cper dump script'
+      )
+
+option('faultlog-dump-extension', type: 'feature',
+        value : 'disabled',
+        description : 'Enable FaultLog dump'
+      )
+
+option('FAULTLOG_DUMP_OBJPATH', type : 'string',
+        value : '/xyz/openbmc_project/dump/faultlog',
+        description : 'The fault log dump manager D-Bus object path'
+      )
+
+option('FAULTLOG_DUMP_OBJ_ENTRY', type : 'string',
+        value : '/xyz/openbmc_project/dump/faultlog/entry',
+        description : 'The fault log dump entry D-Bus object path'
+      )
+
+option('FAULTLOG_DUMP_MAX_LIMIT', type : 'integer',
+        value : 10,
+        description : 'Total fault log dumps to be retained on bmc, 0 represents unlimited dumps'
+      )
+
+option('FAULTLOG_DUMP_PATH', type : 'string',
+        value : '/var/lib/logging/dumps/faultlog/',
+        description : 'Directory where fault log dumps are placed'
+)
+
+option('FAULTLOG_DUMP_TOTAL_SIZE', type : 'integer',
+        value : 1024,
+        description : 'Total size of the dump in kilo bytes'
+      )
+
+option('FAULTLOG_DUMP_MIN_SPACE_REQD', type : 'integer',
+        value : 50,
+        description : 'Minimum space required for one fault log dump in kilo bytes'
+      )
+
+option('FAULTLOG_DUMP_MAX_SIZE', type : 'integer',
+        value : 500,
+        description : 'Maximum size of one fault log dump in kilo bytes'
+      )
+
+option('faultlog-dump-rotation', type : 'feature',
+        description : 'Rotate dump when total size of dumps exceed the quota', value: 'disabled'
+      )
