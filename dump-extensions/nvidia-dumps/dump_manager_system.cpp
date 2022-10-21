@@ -223,7 +223,7 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
         {
             selfTest(id, dumpPath);
         }
-        else if (diagnosticType == "FpgaRegDump")
+        else if (diagnosticType == "FPGA")
         {
             fpgaRegDump(id, dumpPath);
         }
