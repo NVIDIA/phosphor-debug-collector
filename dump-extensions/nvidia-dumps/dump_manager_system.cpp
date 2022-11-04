@@ -191,6 +191,31 @@ uint32_t fpgaRegDump
 
 uint32_t Manager::captureDump(std::map<std::string, std::string> params)
 {
+    // check if minimum required space is available on destination partition
+    std::error_code ec{};
+    fs::path partitionPath(dumpDir);
+    uintmax_t sizeLeftKb = fs::space(partitionPath, ec).available / 1024;
+    uintmax_t reqSizeKb = SYSTEM_DUMP_MIN_SPACE_REQD;
+
+    if (ec.value() != 0)
+    {
+        log<level::ERR>("Failed to check available space");
+        elog<InternalFailure>();
+    }
+
+    if (sizeLeftKb < reqSizeKb)
+    {
+        log<level::ERR>(
+            "Not enough space available to create system dump",
+            entry("REQ_KB=%d", static_cast<unsigned int>(reqSizeKb)),
+            entry("LEFT_KB=%d", static_cast<unsigned int>(sizeLeftKb)));
+        using QuotaExceeded =
+            sdbusplus::xyz::openbmc_project::Dump::Create::Error::QuotaExceeded;
+        using Reason =
+            xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
+        elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
+    }
+
     // Get Dump size.
     auto size = getAllowedSize();
 
