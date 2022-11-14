@@ -189,6 +189,31 @@ uint32_t fpgaRegDump
     elog<InternalFailure>();
 }
 
+uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    // Construct erot dump arguments
+    std::vector<char*> arg_v;
+    std::string fPath = EROT_DUMP_BIN_PATH;
+    arg_v.push_back(&fPath[0]);
+    std::string pOption = "-p";
+    arg_v.push_back(&pOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+
+    arg_v.push_back(nullptr);
+
+    execv(arg_v[0], &arg_v[0]);
+
+    // dreport script execution is failed.
+    auto error = errno;
+    log<level::ERR>(
+        "System dump: Error occurred during dreport function execution",
+        entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
 uint32_t Manager::captureDump(std::map<std::string, std::string> params)
 {
     // check if minimum required space is available on destination partition
@@ -251,6 +276,10 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
         else if (diagnosticType == "FPGA")
         {
             fpgaRegDump(id, dumpPath);
+        }
+        else if (diagnosticType == "EROT")
+        {
+            erotDump(id, dumpPath);
         }
         else
         {
