@@ -1,0 +1,68 @@
+#!/bin/bash
+#
+# config: 2 20
+# @brief: Get the gpu manager dbus information.
+#
+
+. $DREPORT_INCLUDE/functions
+
+desc="gpu manager dbus objects"
+file_name="gpumngrdbusinfo.log"
+
+command="busctl call --verbose --no-pager \
+                xyz.openbmc_project.GpuMgr \
+                / \
+                org.freedesktop.DBus.ObjectManager \
+                GetManagedObjects"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="gpu oob dbus objects"
+command="busctl introspect xyz.openbmc_project.GpuOobRecovery \
+                /xyz/openbmc_project/GpuOobRecovery"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="GPU mngr inventory capabilities"
+file_name="gpumngrinvcap.log"
+op="invcapop.log"
+for i in {0..7} 
+do 
+    busctl call xyz.openbmc_project.GpuMgr \
+                /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
+                DeviceGetData isi $i "gpu.inventory.capabilities" 0 &>> "$op"; 
+done
+
+for i in {0..3}
+do 
+    busctl call xyz.openbmc_project.GpuMgr \
+                /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
+                DeviceGetData isi $i "nvswitch.inventory.capabilities" 0 &>> "$op"; 
+done
+
+busctl call xyz.openbmc_project.GpuMgr \
+            /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
+            DeviceGetData isi 0 "fpga.inventory.capabilities" 0 &>> "$op"; 
+
+
+for i in {0..7} 
+do 
+    busctl call xyz.openbmc_project.GpuMgr \
+                /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
+                DeviceGetData isi $i "gpu.inventory.capabilities" 1 &>> "$op"; 
+done
+
+for i in {0..3} 
+do 
+    busctl call xyz.openbmc_project.GpuMgr \
+                /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
+                DeviceGetData isi $i "nvswitch.inventory.capabilities" 1 &>> "$op"; 
+done
+
+busctl call xyz.openbmc_project.GpuMgr \
+            /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
+            DeviceGetData isi 0 "fpga.inventory.capabilities" 1 &>> "$op"; 
+
+command="cat $op"
+add_cmd_output "$command" "$file_name" "$desc"
+rm $op

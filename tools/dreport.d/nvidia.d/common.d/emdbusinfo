@@ -1,0 +1,19 @@
+#!/bin/bash
+#
+# config: 2 20
+# @brief: Get the entity dbus information.
+#
+
+. $DREPORT_INCLUDE/functions
+
+desc="entity manager dbus objects"
+
+command="busctl call --verbose --no-pager \
+                xyz.openbmc_project.EntityManager \
+                / \
+                org.freedesktop.DBus.ObjectManager \
+                GetManagedObjects"
+
+file_name="embusinfo.log"
+
+add_cmd_output "$command" "$file_name" "$desc"

@@ -1,0 +1,19 @@
+#!/bin/bash
+#
+# config: 2 20
+# @brief: Get the bmc inv dbus information.
+#
+
+. $DREPORT_INCLUDE/functions
+
+desc="bmc inventory dbus objects"
+
+command="busctl call --verbose --no-pager \
+                xyz.openbmc_project.Software.BMC.Inventory \
+                /xyz/openbmc_project/software \
+                org.freedesktop.DBus.ObjectManager \
+                GetManagedObjects"
+
+file_name="bmcinvdbusinfo.log"
+
+add_cmd_output "$command" "$file_name" "$desc"

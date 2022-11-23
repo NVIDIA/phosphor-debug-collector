@@ -1,0 +1,78 @@
+#!/bin/bash
+#
+# config: 2 20
+# @brief: fw update util information.
+#
+
+. $DREPORT_INCLUDE/functions
+
+desc="fw update utils"
+file_name="fwupdateutils.log"
+
+command="busctl call --verbose --no-pager \
+                com.Nvidia.Software.RT.Updater \
+                /xyz/openbmc_project/software/other \
+                org.freedesktop.DBus.ObjectManager \
+                GetManagedObjects"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+command="busctl call --verbose --no-pager \
+                xyz.openbmc_project.State.BMC \
+                /xyz/openbmc_project/state/bmc0 \
+                org.freedesktop.DBus.ObjectManager \
+                GetManagedObjects"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+command="busctl call --verbose --no-pager \
+                com.Nvidia.Software.DebugTokenErase.Updater \
+                /xyz/openbmc_project/software/other \
+                org.freedesktop.DBus.ObjectManager \
+                GetManagedObjects"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+command="busctl call --verbose --no-pager \
+                com.Nvidia.Software.DebugTokenInstall.Updater \
+                /xyz/openbmc_project/software/other \
+                org.freedesktop.DBus.ObjectManager \
+                GetManagedObjects"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="pldmtool commands"
+op="pldmtoolop.log"
+file_name="pldmtool.log"
+echo "pldmtool fw_update GetStatus,GetFwParams,QueryDeviceIdentifiers ----" >> "$op"
+for i in {13..29} 
+do 
+    start_time=`date +%s`
+    pldmtool fw_update GetStatus -m $i &>> "$op"
+    end_time=`date +%s`
+    if [ $((start_time - end_time)) -gt 10 ]; then
+        log_error "Failed to collect pldmtool fw_update GetStatus for endpoint id $i"
+        continue 
+    fi
+
+    start_time=`date +%s`
+    pldmtool fw_update GetFwParams -m $i &>> "$op"
+    end_time=`date +%s`
+    if [ $((start_time - end_time)) -gt 10 ]; then
+        log_error "Failed to collect pldmtool fw_update GetFwParams for endpoint id $i"
+        continue 
+    fi
+
+    start_time=`date +%s`
+    pldmtool fw_update QueryDeviceIdentifiers -m $i &>> "$op" 
+    end_time=`date +%s`
+    if [ $((start_time - end_time)) -gt 10 ]; then
+        log_error "Failed to collect pldmtool fw_update QueryDeviceIdentifiers for endpoint id $i"
+        continue 
+    fi   
+done
+
+command="cat $op"
+add_cmd_output "$command" "$file_name" "$desc"
+rm $op
+

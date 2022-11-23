@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+# config: 2 20
+# @brief: Get the mctp dbus information.
+#
+
+. $DREPORT_INCLUDE/functions
+
+desc="mctp spi dbus objects"
+file_name="mctpdbusinfo.log"
+
+command="busctl call --verbose --no-pager \
+                xyz.openbmc_project.MCTP.Control.SPI \
+                /xyz/openbmc_project/mctp \
+                org.freedesktop.DBus.ObjectManager \
+                GetManagedObjects"
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="mctp pcie dbus objects"
+command="busctl call --verbose --no-pager \
+                xyz.openbmc_project.MCTP.Control.PCIe \
+                /xyz/openbmc_project/mctp \
+                org.freedesktop.DBus.ObjectManager \
+                GetManagedObjects"
+
+add_cmd_output "$command" "$file_name" "$desc"

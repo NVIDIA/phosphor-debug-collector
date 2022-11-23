@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+# config: 2 20
+# @brief: Get the list of pcie devices.
+#
+
+. $DREPORT_INCLUDE/functions
+
+desc="pcie device list"
+
+command="ls /sys/bus/pci/devices"
+
+file_name="pciedevicelist.log"
+
+add_cmd_output "$command" "$file_name" "$desc"
