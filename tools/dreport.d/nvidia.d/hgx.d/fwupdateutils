@@ -47,26 +47,17 @@ file_name="pldmtool.log"
 echo "pldmtool fw_update GetStatus,GetFwParams,QueryDeviceIdentifiers ----" >> "$op"
 for i in {13..29} 
 do 
-    start_time=`date +%s`
-    pldmtool fw_update GetStatus -m $i &>> "$op"
-    end_time=`date +%s`
-    if [ $((start_time - end_time)) -gt 10 ]; then
+    if ! timeout 15 pldmtool fw_update GetStatus -m $i &>> "$op"; then
         log_error "Failed to collect pldmtool fw_update GetStatus for endpoint id $i"
         continue 
     fi
 
-    start_time=`date +%s`
-    pldmtool fw_update GetFwParams -m $i &>> "$op"
-    end_time=`date +%s`
-    if [ $((start_time - end_time)) -gt 10 ]; then
+    if ! timeout 15 pldmtool fw_update GetFwParams -m $i &>> "$op"; then
         log_error "Failed to collect pldmtool fw_update GetFwParams for endpoint id $i"
         continue 
     fi
 
-    start_time=`date +%s`
-    pldmtool fw_update QueryDeviceIdentifiers -m $i &>> "$op" 
-    end_time=`date +%s`
-    if [ $((start_time - end_time)) -gt 10 ]; then
+    if ! timeout 15 pldmtool fw_update QueryDeviceIdentifiers -m $i &>> "$op"; then
         log_error "Failed to collect pldmtool fw_update QueryDeviceIdentifiers for endpoint id $i"
         continue 
     fi   
