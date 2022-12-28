@@ -7,6 +7,7 @@
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
+#include <array>
 #include <sys/inotify.h>
 #include <unistd.h>
 
@@ -92,7 +93,7 @@ uint32_t executeDreport
     const std::string& dumpId,
     const std::string& dumpPath,
     const size_t size,
-    const std::vector<std::string>& addArgs
+    const std::array<std::string, 3>& addArgs
 )
 {
     // Construct dreport arguments
@@ -120,7 +121,7 @@ uint32_t executeDreport
     for(int i=0; i < (int) addArgs.size(); i++)
     {
         arg_v.push_back(&aOption[0]);
-        arg_v.push_back(const_cast<char*>((addArgs.at(i)).c_str()));
+        arg_v.push_back(const_cast<char*>((addArgs[i]).c_str()));
     }
     arg_v.push_back(nullptr);
 
@@ -259,10 +260,27 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
         params.erase("DiagnosticType");
 
         // Construct additional arguments from params
-        std::vector<std::string> addArgs;
+        std::array<std::string, 3> addArgs;
+        // Fix additional arguments order 'bf_ip', 'bf_username', 'bf_password'
         std::map<std::string, std::string>::iterator itr;
         for (itr = params.begin(); itr != params.end(); ++itr) {
-            addArgs.push_back(itr->first + "=" + itr->second);
+            std::string kvPair = itr->first + "=" + itr->second;
+            if (itr->first == "bf_ip")
+            {
+                addArgs[0] = kvPair;
+            }
+            else if (itr->first == "bf_username")
+            {
+                addArgs[1] = kvPair;
+            }
+            else if (itr->first == "bf_password")
+            {
+                addArgs[2] = kvPair;
+            }
+            else
+            {
+                log<level::ERR>("System dump: Unknown additional arguments");
+            }
         }
 
         if (diagnosticType.empty())
