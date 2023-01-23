@@ -1,6 +1,8 @@
 #pragma once
 
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace phosphor
 {
@@ -8,8 +10,6 @@ namespace dump
 {
 namespace create
 {
-
-using namespace std;
 
 /** socket buffer size */
 constexpr auto BUFFER_SIZE = 255;
@@ -20,11 +20,24 @@ constexpr auto TIMEOUT = 1000 * 60 * 5;
 /** path of domain socket */
 constexpr auto SOCKET_PATH = "/tmp/dump_sock.socket";
 
+/** tmp directory path */
+constexpr std::string_view TMP_DIR_PATH = "/tmp/";
+
+/** dump file copy prefix */
+constexpr std::string_view DUMP_COPY_PREFIX = "copy_";
+
 /** command by which the client asks for a dump */
-constexpr string_view CREATE_DUMP_CMD = "CREATE_DUMP";
+constexpr std::string_view CREATE_DUMP_CMD = "CREATE_DUMP";
 
 /** command responded by server ends communication */
-constexpr string_view END_CMD = "END";
+constexpr std::string_view END_CMD = "END";
+
+/** supported dump types */
+const std::vector<std::string> SUPPORTED_DUMP_TYPES{"all", "BMC", "EROT",
+                                                    "FPGA", "SelfTest"};
+
+/** default dump type used when no type is specified by the client / user */
+constexpr std::string_view DEFAULT_DUMP_TYPE = "BMC";
 
 /**
  * @brief handles error message in CreateDumpDbus
@@ -60,12 +73,29 @@ class CreateDumpDbus
     ~CreateDumpDbus();
 
     /** @brief calls CreateDump method on dbus */
-    void doCreateDumpCall();
+    void doCreateDumpCall(const std::string& type);
 
     /** @brief launches create-dump-dbus server that waits for request */
     void launchServer();
 
-    static char* bmcDumpsPath;
+    /** @brief path to which debug collector saves BMC dump files */
+    static std::string bmcDumpPath;
+
+    /** @brief path to which debug collector saves system dump files */
+    static std::string systemDumpPath;
+
+    /** @brief creates a comma-separated list of all supported dump types */
+    static std::string printSupportedTypes()
+    {
+        std::ostringstream oss;
+        int types = static_cast<int>(SUPPORTED_DUMP_TYPES.size());
+        for (int i = 0; i < types - 1; ++i)
+        {
+            oss << "'" << SUPPORTED_DUMP_TYPES[i] << "', ";
+        }
+        oss << "'" << SUPPORTED_DUMP_TYPES[types - 1] << "'";
+        return oss.str();
+    }
 
   private:
     /** @brief closes connection and free resources */
@@ -79,7 +109,8 @@ class CreateDumpDbus
      *
      *  @return on success 0, on failure -1
      */
-    static int copyDumpToTmpDir(string dPath, string& response);
+    static int copyDumpToTmpDir(const std::string& dPath,
+                                std::string& response);
 
     /** @brief creates domain socket to allow communication between server and
      *         client
@@ -93,14 +124,7 @@ class CreateDumpDbus
      *
      *  @throws std::exception on failure
      **/
-    static void sendMsg(int fd, string msg);
-
-    /** @brief calls the CreateDump method on dbus
-     *  @param [in] response - response message from dbus (or error message)
-     *
-     *  @return on success 0, on failure -1
-     */
-    static int createDump(string& response);
+    static void sendMsg(int fd, const std::string& msg);
 
     /**
      * @brief check dump creation status by checking dump entry progress
@@ -108,7 +132,27 @@ class CreateDumpDbus
      *
      * @param [in] entryPath - path of entry's dbus object
      */
-    static void waitForDumpCreation(string entryPath);
+    static void waitForDumpCreation(const std::string& entryPath);
+
+    /** @brief calls the CreateDump method on dbus
+     *  @param [in] response - response message from dbus (or error message)
+     *  @param [in] type - dump type
+     *
+     *  @return on success 0, on failure -1
+     */
+    static int createDump(const std::string& type, std::string& response);
+
+    /** @brief creates dump and copies it to target location
+     *  @param [in] fd - file descriptor of the socket
+     *  @param [in] type - dump type
+     */
+    static void processSingleDump(int fd, const std::string& type);
+
+    /** @brief clears previously created dumps and processes the requested ones
+     *  @param [in] fd - file descriptor of the socket
+     *  @param [in] type - dump type
+     */
+    static void processDumpRequest(int fd, const std::string& type);
 
     /** @brief socket descriptors */
     int fd = -1;
