@@ -2,19 +2,22 @@
 
 #include "dump_manager_system.hpp"
 
-#include "system_dump_entry.hpp"
 #include "dump_internal.hpp"
+#include "system_dump_entry.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
-#include <array>
+#include <fmt/core.h>
 #include <sys/inotify.h>
 #include <unistd.h>
 
+#include <array>
+#include <chrono>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <regex>
-#include <chrono>
+#include <sdeventplus/exception.hpp>
+#include <sdeventplus/source/base.hpp>
 
 namespace phosphor
 {
@@ -43,10 +46,10 @@ void Manager::limitDumpEntries()
         return;
     }
     // Get the oldest dumps
-    int excessDumps = totalDumps - (SYSTEM_DUMP_MAX_LIMIT-1);
+    int excessDumps = totalDumps - (SYSTEM_DUMP_MAX_LIMIT - 1);
     // Delete the oldest dumps
-    for (auto d = entries.begin(); d != entries.end() && excessDumps;
-            d++) {
+    for (auto d = entries.begin(); d != entries.end() && excessDumps; d++)
+    {
         auto& entry = d->second;
         entry->delete_();
         --excessDumps;
@@ -87,14 +90,9 @@ sdbusplus::message::object_path
 }
 
 // captureDump helper functions
-uint32_t executeDreport
-(
-    const std::string& dumpType,
-    const std::string& dumpId,
-    const std::string& dumpPath,
-    const size_t size,
-    const std::array<std::string, 3>& addArgs
-)
+uint32_t executeDreport(const std::string& dumpType, const std::string& dumpId,
+                        const std::string& dumpPath, const size_t size,
+                        const std::array<std::string, 3>& addArgs)
 {
     // Construct dreport arguments
     std::vector<char*> arg_v;
@@ -118,7 +116,7 @@ uint32_t executeDreport
     arg_v.push_back(const_cast<char*>(dumpType.c_str()));
     // Add additional arguments
     std::string aOption = "-a";
-    for(int i=0; i < (int) addArgs.size(); i++)
+    for (int i = 0; i < (int)addArgs.size(); i++)
     {
         arg_v.push_back(&aOption[0]);
         arg_v.push_back(const_cast<char*>((addArgs[i]).c_str()));
@@ -129,16 +127,13 @@ uint32_t executeDreport
 
     // dreport script execution is failed.
     auto error = errno;
-    log<level::ERR>("System dump: Error occurred during dreport function execution",
-                    entry("ERRNO=%d", error));
+    log<level::ERR>(
+        "System dump: Error occurred during dreport function execution",
+        entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
 
-uint32_t selfTest
-(
-    const std::string& dumpId,
-    const std::string& dumpPath
-)
+uint32_t selfTest(const std::string& dumpId, const std::string& dumpPath)
 {
     // Construct selftest dump arguments
     std::vector<char*> arg_v;
@@ -163,11 +158,7 @@ uint32_t selfTest
     elog<InternalFailure>();
 }
 
-uint32_t fpgaRegDump
-(
-    const std::string& dumpId,
-    const std::string& dumpPath
-)
+uint32_t fpgaRegDump(const std::string& dumpId, const std::string& dumpPath)
 {
     // Construct fpga dump arguments
     std::vector<char*> arg_v;
@@ -185,8 +176,9 @@ uint32_t fpgaRegDump
 
     // FPGA register dump execution is failed.
     auto error = errno;
-    log<level::ERR>("System dump: Error occurred during FPGA register dump execution",
-                    entry("ERRNO=%d", error));
+    log<level::ERR>(
+        "System dump: Error occurred during FPGA register dump execution",
+        entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
 
@@ -283,7 +275,8 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
         std::array<std::string, 3> addArgs;
         // Fix additional arguments order 'bf_ip', 'bf_username', 'bf_password'
         std::map<std::string, std::string>::iterator itr;
-        for (itr = params.begin(); itr != params.end(); ++itr) {
+        for (itr = params.begin(); itr != params.end(); ++itr)
+        {
             std::string kvPair = itr->first + "=" + itr->second;
             if (itr->first == "bf_ip")
             {
@@ -327,20 +320,33 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
     }
     else if (pid > 0)
     {
-        auto rc = sd_event_add_child(eventLoop.get(), nullptr, pid,
-                                     WEXITED | WSTOPPED, callback, nullptr);
-        if (0 > rc)
+        Child::Callback callback = [this, pid](Child&, const siginfo_t*) {
+            this->childPtrMap.erase(pid);
+        };
+        try
+        {
+            childPtrMap.emplace(pid,
+                                std::make_unique<Child>(eventLoop.get(), pid,
+                                                        WEXITED | WSTOPPED,
+                                                        std::move(callback)));
+        }
+        catch (const sdeventplus::SdEventError& ex)
         {
             // Failed to add to event loop
-            log<level::ERR>("System dump: Error occurred during the sd_event_add_child call",
-                            entry("RC=%d", rc));
+            log<level::ERR>(
+                fmt::format(
+                    "Error occurred during the sdeventplus::source::Child "
+                    "creation ex({})",
+                    ex.what())
+                    .c_str());
             elog<InternalFailure>();
         }
     }
     else
     {
         auto error = errno;
-        log<level::ERR>("System dump: Error occurred during fork", entry("ERRNO=%d", error));
+        log<level::ERR>("System dump: Error occurred during fork",
+                        entry("ERRNO=%d", error));
         elog<InternalFailure>();
     }
 
@@ -383,11 +389,11 @@ void Manager::createEntry(const fs::path& file)
 
     try
     {
-        entries.insert(
-            std::make_pair(id, std::make_unique<system::Entry>(
+        entries.insert(std::make_pair(
+            id,
+            std::make_unique<system::Entry>(
                 bus, objPath.c_str(), id, stoull(msString), fs::file_size(file),
                 file, phosphor::dump::OperationStatus::Completed, *this)));
-
     }
     catch (const std::invalid_argument& e)
     {
@@ -410,18 +416,27 @@ void Manager::watchCallback(const UserMap& fileInfo)
         // and associated inotify watch.
         if (IN_CLOSE_WRITE == i.second)
         {
-            removeWatch(i.first);
-
-            createEntry(i.first);
+            if (!std::filesystem::is_directory(i.first))
+            {
+                // Don't require filename to be passed, as the path
+                // of dump directory is stored in the childWatchMap
+                removeWatch(i.first.parent_path());
+                // dump file is written now create D-Bus entry
+                createEntry(i.first);
+            }
+            else
+            {
+                removeWatch(i.first);
+            }
         }
         // Start inotify watch on newly created directory.
         else if ((IN_CREATE == i.second) && fs::is_directory(i.first))
         {
             auto watchObj = std::make_unique<Watch>(
                 eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE, EPOLLIN, i.first,
-                std::bind(
-                    std::mem_fn(&phosphor::dump::system::Manager::watchCallback),
-                    this, std::placeholders::_1));
+                std::bind(std::mem_fn(
+                              &phosphor::dump::system::Manager::watchCallback),
+                          this, std::placeholders::_1));
 
             childWatchMap.emplace(i.first, std::move(watchObj));
         }
