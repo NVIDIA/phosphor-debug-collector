@@ -59,10 +59,10 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
         phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize,
                               status, parent),
         file(file)
-        {
-            // Emit deferred signal.
-            this->phosphor::dump::system::EntryIfaces::emit_object_added();
-        }
+    {
+        // Emit deferred signal.
+        this->phosphor::dump::system::EntryIfaces::emit_object_added();
+    }
 
     /** @brief Delete this d-bus object.
      */
@@ -87,6 +87,13 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
         status(OperationStatus::Completed);
         file = filePath;
         completedTime(timeStamp);
+    }
+
+    /** @brief Minimal interface to allow setting status as failed
+     */
+    void setFailedStatus(void)
+    {
+        status(phosphor::dump::OperationStatus::Failed);
     }
 
   private:

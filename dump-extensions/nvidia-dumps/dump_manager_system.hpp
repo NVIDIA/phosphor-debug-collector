@@ -3,11 +3,13 @@
 #include "dump_manager.hpp"
 #include "dump_utils.hpp"
 #include "nvidia_dumps_config.hpp"
+#include "system_dump_entry.hpp"
 #include "watch.hpp"
 #include "xyz/openbmc_project/Dump/NewDump/server.hpp"
 
 #include <experimental/filesystem>
 #include <map>
+#include <phosphor-logging/log.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
 #include <sdeventplus/source/child.hpp>
@@ -19,6 +21,8 @@ namespace dump
 {
 namespace system
 {
+
+using namespace phosphor::logging;
 
 using CreateIface = sdbusplus::server::object::object<
     sdbusplus::xyz::openbmc_project::Dump::server::Create>;
@@ -85,6 +89,15 @@ class Manager : virtual public CreateIface,
      */
     sdbusplus::message::object_path
         createDump(std::map<std::string, std::string> params) override;
+
+    /** @brief Used to serve case where create dump failed
+     *  @param [in] id - entry id which failed
+     */
+    void createDumpFailed(int id)
+    {
+        dynamic_cast<phosphor::dump::system::Entry*>(entries[id].get())
+            ->setFailedStatus();
+    }
 
   private:
     /** @brief Create Dump entry d-bus object

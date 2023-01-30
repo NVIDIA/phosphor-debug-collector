@@ -3,7 +3,6 @@
 #include "dump_manager_system.hpp"
 
 #include "dump_internal.hpp"
-#include "system_dump_entry.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
@@ -257,6 +256,28 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
     // Get Dump size.
     auto size = getAllowedSize();
 
+    // Validate request argument
+    const std::string typeSelftest = "SelfTest";
+    const std::string typeFPGA = "FPGA";
+    const std::string typeEROT = "EROT";
+    auto diagnosticType = params["DiagnosticType"];
+    params.erase("DiagnosticType");
+    if (!diagnosticType.empty())
+    {
+        if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
+            diagnosticType != typeEROT)
+        {
+            log<level::ERR>("Unrecognized DiagnosticType option",
+                            entry("DIAG_TYPE=%s", diagnosticType.c_str()));
+            using INV_ARG =
+                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
+            using INV_VAL =
+                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
+            elog<InvalidArgument>(INV_ARG("DiagnosticType"),
+                                  INV_VAL(diagnosticType.c_str()));
+        }
+    }
+
     pid_t pid = fork();
 
     if (pid == 0)
@@ -267,9 +288,6 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
 
         std::string dumpType = "system";
 
-        // Extract dump configs
-        auto diagnosticType = params["DiagnosticType"];
-        params.erase("DiagnosticType");
 
         // Construct additional arguments from params
         std::array<std::string, 3> addArgs;
@@ -300,15 +318,15 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
         {
             executeDreport(dumpType, id, dumpPath, size, addArgs);
         }
-        else if (diagnosticType == "SelfTest")
+        else if (diagnosticType == typeSelftest)
         {
             selfTest(id, dumpPath);
         }
-        else if (diagnosticType == "FPGA")
+        else if (diagnosticType == typeFPGA)
         {
             fpgaRegDump(id, dumpPath);
         }
-        else if (diagnosticType == "EROT")
+        else if (diagnosticType == typeEROT)
         {
             erotDump(id, dumpPath);
         }
@@ -320,9 +338,24 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
     }
     else if (pid > 0)
     {
-        Child::Callback callback = [this, pid](Child&, const siginfo_t*) {
+        auto entryId = lastEntryId + 1;
+        Child::Callback callback = [this, pid, entryId](Child&,
+                                                        const siginfo_t* si) {
+            if (si->si_status != 0)
+            {
+                std::string msg = "Dump process failed: (signo)" +
+                                  std::to_string(si->si_signo) + "; (code)" +
+                                  std::to_string(si->si_code) + "; (errno)" +
+                                  std::to_string(si->si_errno) + "; (pid)" +
+                                  std::to_string(si->si_pid) + "; (status)" +
+                                  std::to_string(si->si_status);
+                log<level::ERR>(msg.c_str());
+                this->createDumpFailed(entryId);
+            }
+
             this->childPtrMap.erase(pid);
         };
+
         try
         {
             childPtrMap.emplace(pid,
