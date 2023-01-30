@@ -220,7 +220,27 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
     // check if minimum required space is available on destination partition
     std::error_code ec{};
     fs::path partitionPath(dumpDir);
+
+#if (JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT > 0)
+    /* jffs2 space available problem is worked around by substracting 2%
+       of capacity from currently available space, eg. 200M - 4M = 196M
+       it solves problem of failed dump when user request it close to space
+       limit so instead if silently failing the task user receives appropriate
+       message. Test it yourself - fill up the partition until 'no space left'
+       message appears, check `df -T` for available space, if there seems to be
+       at least 1% space available then you just reproduced the issue*/
+    uintmax_t offset = (fs::space(partitionPath, ec).capacity *
+                        JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT) /
+                       100;
+    uintmax_t spaceAvailable = fs::space(partitionPath, ec).available;
+    uintmax_t sizeLeftKb = 0;
+    if (spaceAvailable >= offset)
+    {
+        sizeLeftKb = (spaceAvailable - offset) / 1024;
+    }
+#else
     uintmax_t sizeLeftKb = fs::space(partitionPath, ec).available / 1024;
+#endif
     uintmax_t reqSizeKb = SYSTEM_DUMP_MIN_SPACE_REQD;
 
     if (ec.value() != 0)

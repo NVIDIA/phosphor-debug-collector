@@ -10,6 +10,13 @@ option('jffs-workaround', type: 'feature',
         description : 'Turn on jffs workaround for core file'
       )
 
+option('JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT', type : 'integer',
+        value : 2,
+        description : '''jffs2 reported no-space-left write error despite clearly 
+        showing some space left, use percent of partition *capacity* as a space 
+        *available* offset, eg. 200MB partition, 2% offset, 196MB available'''
+      )      
+
 option('DUMP_BUSNAME', type : 'string',
         value : 'xyz.openbmc_project.Dump.Manager',
         description : 'The D-Bus busname to own'
