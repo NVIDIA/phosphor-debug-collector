@@ -45,7 +45,7 @@ desc="pldmtool commands"
 op="pldmtoolop.log"
 file_name="pldmtool.log"
 echo "pldmtool fw_update GetStatus,GetFwParams,QueryDeviceIdentifiers ----" >> "$op"
-for i in {13..29} 
+for i in {13..21} {24..29}
 do 
     if ! timeout 15 pldmtool fw_update GetStatus -m $i &>> "$op"; then
         log_error "Failed to collect pldmtool fw_update GetStatus for endpoint id $i"
