@@ -14,6 +14,8 @@
 #include <ctime>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
+#include <sdeventplus/exception.hpp>
+#include <sdeventplus/source/base.hpp>
 
 #include <cmath>
 #include <ctime>
@@ -172,15 +174,25 @@ uint32_t Manager::captureDump(Type type,
     }
     else if (pid > 0)
     {
-        auto rc = sd_event_add_child(eventLoop.get(), nullptr, pid,
-                                     WEXITED | WSTOPPED, callback, nullptr);
-        if (0 > rc)
+        Child::Callback callback = [this, type, pid](Child&, const siginfo_t*) {
+            this->childPtrMap.erase(pid);
+        };
+
+        try
+        {
+            childPtrMap.emplace(pid,
+                                std::make_unique<Child>(eventLoop.get(), pid,
+                                                        WEXITED | WSTOPPED,
+                                                        std::move(callback)));
+        }
+        catch (const sdeventplus::SdEventError& ex)
         {
             // Failed to add to event loop
             log<level::ERR>(
                 fmt::format(
-                    "Error occurred during the sd_event_add_child call, rc({})",
-                    rc)
+                    "Error occurred during the sdeventplus::source::Child "
+                    "creation ex({})",
+                    ex.what())
                     .c_str());
             elog<InternalFailure>();
         }
@@ -261,9 +273,18 @@ void Manager::watchCallback(const UserMap& fileInfo)
         // and associated inotify watch.
         if (IN_CLOSE_WRITE == i.second)
         {
-            removeWatch(i.first);
-
-            createEntry(i.first);
+            if (!std::filesystem::is_directory(i.first))
+            {
+                // Don't require filename to be passed, as the path
+                // of dump directory is stored in the childWatchMap
+                removeWatch(i.first.parent_path());
+                // dump file is written now create D-Bus entry
+                createEntry(i.first);
+            }
+            else
+            {
+                removeWatch(i.first);
+            }
         }
         // Start inotify watch on newly created directory.
         else if ((IN_CREATE == i.second) && fs::is_directory(i.first))
