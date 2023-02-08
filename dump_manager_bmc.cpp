@@ -41,36 +41,89 @@ namespace internal
 void Manager::create(Type type, std::vector<std::string> fullPaths)
 {
     // Limit dumps to max allowed entries
-    dumpMgr.phosphor::dump::bmc::Manager::limitDumpEntries();
+    dumpMgr.phosphor::dump::bmc::Manager::limitDumpEntries(type);
 
     dumpMgr.phosphor::dump::bmc::Manager::captureDump(type, fullPaths);
 }
 
 } // namespace internal
 
-void Manager::limitDumpEntries()
+void Manager::limitDumpEntries(Type type)
 {
     // Delete dumps only when bmc dump max limit is configured
-    if (BMC_DUMP_MAX_LIMIT == 0)
+    if (BMC_DUMP_MAX_LIMIT == 0 && BMC_CORE_DUMP_MAX_LIMIT == 0)
     {
         // Do nothing - bmc dump max limit is not configured
         return;
     }
     // Delete dumps on reaching allowed entries
-    int totalDumps = entries.size();
-    if (totalDumps < BMC_DUMP_MAX_LIMIT)
+    int totalBmcDumps = 0;
+    int totalCoreDumps = 0;
+    std::string coreDir = TypeMap.find(Type::ApplicationCored)->second;
+
+    for (auto& entry : entries)
+    {
+        auto path =
+            dynamic_cast<phosphor::dump::bmc::Entry*>(entry.second.get())
+                ->getFileName()
+                .string();
+        if (path.find(coreDir) != std::string::npos)
+        {
+            ++totalCoreDumps;
+        }
+        else
+        {
+            ++totalBmcDumps;
+        }
+    }
+
+    if (totalBmcDumps < BMC_DUMP_MAX_LIMIT &&
+        totalCoreDumps < BMC_CORE_DUMP_MAX_LIMIT)
     {
         // Do nothing - Its within allowed entries
         return;
     }
+
     // Get the oldest dumps
-    int excessDumps = totalDumps - (BMC_DUMP_MAX_LIMIT-1);
+    int excessBmcDumps = 0; 
+    int excessCoreDumps = 0;
+
+    if (totalBmcDumps >= BMC_DUMP_MAX_LIMIT && BMC_DUMP_MAX_LIMIT &&
+        type != Type::ApplicationCored)
+    {
+        excessBmcDumps = totalBmcDumps - (BMC_DUMP_MAX_LIMIT - 1);
+    }
+
+    if (totalCoreDumps >= BMC_CORE_DUMP_MAX_LIMIT && BMC_CORE_DUMP_MAX_LIMIT &&
+        type == Type::ApplicationCored)
+    {
+        excessCoreDumps = totalCoreDumps - (BMC_CORE_DUMP_MAX_LIMIT - 1);
+    }
+
+    log<level::WARNING>(fmt::format("Excess dumps to be deleted, "
+                                    "excessBmcDumps({}), excessCoreDumps({})",
+                                    excessBmcDumps, excessCoreDumps)
+                            .c_str());
+
     // Delete the oldest dumps
-    for (auto d = entries.begin(); d != entries.end() && excessDumps;
-            d++) {
+    for (auto d = entries.begin();
+         d != entries.end() && (excessCoreDumps || excessBmcDumps); d++)
+    {
         auto& entry = d->second;
-        entry->delete_();
-        --excessDumps;
+        auto path = dynamic_cast<phosphor::dump::bmc::Entry*>(entry.get())
+                        ->getFileName()
+                        .string();
+
+        if (path.find(coreDir) != std::string::npos && excessCoreDumps)
+        {
+            entry->delete_();
+            --excessCoreDumps;
+        }
+        else if (path.find(coreDir) == std::string::npos && excessBmcDumps)
+        {
+            entry->delete_();
+            --excessBmcDumps;
+        }
     }
 
     return;
@@ -114,7 +167,7 @@ sdbusplus::message::object_path
     }
 
     // Limit dumps to max allowed entries
-    limitDumpEntries();
+    limitDumpEntries(Type::UserRequested);
     std::vector<std::string> paths;
     auto id = captureDump(Type::UserRequested, paths);
 
@@ -151,12 +204,17 @@ uint32_t Manager::captureDump(Type type,
 
     if (pid == 0)
     {
-        fs::path dumpPath(dumpDir);
-        auto id = std::to_string(lastEntryId + 1);
-        dumpPath /= id;
-
         // get dreport type map entry
         auto tempType = TypeMap.find(type);
+        fs::path dumpPath(dumpDir);
+
+        // Core dumps are stored in core directory 
+        if (type == Type::ApplicationCored) {
+            dumpPath /= tempType->second;
+        }
+        
+        auto id = std::to_string(lastEntryId + 1);
+        dumpPath /= id;
 
         execl("/usr/bin/dreport", "dreport", "-d", dumpPath.c_str(), "-i",
               id.c_str(), "-s", std::to_string(size).c_str(), "-q", "-v", "-p",
@@ -308,7 +366,17 @@ void Manager::removeWatch(const fs::path& path)
 
 void Manager::restore()
 {
-    fs::path dir(dumpDir);
+    fs::path dumpPath(dumpDir);
+    restoreDir(dumpPath);
+
+    auto tempType = TypeMap.find(Type::ApplicationCored);
+    dumpPath /= tempType->second;
+
+    restoreDir(dumpPath);
+}
+
+void Manager::restoreDir(fs::path dir)
+{
     if (!fs::exists(dir) || fs::is_empty(dir))
     {
         return;

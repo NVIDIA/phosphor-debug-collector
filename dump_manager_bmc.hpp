@@ -81,6 +81,18 @@ class Manager : virtual public CreateIface,
                       this, std::placeholders::_1)),
         dumpDir(filePath)
     {
+        // add watch for sub directories
+        fs::path dumpPath(filePath);
+        auto tempType = TypeMap.find(Type::ApplicationCored);
+        dumpPath /= tempType->second;
+
+        auto watchObj = std::make_unique<Watch>(
+            eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE | IN_CREATE, EPOLLIN,
+            dumpPath,
+            std::bind(std::mem_fn(&phosphor::dump::bmc::Manager::watchCallback),
+                      this, std::placeholders::_1));
+
+        childWatchMap.emplace(dumpPath, std::move(watchObj));        
     }
 
     /** @brief Implementation of dump watch call back
@@ -107,6 +119,13 @@ class Manager : virtual public CreateIface,
     bool checkDumpCreationInProgress();    
 
   private:
+
+    /** @brief Construct dump d-bus objects from their persisted
+     *        representations.
+     *  @param[in] dir - dump dir 
+     */
+    void restoreDir(fs::path dir);
+
     /** @brief Create Dump entry d-bus object
      *  @param[in] fullPath - Full path of the Dump file name
      */
@@ -153,7 +172,7 @@ class Manager : virtual public CreateIface,
      *         from permanent location on reaching maximum allowed
      *         entries.
      */
-    void limitDumpEntries();
+    void limitDumpEntries(Type type);
 
 };
 

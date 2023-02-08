@@ -93,6 +93,15 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
         completedTime(timeStamp);
     }
 
+    /** @brief To get the dump file name path 
+     *  @return path - file path 
+     */
+
+    fs::path getFileName()
+    {
+      return file;
+    }
+
   private:
     /** @Dump file name */
     fs::path file;

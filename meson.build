@@ -122,6 +122,9 @@ conf_data.set('BMC_DUMP_TOTAL_SIZE', get_option('BMC_DUMP_TOTAL_SIZE'),
 conf_data.set('BMC_DUMP_MAX_LIMIT', get_option('BMC_DUMP_MAX_LIMIT'),
                description : 'Total dumps to be retained on bmc'
              )
+conf_data.set('BMC_CORE_DUMP_MAX_LIMIT', get_option('BMC_CORE_DUMP_MAX_LIMIT'),
+               description : 'Total core dumps to be retained on bmc'
+             )             
 conf_data.set_quoted('SYSTEM_DUMP_PATH', get_option('SYSTEM_DUMP_PATH'),
                      description : 'Directory where system dumps are placed')
 conf_data.set_quoted('SYSTEM_DUMP_OBJPATH', get_option('SYSTEM_DUMP_OBJPATH'),
