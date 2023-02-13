@@ -31,10 +31,6 @@ namespace bmc
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using namespace phosphor::logging;
 
-// Timeout is kept similar to bmcweb dump creation task timeout
-// Max time taken for BMC dump creation is around 10 minutes + 50% threshold
-constexpr auto bmcDumpMaxTimeLimitInSec = 1200;
-
 namespace internal
 {
 

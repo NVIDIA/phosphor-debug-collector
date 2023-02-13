@@ -5,7 +5,10 @@
 #include "xyz/openbmc_project/Dump/Entry/server.hpp"
 #include "xyz/openbmc_project/Object/Delete/server.hpp"
 #include "xyz/openbmc_project/Time/EpochTime/server.hpp"
+#include <sdbusplus/timer.hpp>
 
+#include <phosphor-logging/log.hpp>
+#include <chrono>
 #include <filesystem>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
@@ -16,11 +19,17 @@ namespace dump
 {
 namespace bmc
 {
+using namespace phosphor::logging;
+
 template <typename T>
 using ServerObject = typename sdbusplus::server::object::object<T>;
 
 using EntryIfaces = sdbusplus::server::object::object<
     sdbusplus::xyz::openbmc_project::Dump::Entry::server::BMC>;
+
+// Timeout is kept similar to bmcweb dump creation task timeout
+// Max time taken for BMC dump creation is around 20 minutes + 50% threshold
+constexpr auto bmcDumpMaxTimeLimitInSec = 1800;
 
 namespace fs = std::filesystem;
 
@@ -63,6 +72,28 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
     {
         // Emit deferred signal.
         this->phosphor::dump::bmc::EntryIfaces::emit_object_added();
+
+        // Create timer for entries which are in progress
+        if (phosphor::dump::Entry::status() == OperationStatus::InProgress)
+        {
+            progressTimer = std::make_unique<phosphor::Timer>([this]() {
+                uint64_t now = std::time(nullptr);
+                uint64_t limit = phosphor::dump::Entry::startTime() + bmcDumpMaxTimeLimitInSec;
+                float timeProgress = now <= limit
+                                         ? (((float)(limit - now) /
+                                             (float)bmcDumpMaxTimeLimitInSec) * 100.0)
+                                         : 100.0;
+                progress(100 - timeProgress);
+                if (phosphor::dump::Entry::status() ==
+                    OperationStatus::Completed)
+                {
+                    progressTimer->stop();
+                }
+                return;
+            });
+            //Progress update is done every 3 minutes
+            progressTimer->start(std::chrono::minutes(3), true);
+        }
     }
 
     /** @brief Delete this d-bus object.
@@ -91,6 +122,8 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
         // TODO: serialization of this property will be handled with
         // #ibm-openbmc/2597
         completedTime(timeStamp);
+        progress(100);
+        progressTimer->stop();
     }
 
     /** @brief To get the dump file name path 
@@ -105,6 +138,12 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
   private:
     /** @Dump file name */
     fs::path file;
+
+    /**
+     * @brief timer to update progress percent
+     *
+     */
+    std::unique_ptr<phosphor::Timer> progressTimer;
 };
 
 } // namespace bmc
