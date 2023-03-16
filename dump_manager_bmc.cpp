@@ -151,14 +151,10 @@ sdbusplus::message::object_path
     {
         log<level::WARNING>("BMC dump accepts no additional parameters");
     }
-    // don't allows simultaneously dump creation 
+    // don't allows simultaneously dump creation
     if (checkDumpCreationInProgress())
     {
-        using NotAllowed =
-            sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed;
-        using Reason = xyz::openbmc_project::Common::NotAllowed::REASON;
-        elog<NotAllowed>(
-            Reason("BMC dump creation in progress"));
+        elog<sdbusplus::xyz::openbmc_project::Common::Error::Unavailable>();
         return std::string();
     }
 
