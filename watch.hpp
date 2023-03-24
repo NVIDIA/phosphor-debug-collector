@@ -86,6 +86,9 @@ class Watch
     /** @brief File path to be watched */
     fs::path path;
 
+    /** @brief sd event io handle */
+    sd_event_source* eventSource = nullptr;
+
     /** @brief dump file directory watch descriptor */
     int wd = -1;
 

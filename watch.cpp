@@ -21,7 +21,16 @@ Watch::~Watch()
 {
     if ((fd() >= 0) && (wd >= 0))
     {
-        inotify_rm_watch(fd(), wd);
+        if (inotify_rm_watch(fd(), wd) != 0)
+        {
+            log<level::ERR>(
+                fmt::format("Error during inotify_rm_watch").c_str());
+        }
+    }
+
+    if (this->eventSource != nullptr)
+    {
+        this->eventSource = sd_event_source_disable_unref(this->eventSource);
     }
 }
 
@@ -52,8 +61,8 @@ Watch::Watch(const EventPtr& eventObj, const int flags, const uint32_t mask,
         elog<InternalFailure>();
     }
 
-    auto rc =
-        sd_event_add_io(eventObj.get(), nullptr, fd(), events, callback, this);
+    auto rc = sd_event_add_io(eventObj.get(), &eventSource, fd(), events,
+                              callback, this);
     if (0 > rc)
     {
         // Failed to add to event loop
