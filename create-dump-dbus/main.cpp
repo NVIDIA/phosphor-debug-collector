@@ -129,7 +129,10 @@ int main(int argc, char** argv)
         sigaction(SIGTSTP, &sigIntHandler, NULL);
 
         // make sure socket file is cleaned up
-        remove(SOCKET_PATH);
+        if (remove(SOCKET_PATH) < 0)
+        {
+            std::cerr << "remove call failed on socket" <<  std::endl;
+        }
 
         server->launchServer();
     }
