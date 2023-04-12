@@ -233,6 +233,30 @@ uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath
     elog<InternalFailure>();
 }
 
+uint32_t fdrDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    // Construct FDR dump arguments
+    std::vector<char*> arg_v;
+    std::string fPath = FDR_DUMP_BIN_PATH;
+    arg_v.push_back(&fPath[0]);
+    std::string pOption = "-p";
+    arg_v.push_back(&pOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+
+    arg_v.push_back(nullptr);
+
+    execv(arg_v[0], &arg_v[0]);
+
+    // FDR Dump execution is failed.
+    auto error = errno;
+    log<level::ERR>(
+        "System dump: Error occurred during fdr dump function execution",
+        entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
 
 uint32_t Manager::captureDump(std::map<std::string, std::string> params)
 {
@@ -289,12 +313,14 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
     const std::string typeFPGA = "FPGA";
     const std::string typeEROT = "EROT";
     const std::string typeLTSSM = "RetLTSSM";
+    const std::string typeFDR = "FDR";
     auto diagnosticType = params["DiagnosticType"];
     params.erase("DiagnosticType");
     if (!diagnosticType.empty())
     {
         if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
-            diagnosticType != typeEROT && diagnosticType != typeLTSSM)
+            diagnosticType != typeEROT && diagnosticType != typeLTSSM &&
+            diagnosticType != typeFDR)
         {
             log<level::ERR>("Unrecognized DiagnosticType option",
                             entry("DIAG_TYPE=%s", diagnosticType.c_str()));
@@ -361,6 +387,10 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
         else if (diagnosticType == typeLTSSM)
         {
             retimerLtssmDump(id, dumpPath);
+        }
+        else if (diagnosticType == typeFDR)
+        {
+            fdrDump(id, dumpPath);
         }
         else
         {
