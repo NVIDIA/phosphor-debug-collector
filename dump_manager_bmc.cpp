@@ -384,13 +384,23 @@ void Manager::restoreDir(fs::path dir)
         if ((fs::is_directory(p.path())) &&
             std::all_of(idStr.begin(), idStr.end(), ::isdigit))
         {
-            lastEntryId =
-                std::max(lastEntryId, static_cast<uint32_t>(std::stoul(idStr)));
-            auto fileIt = fs::directory_iterator(p.path());
-            // Create dump entry d-bus object.
-            if (fileIt != fs::end(fileIt))
+            auto dirEntryId = static_cast<uint32_t>(std::stoul(idStr));
+            if (dirEntryId != lastEntryId)
             {
-                createEntry(fileIt->path());
+                lastEntryId = std::max(lastEntryId, dirEntryId);
+                auto fileIt = fs::directory_iterator(p.path());
+                // Create dump entry d-bus object.
+                if (fileIt != fs::end(fileIt))
+                {
+                    createEntry(fileIt->path());
+                }
+            }
+            else
+            {
+                log<level::ERR>(
+                    fmt::format("Bmc duplicate dump entry found, EntryId({})",
+                                dirEntryId)
+                        .c_str());
             }
         }
     }
