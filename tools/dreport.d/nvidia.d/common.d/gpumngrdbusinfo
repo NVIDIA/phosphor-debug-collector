@@ -23,6 +23,13 @@ command="busctl introspect xyz.openbmc_project.GpuOobRecovery \
 
 add_cmd_output "$command" "$file_name" "$desc"
 
+desc="hmc ready status get"
+command="busctl call xyz.openbmc_project.GpuMgr \
+            /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
+            GetReadyStatus"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
 desc="GPU mngr inventory capabilities"
 file_name="gpumngrinvcap.log"
 op="invcapop.log"
@@ -47,21 +54,24 @@ busctl call xyz.openbmc_project.GpuMgr \
 
 for i in {0..7} 
 do 
-    busctl call xyz.openbmc_project.GpuMgr \
-                /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
-                DeviceGetData isi $i "gpu.inventory.capabilities" 1 &>> "$op"; 
+    command_to_run="busctl call xyz.openbmc_project.GpuMgr /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server DeviceGetData isi $i gpu.inventory.capabilities 1";
+    output=$( { time -p $command_to_run; } 2>&1 );
+    echo "Command: $command_to_run" >> "$op";
+    echo "Output: $output" >> "$op";
 done
 
 for i in {0..3} 
 do 
-    busctl call xyz.openbmc_project.GpuMgr \
-                /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
-                DeviceGetData isi $i "nvswitch.inventory.capabilities" 1 &>> "$op"; 
+    command_to_run="busctl call xyz.openbmc_project.GpuMgr /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server DeviceGetData isi $i nvswitch.inventory.capabilities 1";
+    output=$( { time -p $command_to_run; } 2>&1 );
+    echo "Command: $command_to_run" >> "$op";
+    echo "Output: $output" >> "$op";
 done
 
-busctl call xyz.openbmc_project.GpuMgr \
-            /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
-            DeviceGetData isi 0 "fpga.inventory.capabilities" 1 &>> "$op"; 
+command_to_run="busctl call xyz.openbmc_project.GpuMgr /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server DeviceGetData isi 0 fpga.inventory.capabilities 1";
+output=$( { time -p $command_to_run; } 2>&1 );
+echo "Command: $command_to_run" >> "$op";
+echo "Output: $output" >> "$op";
 
 command="cat $op"
 add_cmd_output "$command" "$file_name" "$desc"
