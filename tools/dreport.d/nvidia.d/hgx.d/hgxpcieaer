@@ -8,7 +8,7 @@
 
 desc="hgx pcie aer"
 
-command="lspci"
+command="lspci -vv"
 
 file_name="hgxpcieaer.log"
 
