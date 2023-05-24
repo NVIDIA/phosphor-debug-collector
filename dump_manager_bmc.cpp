@@ -38,8 +38,9 @@ void Manager::create(Type type, std::vector<std::string> fullPaths)
 {
     // Limit dumps to max allowed entries
     dumpMgr.phosphor::dump::bmc::Manager::limitDumpEntries(type);
-
-    dumpMgr.phosphor::dump::bmc::Manager::captureDump(type, fullPaths);
+    auto dumpPGID = 0;
+    dumpMgr.phosphor::dump::bmc::Manager::captureDump(type, fullPaths,
+                                                      dumpPGID);
 }
 
 } // namespace internal
@@ -81,7 +82,7 @@ void Manager::limitDumpEntries(Type type)
     }
 
     // Get the oldest dumps
-    int excessBmcDumps = 0; 
+    int excessBmcDumps = 0;
     int excessCoreDumps = 0;
 
     if (totalBmcDumps >= BMC_DUMP_MAX_LIMIT && BMC_DUMP_MAX_LIMIT &&
@@ -161,7 +162,8 @@ sdbusplus::message::object_path
     // Limit dumps to max allowed entries
     limitDumpEntries(Type::UserRequested);
     std::vector<std::string> paths;
-    auto id = captureDump(Type::UserRequested, paths);
+    pid_t dumpProcessGroupId = 0;
+    auto id = captureDump(Type::UserRequested, paths, dumpProcessGroupId);
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
@@ -172,7 +174,8 @@ sdbusplus::message::object_path
         entries.insert(std::make_pair(
             id, std::make_unique<bmc::Entry>(
                     bus, objPath.c_str(), id, timeStamp, 0, std::string(),
-                    phosphor::dump::OperationStatus::InProgress, *this)));
+                    phosphor::dump::OperationStatus::InProgress, *this,
+                    dumpProcessGroupId)));
     }
     catch (const std::invalid_argument& e)
     {
@@ -187,7 +190,8 @@ sdbusplus::message::object_path
 }
 
 uint32_t Manager::captureDump(Type type,
-                              const std::vector<std::string>& fullPaths)
+                              const std::vector<std::string>& fullPaths,
+                              pid_t& dumpPGID)
 {
     // Get Dump size.
     auto size = getAllowedSize();
@@ -196,15 +200,20 @@ uint32_t Manager::captureDump(Type type,
 
     if (pid == 0)
     {
+        // used to detach from previous process group to properly kill dreport
+        // process group and leaving original dump manager running
+        setpgid(0, 0);
+
         // get dreport type map entry
         auto tempType = TypeMap.find(type);
         fs::path dumpPath(dumpDir);
 
-        // Core dumps are stored in core directory 
-        if (type == Type::ApplicationCored) {
+        // Core dumps are stored in core directory
+        if (type == Type::ApplicationCored)
+        {
             dumpPath /= tempType->second;
         }
-        
+
         auto id = std::to_string(lastEntryId + 1);
         dumpPath /= id;
 
@@ -224,9 +233,13 @@ uint32_t Manager::captureDump(Type type,
     }
     else if (pid > 0)
     {
-        Child::Callback callback = [this, type, pid](Child&, const siginfo_t*) {
+        auto entryId = lastEntryId + 1;
+        Child::Callback callback = [this, type, pid, entryId](Child&, const siginfo_t*) {
             this->childPtrMap.erase(pid);
+            this->clearEntryGroupProcessId(entryId);
         };
+
+        dumpPGID = pid;
 
         try
         {
@@ -300,7 +313,7 @@ void Manager::createEntry(const fs::path& file)
             id,
             std::make_unique<bmc::Entry>(
                 bus, objPath.c_str(), id, stoull(msString), fs::file_size(file),
-                file, phosphor::dump::OperationStatus::Completed, *this)));
+                file, phosphor::dump::OperationStatus::Completed, *this, 0)));
     }
     catch (const std::invalid_argument& e)
     {

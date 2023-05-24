@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dump_entry.hpp"
+#include "bmc_dump_entry.hpp"
 #include "xyz/openbmc_project/Dump/Entry/BMC/server.hpp"
 #include "xyz/openbmc_project/Dump/Entry/server.hpp"
 #include "xyz/openbmc_project/Object/Delete/server.hpp"
@@ -28,8 +29,8 @@ using EntryIfaces = sdbusplus::server::object::object<
     sdbusplus::xyz::openbmc_project::Dump::Entry::server::BMC>;
 
 // Timeout is kept similar to bmcweb dump creation task timeout
-// Max time taken for BMC dump creation is around 20 minutes + 50% threshold
-constexpr auto bmcDumpMaxTimeLimitInSec = 1800;
+// Max time taken for BMC dump creation is around 30 minutes + 50% threshold
+constexpr auto bmcDumpMaxTimeLimitInSec = 2700;
 
 namespace fs = std::filesystem;
 
@@ -64,11 +65,11 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
     Entry(sdbusplus::bus::bus& bus, const std::string& objPath, uint32_t dumpId,
           uint64_t timeStamp, uint64_t fileSize, const fs::path& file,
           phosphor::dump::OperationStatus status,
-          phosphor::dump::Manager& parent) :
+          phosphor::dump::Manager& parent, pid_t dumpPGID) :
         EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),
         phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize,
                               status, parent),
-        file(file)
+        file(file), entryProcessGroupID(dumpPGID)
     {
         // Emit deferred signal.
         this->phosphor::dump::bmc::EntryIfaces::emit_object_added();
@@ -84,15 +85,38 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
                                              (float)bmcDumpMaxTimeLimitInSec) * 100.0)
                                          : 100.0;
                 progress(100 - timeProgress);
-                if (phosphor::dump::Entry::status() ==
-                    OperationStatus::Completed)
+
+                bool completed = phosphor::dump::Entry::status() ==
+                                 OperationStatus::Completed;
+                bool validProcesGroupId = entryProcessGroupID > 0;
+                bool pastTimeout = now > limit;
+
+                if (pastTimeout && validProcesGroupId && !completed)
+                {
+                    std::string msg = "Terminating " +
+                                      std::to_string(entryProcessGroupID) +
+                                      " PGID\r\n";
+                    log<level::ERR>(msg.c_str());
+                    /* use SIGTERM as dreport has TRAP on it to clean-up
+                        leftovers in /tmp */
+                    kill(-1 * (entryProcessGroupID), SIGTERM);
+                    clearProcessGroupId();
+                }
+
+                if (completed || pastTimeout)
                 {
                     progressTimer->stop();
+                    if (pastTimeout && !completed)
+                    {
+                        std::string msg =
+                            "Stopped progress timer due to timeout";
+                        log<level::ERR>(msg.c_str());
+                    }
                 }
                 return;
             });
-            //Progress update is done every 3 minutes
-            progressTimer->start(std::chrono::minutes(3), true);
+            // Progress update is done every 1 minute
+            progressTimer->start(std::chrono::minutes(1), true);
         }
     }
 
@@ -135,8 +159,13 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
       return file;
     }
 
+    void clearProcessGroupId(void)
+    {
+        entryProcessGroupID = 0;
+    }
+
   private:
-    /** @Dump file name */
+    /** @brief Dump file name */
     fs::path file;
 
     /**
@@ -144,6 +173,10 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
      *
      */
     std::unique_ptr<phosphor::Timer> progressTimer;
+
+    /** @brief Dump process group Id when currently running > 0 or 0 if not
+     * valid */
+    pid_t entryProcessGroupID;
 };
 
 } // namespace bmc

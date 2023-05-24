@@ -85,6 +85,16 @@ declare -x elog_id=""
 #Source dreport common functions
 . $DREPORT_INCLUDE/functions
 
+function cleanup_on_termination()
+{
+    echo "SIGTERM captured - cleanup $name_dir and $name_dir.tar.xz leftovers"
+    rm -r "$name_dir"
+    rm -r "$name_dir.tar.xz"
+    exit -1
+}
+
+trap 'cleanup_on_termination' SIGTERM
+
 # @brief Initiate data collection based on the type.
 # @return 0 on success, error code otherwise
 function collect_data()

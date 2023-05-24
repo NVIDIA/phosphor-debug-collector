@@ -4,6 +4,7 @@
 #include "dump_utils.hpp"
 #include "watch.hpp"
 #include "xyz/openbmc_project/Dump/Internal/Create/server.hpp"
+#include "bmc_dump_entry.hpp"
 
 #include <sdeventplus/source/child.hpp>
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
@@ -118,6 +119,21 @@ class Manager : virtual public CreateIface,
      */
     bool checkDumpCreationInProgress();    
 
+    /** @brief setter used to invalidate PGID to prevent race in scenario:
+     * 1. already past timeout but not terminated yet 
+     * 2. dreport makes it just before termination
+     * 3. progress tracking timer callback fires but sees invalidated GPID
+     *    in result does nothing
+     * also prevents terminating wrong process in case of 1. and 2. from 
+     * previous scenario and 3. PID reuse
+     *  @param [in] id - entry id which dump process exited (RC doesn't matter)
+     */
+    void clearEntryGroupProcessId(int id)
+    {
+        dynamic_cast<phosphor::dump::bmc::Entry*>(entries[id].get())
+             ->clearProcessGroupId();
+    }
+
   private:
 
     /** @brief Construct dump d-bus objects from their persisted
@@ -135,9 +151,11 @@ class Manager : virtual public CreateIface,
      *  @param[in] type - Type of the Dump.
      *  @param[in] fullPaths - List of absolute paths to the files
      *             to be included as part of Dump package.
+     *  @param[out] dumpPGID - dump process group Id
      *  @return id - The Dump entry id number.
      */
-    uint32_t captureDump(Type type, const std::vector<std::string>& fullPaths);
+    uint32_t captureDump(Type type, const std::vector<std::string>& fullPaths,
+                            pid_t &dumpPGID);
 
     /** @brief Remove specified watch object pointer from the
      *        watch map and associated entry from the map.
