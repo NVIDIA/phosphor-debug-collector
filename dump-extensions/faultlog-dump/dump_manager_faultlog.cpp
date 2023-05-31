@@ -16,6 +16,12 @@
 
 #include "dump-extensions/faultlog-dump/faultlog_dump_config.h"
 
+#include <fstream>
+#include <string>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
+
 namespace phosphor
 {
 namespace dump
@@ -84,39 +90,58 @@ void Manager::limitTotalDumpSize()
 #endif
 }
 
-sdbusplus::message::object_path
-    Manager::createDump(std::map<std::string, std::string> params)
+sdbusplus::message::object_path Manager::createDump(std::map<std::string, std::string> params)
 {
     // Limit dumps to max allowed entries
     limitDumpEntries();
     // Limit dumps to max allowed size
     limitTotalDumpSize();
-    const auto& [id, type, additionalTypeName, primayLogId] =
-        captureDump(params);
+
+    const auto& [id, type, additionalTypeName, primayLogId] = captureDump(params);
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
+    std::string sectionType = "NA";
+    std::string fruID = "NA";
+    std::string severity = "NA";
+    std::string nvipSignature = "NA";
+    std::string nvSeverity = "NA";
+    std::string nvSocketNumber = "NA";
+    std::string pcieVendorID = "NA";
+    std::string pcieDeviceID = "NA";
+    std::string pcieClassCode = "NA";
+    std::string pcieFunctionNumber = "NA";
+    std::string pcieDeviceNumber = "NA";
+    std::string pcieSegmentNumber = "NA";
+    std::string pcieDeviceBusNumber = "NA";
+    std::string pcieSecondaryBusNumber = "NA";
+    std::string pcieSlotNumber = "NA";
 
     try
     {
         std::time_t timeStamp = std::time(nullptr);
         entries.insert(std::make_pair(
-            id, std::make_unique<faultLog::Entry>(
-                    bus, objPath.c_str(), id, timeStamp, type,
-                    additionalTypeName, primayLogId, 0, std::string(),
-                    phosphor::dump::OperationStatus::InProgress, *this)));
+            id,
+            std::make_unique<faultLog::Entry>(
+                bus, objPath.c_str(), id, timeStamp, type, additionalTypeName,
+                primayLogId, 0, std::string(),
+                phosphor::dump::OperationStatus::InProgress, sectionType, fruID,
+                severity, nvipSignature, nvSeverity, nvSocketNumber, pcieVendorID,
+                pcieDeviceID, pcieClassCode, pcieFunctionNumber, pcieDeviceNumber,
+                pcieSegmentNumber, pcieDeviceBusNumber, pcieSecondaryBusNumber,
+                pcieSlotNumber, *this)));
     }
     catch (const std::invalid_argument& e)
     {
         log<level::ERR>(e.what());
-        log<level::ERR>("Error in creating system dump entry",
-                        entry("OBJECTPATH=%s", objPath.c_str()),
-                        entry("ID=%d", id));
+        log<level::ERR>(
+            "Error in creating system dump entry", entry("OBJECTPATH=%s", objPath.c_str()), entry("ID=%d", id));
         elog<InternalFailure>();
     }
 
     return objPath.string();
 }
+
 
 uint32_t cperDump(const std::string& dumpId, const std::string& dumpPath,
                   const std::string& cperPath)
@@ -206,6 +231,8 @@ FaultLogEntryInfo
                            primaryLogId);
 }
 
+
+
 void Manager::createEntry(const fs::path& file)
 {
     // Dump File Name format obmcdump_ID_EPOCHTIME.EXT
@@ -215,13 +242,31 @@ void Manager::createEntry(const fs::path& file)
 
     std::smatch match;
     std::string name = file.filename();
-
+ 
     if (!((std::regex_search(name, match, file_regex)) && (match.size() > 0)))
     {
         log<level::ERR>("System dump: Invalid Dump file name",
                         entry("FILENAME=%s", file.filename().c_str()));
         return;
     }
+
+    std::string sectionType = "NA";
+    std::string fruid = "NA";
+    std::string severity = "NA";
+    std::string nvipSignature = "NA";
+    std::string nvSeverity = "NA";
+    int nvSockNumber;
+    std::string nvSocketNumber = "NA";
+    std::string pcieVendorID = "NA";
+    std::string pcieDeviceID = "NA";
+    std::string pcieClassCode = "NA";
+    std::string pcieFunctionNumber = "NA";
+    std::string pcieDeviceNumber = "NA";
+    std::string pcieSegmentNumber = "NA";
+    std::string pcieDeviceBusNumber = "NA";
+    std::string pcieSecondaryBusNumber = "NA";
+    int pcieSlotNum;
+    std::string pcieSlotNumber = "NA";
 
     auto idString = match[ID_POS];
     auto msString = match[EPOCHTIME_POS];
@@ -232,13 +277,96 @@ void Manager::createEntry(const fs::path& file)
     auto dumpEntry = entries.find(id);
     if (dumpEntry != entries.end())
     {
-        dynamic_cast<phosphor::dump::faultLog::Entry*>(dumpEntry->second.get())
-            ->update(stoull(msString), fs::file_size(file), file);
+          dynamic_cast<phosphor::dump::faultLog::Entry*>(dumpEntry->second.get())
+            ->update(stoull(msString), fs::file_size(file), file, std::to_string(id));
+        
         return;
     }
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
+
+    std::string cperDecodePath = "/var/lib/logging/dumps/faultlog/" + std::to_string(id) + "/Decoded/decoded.json";
+    std::ifstream cperFile(cperDecodePath.c_str());
+
+    if (cperFile.is_open())
+    {
+        json jsonData;
+        jsonData = json::parse(cperFile);
+        if (jsonData.contains("Header") && jsonData["Header"].contains("Section Count"))
+        {
+            int secCount = jsonData["Header"]["Section Count"];
+
+            for (int i = 0; i < secCount; i++)
+            {
+                if (jsonData.contains("Sections") && jsonData["Sections"].is_array() &&
+                    !jsonData["Sections"].empty())
+                {
+                    if (jsonData["Sections"][i].contains("Section Descriptor"))
+                    {
+                        // Extracting existing fields
+                        if (jsonData["Sections"][i]["Section Descriptor"].contains("Section Type")){
+                            sectionType = jsonData["Sections"][i]["Section Descriptor"]["Section Type"];}
+
+                        if (jsonData["Sections"][i]["Section Descriptor"].contains("FRU Id")){
+                            fruid = jsonData["Sections"][i]["Section Descriptor"]["FRU Id"];}
+
+                        if (jsonData["Sections"][i]["Section Descriptor"].contains("Section Severity")){
+                            severity = jsonData["Sections"][i]["Section Descriptor"]["Section Severity"];}
+
+                        if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("IPSignature")){
+                            nvipSignature = jsonData["Sections"][i]["Section"]["IPSignature"];}
+
+                        if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("Severity")){
+                            nvSeverity = jsonData["Sections"][i]["Section"]["Severity"];}
+
+                        if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("Socket Number"))
+                        {
+                            nvSockNumber = jsonData["Sections"][i]["Section"]["Socket Number"];
+                            nvSocketNumber = std::to_string(nvSockNumber);
+                        }
+
+                        if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("Device ID"))
+                        {
+                            if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Vendor ID")){
+                                pcieVendorID = jsonData["Sections"][i]["Section"]["Device ID"]["Vendor ID"];}
+
+                            if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Device ID")){
+                                pcieDeviceID = jsonData["Sections"][i]["Section"]["Device ID"]["Device ID"];}
+
+                            if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Class Code")){
+                                pcieClassCode = jsonData["Sections"][i]["Section"]["Device ID"]["Class Code"];}
+
+                            if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Function Number")){
+                                pcieFunctionNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Function Number"];}
+
+                            if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Device Number")){
+                                pcieDeviceNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Device Number"];}
+
+                            if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Segment Number")){
+                                pcieSegmentNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Segment Number"];}
+
+                            if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Device Bus Number")){
+                                pcieDeviceBusNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Device Bus Number"];}
+
+                            if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Secondary Bus Number")){
+                                pcieSecondaryBusNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Secondary Bus Number"];}
+
+                            if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Slot Number"))
+                            {
+                                pcieSlotNum = jsonData["Sections"][i]["Section"]["Device ID"]["Slot Number"];
+                                pcieSlotNumber = std::to_string(pcieSlotNum);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        log<level::ERR>("Unable to open file");
+    }
 
     try
     {
@@ -246,9 +374,14 @@ void Manager::createEntry(const fs::path& file)
             id, std::make_unique<faultLog::Entry>(
                     bus, objPath.c_str(), id, stoull(msString),
                     FaultDataType::CPER, "CPER", "0", fs::file_size(file), file,
-                    phosphor::dump::OperationStatus::Completed, *this)));
+                    phosphor::dump::OperationStatus::Completed,
+                    sectionType, fruid, severity, nvipSignature, nvSeverity,
+                    nvSocketNumber, pcieVendorID, pcieDeviceID, pcieClassCode,
+                    pcieFunctionNumber, pcieDeviceNumber, pcieSegmentNumber,
+                    pcieDeviceBusNumber, pcieSecondaryBusNumber, pcieSlotNumber, *this)));
     }
-    catch (const std::invalid_argument& e)
+
+    catch (const std::invalid_argument &e)
     {
         log<level::ERR>(e.what());
         log<level::ERR>("Error in creating FaultLog dump entry",

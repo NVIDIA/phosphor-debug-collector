@@ -5,6 +5,7 @@
 #include "faultlog_dump_entry.hpp"
 #include "watch.hpp"
 #include "xyz/openbmc_project/Dump/NewDump/server.hpp"
+#include "xyz/openbmc_project/Dump/Entry/CPERDecode/server.hpp"
 
 #include <experimental/filesystem>
 #include <sdbusplus/bus.hpp>
