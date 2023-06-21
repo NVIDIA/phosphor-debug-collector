@@ -95,8 +95,12 @@ class Manager : virtual public CreateIface,
      */
     void createDumpFailed(int id)
     {
-        dynamic_cast<phosphor::dump::system::Entry*>(entries[id].get())
-            ->setFailedStatus();
+        auto entry = entries[id].get();
+        if (entry != nullptr)
+        {
+            dynamic_cast<phosphor::dump::system::Entry*>(entries[id].get())
+                ->setFailedStatus();
+        }
     }
 
   private:
