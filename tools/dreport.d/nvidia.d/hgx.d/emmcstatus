@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# config: 2 20
+# @brief: Get partitions/filesystem/mount of emmc.
+#
+
+. $DREPORT_INCLUDE/functions
+
+desc="partitions of emmc"
+
+command="fdisk -l"
+
+file_name="fdisk.log"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="mounts of emmc"
+
+command="mount"
+
+file_name="mount.log"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="emmc regs"
+
+file_name="emmcregs.log"
+
+command="mmc extcsd read /dev/mmcblk0"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
