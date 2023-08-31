@@ -233,7 +233,32 @@ uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath
     elog<InternalFailure>();
 }
 
-uint32_t fdrDump(const std::string& dumpId, const std::string& dumpPath)
+static void fdrDumpGetActionArgument(std::map<std::string, std::string>& params,
+                                     std::string& action)
+{
+    const std::string key = "Action";
+    const std::string cleanAction = "Clean";
+    const std::string collectAction = "Collect";
+
+    if (auto search = params.find(key); search != params.end())
+    {
+        if (search->second == cleanAction)
+        {
+            action = "clean";
+        }
+        else if (search->second == collectAction)
+        {
+            action = "collect";
+        }
+        else
+        {
+            log<level::ERR>("System dump: Unsupport argument for action");
+        }
+    }
+}
+
+uint32_t fdrDump(const std::string& dumpId, const std::string& dumpPath,
+                 const std::string& action)
 {
     // Construct FDR dump arguments
     std::vector<char*> arg_v;
@@ -245,6 +270,9 @@ uint32_t fdrDump(const std::string& dumpId, const std::string& dumpPath)
     std::string iOption = "-i";
     arg_v.push_back(&iOption[0]);
     arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    std::string aOption = "-a";
+    arg_v.push_back(&aOption[0]);
+    arg_v.push_back(const_cast<char*>(action.c_str()));
 
     arg_v.push_back(nullptr);
 
@@ -390,7 +418,10 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
         }
         else if (diagnosticType == typeFDR)
         {
-            fdrDump(id, dumpPath);
+            std::string action = "collect";
+
+            fdrDumpGetActionArgument(params, action);
+            fdrDump(id, dumpPath, action);
         }
         else
         {
