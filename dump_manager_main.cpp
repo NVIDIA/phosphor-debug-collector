@@ -2,6 +2,7 @@
 
 #include "dump-extensions.hpp"
 #include "dump-extensions/faultlog-dump/faultlog-dump-extensions.hpp"
+#include "dump-extensions/fdr-dump/fdr-dump-extensions.hpp"
 #include "dump_internal.hpp"
 #include "dump_manager.hpp"
 #include "dump_manager_bmc.hpp"
@@ -84,6 +85,9 @@ int main()
         phosphor::dump::loadExtensionsFaultLog(bus, dumpMgrList);
 #endif
 
+#ifdef FDR_DUMP_EXTENSION
+        phosphor::dump::loadExtensionsFDR(bus, dumpMgrList);
+#endif
         // Restore dbus objects of all dumps
         for (auto& dmpMgr : dumpMgrList)
         {

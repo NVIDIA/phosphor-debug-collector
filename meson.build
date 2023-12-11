@@ -168,6 +168,10 @@ conf_data.set('FAULTLOG_DUMP_EXTENSION', get_option('faultlog-dump-extension').e
                description : 'FaultLog dump extension'
              )  
 
+conf_data.set('FDR_DUMP_EXTENSION', get_option('fdr-dump-extension').enabled(),
+               description : 'FDR dump extension'
+             )
+
 configure_file(configuration : conf_data,
                output : 'config.h'
               )
