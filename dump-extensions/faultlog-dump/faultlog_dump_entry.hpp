@@ -39,7 +39,7 @@ class Manager;
  *  @details A concrete implementation for the
  *  xyz.openbmc_project.Dump.Entry DBus API
  */
-class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
+class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
 {
   public:
     Entry() = delete;
@@ -60,13 +60,17 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
      *  @param[in] fileSize - Dump file size in bytes.
      *  @param[in] file - Name of dump file.
      *  @param[in] status - status  of the dump.
+     *  @param[in] dumpSize - Dump size in bytes.
+     *  @param[in] sourceId - DumpId provided by the source.
      *  @param[in] parent - The dump entry's parent.
      */
     Entry(sdbusplus::bus::bus &bus, const std::string &objPath, uint32_t dumpId,
           uint64_t timeStamp, FaultDataType typeIn,
           const std::string &additionalTypeNameIn, const std::string &primaryLogIdIn, uint64_t fileSize,
           const fs::path &file, phosphor::dump::OperationStatus status, const std::string &SectionTypeIn, const std::string &fruIDIn, const std::string &severityIn, const std::string &nvIPSigIn, const std::string &nvSevIn, const std::string &nvSockNumIn, const std::string &pcieVendorIDIn, const std::string &pcieDeviceIDIn, const std::string &pcieClassCodeIn, const std::string &pcieFuncNumberIn, const std::string &pcieDeviceNumberIn, const std::string &pcieSegmentNumberIn, const std::string &pcieDeviceBusNumberIn, const std::string &pcieSecondaryBusNumberIn, const std::string &pcieSlotNumberIn,
-          phosphor::dump::Manager &parent) : EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize, status, parent),
+          std::string originatorId, originatorTypes originatorType, phosphor::dump::Manager &parent) :
+        phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize, std::string(), status, originatorId, originatorType, parent),
+        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),
         file(file)
     {
         type(typeIn);

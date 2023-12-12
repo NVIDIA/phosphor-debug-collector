@@ -16,7 +16,7 @@ namespace system
 {
 
 constexpr uint32_t INVALID_SOURCE_ID = 0xFFFFFFFF;
-using NotifyIface = sdbusplus::server::object::object<
+using NotifyIface = sdbusplus::server::object_t<
     sdbusplus::xyz::openbmc_project::Dump::server::Create,
     sdbusplus::xyz::openbmc_project::Dump::server::NewDump>;
 
@@ -42,7 +42,7 @@ class Manager : virtual public NotifyIface,
      *  @param[in] path - Path to attach at.
      *  @param[in] baseEntryPath - Base path of the dump entry.
      */
-    Manager(sdbusplus::bus::bus& bus, const char* path,
+    Manager(sdbusplus::bus_t& bus, const char* path,
             const std::string& baseEntryPath) :
         NotifyIface(bus, path),
         phosphor::dump::Manager(bus, path, baseEntryPath)
@@ -68,7 +68,7 @@ class Manager : virtual public NotifyIface,
      *  @return object_path - The path to the new dump entry.
      */
     sdbusplus::message::object_path
-        createDump(std::map<std::string, std::string> params) override;
+        createDump(phosphor::dump::DumpCreateParams params) override;
 };
 
 } // namespace system

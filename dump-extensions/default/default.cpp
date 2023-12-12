@@ -7,5 +7,6 @@ namespace dump
 void loadExtensions(sdbusplus::bus::bus&, DumpManagerList&)
 {
 }
+void loadExtensions(sdbusplus::bus_t&, DumpManagerList&) {}
 } // namespace dump
 } // namespace phosphor

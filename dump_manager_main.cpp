@@ -2,16 +2,15 @@
 
 #include "dump-extensions.hpp"
 #include "dump-extensions/faultlog-dump/faultlog-dump-extensions.hpp"
-#include "dump_internal.hpp"
 #include "dump_manager.hpp"
 #include "dump_manager_bmc.hpp"
+#include "dump_manager_faultlog.hpp"
 #include "elog_watch.hpp"
 #include "watch.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 
-#include <fmt/core.h>
-
 #include <phosphor-logging/elog-errors.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 #include <vector>
 
@@ -26,10 +25,8 @@ int main()
     auto rc = sd_event_default(&event);
     if (rc < 0)
     {
-        log<level::ERR>(
-            fmt::format("Error occurred during the sd_event_default, rc({})",
-                        rc)
-                .c_str());
+        lg2::error("Error occurred during the sd_event_default, rc: {RC}", "RC",
+                   rc);
         report<InternalFailure>();
         return rc;
     }
@@ -40,31 +37,27 @@ int main()
     sigset_t mask;
     if (sigemptyset(&mask) < 0)
     {
-        log<level::ERR>(
-            fmt::format("Unable to initialize signal set, errno({})", errno)
-                .c_str());
+        lg2::error("Unable to initialize signal set, errno: {ERRNO}", "ERRNO",
+                   errno);
         return EXIT_FAILURE;
     }
 
     if (sigaddset(&mask, SIGCHLD) < 0)
     {
-        log<level::ERR>(
-            fmt::format("Unable to add signal to signal set, errno({})", errno)
-                .c_str());
+        lg2::error("Unable to add signal to signal set, errno: {ERRNO}",
+                   "ERRNO", errno);
         return EXIT_FAILURE;
     }
 
     // Block SIGCHLD first, so that the event loop can handle it
     if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0)
     {
-        log<level::ERR>(
-            fmt::format("Unable to block signal, errno({})", errno).c_str());
+        lg2::error("Unable to block signal, errno: {ERRNO}", "ERRNO", errno);
         return EXIT_FAILURE;
     }
 
     // Add sdbusplus ObjectManager for the 'root' path of the DUMP manager.
-    sdbusplus::server::manager::manager objManager(bus, DUMP_OBJPATH);
-    bus.request_name(DUMP_BUSNAME);
+    sdbusplus::server::manager_t objManager(bus, DUMP_OBJPATH);
 
     try
     {
@@ -74,9 +67,15 @@ int main()
                 bus, eventP, BMC_DUMP_OBJPATH, BMC_DUMP_OBJ_ENTRY,
                 BMC_DUMP_PATH);
 
-        phosphor::dump::bmc::internal::Manager mgr(bus, *bmcDumpMgr,
-                                                   OBJ_INTERNAL);
+        phosphor::dump::bmc::Manager* ptrBmcDumpMgr = bmcDumpMgr.get();
+
         dumpMgrList.push_back(std::move(bmcDumpMgr));
+
+        std::unique_ptr<phosphor::dump::faultlog::Manager> faultLogMgr =
+            std::make_unique<phosphor::dump::faultlog::Manager>(
+                bus, FAULTLOG_DUMP_OBJPATH, FAULTLOG_DUMP_OBJ_ENTRY,
+                FAULTLOG_DUMP_PATH);
+        dumpMgrList.push_back(std::move(faultLogMgr));
 
         phosphor::dump::loadExtensions(bus, dumpMgrList);
 
@@ -90,16 +89,18 @@ int main()
             dmpMgr->restore();
         }
 
-        phosphor::dump::elog::Watch eWatch(bus, mgr);
+        phosphor::dump::elog::Watch eWatch(bus, *ptrBmcDumpMgr);
+
         bus.attach_event(eventP.get(), SD_EVENT_PRIORITY_NORMAL);
+
+        // Daemon is all set up so claim the busname now.
+        bus.request_name(DUMP_BUSNAME);
 
         auto rc = sd_event_loop(eventP.get());
         if (rc < 0)
         {
-            log<level::ERR>(
-                fmt::format("Error occurred during the sd_event_loop, rc({})",
-                            rc)
-                    .c_str());
+            lg2::error("Error occurred during the sd_event_loop, rc: {RC}",
+                       "RC", rc);
             elog<InternalFailure>();
         }
     }

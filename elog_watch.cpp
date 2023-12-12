@@ -2,17 +2,16 @@
 
 #include "elog_watch.hpp"
 
-#include "dump_internal.hpp"
 #include "dump_serialize.hpp"
-#include "errors_map.hpp"
+#include "dump_types.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
-
-#include <fmt/core.h>
 
 #include <cereal/cereal.hpp>
 #include <fstream>
 #include <phosphor-logging/elog.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/exception.hpp>
+#include <xyz/openbmc_project/Dump/Create/common.hpp>
 
 // Register class version with Cereal
 CEREAL_CLASS_VERSION(phosphor::dump::elog::Watch, CLASS_VERSION)
@@ -24,7 +23,6 @@ namespace dump
 namespace elog
 {
 
-using namespace phosphor::logging;
 constexpr auto LOG_PATH = "/xyz/openbmc_project/logging";
 using Message = std::string;
 using Attributes = std::variant<Message>;
@@ -33,8 +31,8 @@ using AttributeMap = std::map<AttributeName, Attributes>;
 using PropertyName = std::string;
 using PropertyMap = std::map<PropertyName, AttributeMap>;
 
-Watch::Watch(sdbusplus::bus::bus& bus, IMgr& iMgr) :
-    iMgr(iMgr),
+Watch::Watch(sdbusplus::bus_t& bus, Mgr& mgr) :
+    mgr(mgr),
     addMatch(bus,
              sdbusplus::bus::match::rules::interfacesAdded() +
                  sdbusplus::bus::match::rules::path_namespace(OBJ_LOGGING),
@@ -46,18 +44,17 @@ Watch::Watch(sdbusplus::bus::bus& bus, IMgr& iMgr) :
              std::bind(std::mem_fn(&Watch::delCallback), this,
                        std::placeholders::_1))
 {
-
-    fs::path file(ELOG_ID_PERSIST_PATH);
-    if (fs::exists(file))
+    std::filesystem::path file(ELOG_ID_PERSIST_PATH);
+    if (std::filesystem::exists(file))
     {
         if (!deserialize(ELOG_ID_PERSIST_PATH, elogList))
         {
-            log<level::ERR>("Error occurred during error id deserialize");
+            lg2::error("Error occurred during error id deserialize");
         }
     }
 }
 
-void Watch::addCallback(sdbusplus::message::message& msg)
+void Watch::addCallback(sdbusplus::message_t& msg)
 {
     using QuotaExceeded =
         sdbusplus::xyz::openbmc_project::Dump::Create::Error::QuotaExceeded;
@@ -68,13 +65,11 @@ void Watch::addCallback(sdbusplus::message::message& msg)
     {
         msg.read(objectPath, propertyMap);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
-        log<level::ERR>(
-            fmt::format(
-                "Failed to parse elog add signal, errormsg({}), REPLY_SIG({})",
-                e.what(), msg.get_signature())
-                .c_str());
+        lg2::error("Failed to parse elog add signal, errormsg: {ERROR}, "
+                   "REPLY_SIG: {REPLY_SIG}",
+                   "ERROR", e, "REPLY_SIG", msg.get_signature());
         return;
     }
 
@@ -113,26 +108,28 @@ void Watch::addCallback(sdbusplus::message::message& msg)
         return;
     }
 
-    EType errorType;
-    for (const auto& [type, errorList] : errorMap)
+    auto etype = findErrorType(data);
+    if (!etype.has_value())
     {
-        auto error = std::find(errorList.begin(), errorList.end(), data);
-        if (error != errorList.end())
-        {
-            errorType = type;
-            break;
-        }
-    }
-
-    // error not supported in the configuration
-    if (errorType.empty())
-    {
+        // error not supported in the configuration
         return;
     }
 
-    std::vector<std::string> fullPaths;
-    fullPaths.push_back(objectPath);
+    auto errorType = etype.value();
 
+    DumpCreateParams params;
+    using DumpIntr = sdbusplus::common::xyz::openbmc_project::dump::Create;
+    using CreateParameters =
+        sdbusplus::common::xyz::openbmc_project::dump::Create::CreateParameters;
+    using DumpType =
+        sdbusplus::common::xyz::openbmc_project::dump::Create::DumpType;
+    params[DumpIntr::convertCreateParametersToString(
+        CreateParameters::FilePath)] = objectPath;
+    params[DumpIntr::convertCreateParametersToString(
+        CreateParameters::DumpType)] =
+        DumpIntr::convertDumpTypeToString(DumpType::ErrorLog);
+    params[DumpIntr::convertCreateParametersToString(
+        CreateParameters::ErrorType)] = errorType;
     try
     {
         // Save the elog information. This is to avoid dump requests
@@ -140,15 +137,7 @@ void Watch::addCallback(sdbusplus::message::message& msg)
         elogList.insert(eId);
 
         phosphor::dump::elog::serialize(elogList);
-
-        auto item = std::find_if(
-            phosphor::dump::bmc::TypeMap.begin(),
-            phosphor::dump::bmc::TypeMap.end(),
-            [errorType](const auto& err) { return (err.second == errorType); });
-        if (item != phosphor::dump::bmc::TypeMap.end())
-        {
-            iMgr.IMgr::create((*item).first, fullPaths);
-        }
+        mgr.Mgr::createDump(params);
     }
     catch (const QuotaExceeded& e)
     {
@@ -157,20 +146,18 @@ void Watch::addCallback(sdbusplus::message::message& msg)
     return;
 }
 
-void Watch::delCallback(sdbusplus::message::message& msg)
+void Watch::delCallback(sdbusplus::message_t& msg)
 {
     sdbusplus::message::object_path objectPath;
     try
     {
         msg.read(objectPath);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
-        log<level::ERR>(
-            fmt::format(
-                "Failed to parse elog del signal, errormsg({}), REPLY_SIG({})",
-                e.what(), msg.get_signature())
-                .c_str());
+        lg2::error("Failed to parse elog del signal, errormsg: {ERROR}, "
+                   "REPLY_SIG: {REPLY_SIG}",
+                   "ERROR", e, "REPLY_SIG", msg.get_signature());
         return;
     }
 

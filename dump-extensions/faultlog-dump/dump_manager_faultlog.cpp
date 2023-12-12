@@ -1,8 +1,8 @@
 #include "config.h"
 
 #include "dump_manager_faultlog.hpp"
+#include "dump_utils.hpp"
 
-#include "dump_internal.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
@@ -90,7 +90,7 @@ void Manager::limitTotalDumpSize()
 #endif
 }
 
-sdbusplus::message::object_path Manager::createDump(std::map<std::string, std::string> params)
+sdbusplus::message::object_path Manager::createDump(phosphor::dump::DumpCreateParams params)
 {
     // Limit dumps to max allowed entries
     limitDumpEntries();
@@ -119,6 +119,12 @@ sdbusplus::message::object_path Manager::createDump(std::map<std::string, std::s
 
     try
     {
+        // Get the originator id and type from params
+        std::string originatorId;
+        originatorTypes originatorType;
+
+        phosphor::dump::extractOriginatorProperties(params, originatorId,
+                                                    originatorType);
         std::time_t timeStamp = std::time(nullptr);
         entries.insert(std::make_pair(
             id,
@@ -129,7 +135,7 @@ sdbusplus::message::object_path Manager::createDump(std::map<std::string, std::s
                 severity, nvipSignature, nvSeverity, nvSocketNumber, pcieVendorID,
                 pcieDeviceID, pcieClassCode, pcieFunctionNumber, pcieDeviceNumber,
                 pcieSegmentNumber, pcieDeviceBusNumber, pcieSecondaryBusNumber,
-                pcieSlotNumber, *this)));
+                pcieSlotNumber, originatorId, originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {
@@ -171,7 +177,7 @@ uint32_t cperDump(const std::string& dumpId, const std::string& dumpPath,
 }
 
 FaultLogEntryInfo
-    Manager::captureDump(std::map<std::string, std::string> params)
+    Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     FaultDataType type{};
     std::string additionalTypeName{};
@@ -183,9 +189,9 @@ FaultLogEntryInfo
     if (findCperType != params.end() && findCperPath != params.end())
     {
         type = FaultDataType::CPER;
-        additionalTypeName = findCperType->second;
+        additionalTypeName = std::get<std::string>(findCperType->second);
         primaryLogId = std::to_string(++lastCperId);
-        cperPath = findCperPath->second;
+        cperPath = std::get<std::string>(findCperPath->second);
         params.erase("CPER_TYPE");
         params.erase("CPER_PATH");
     }
@@ -370,6 +376,10 @@ void Manager::createEntry(const fs::path& file)
 
     try
     {
+        // Get the originator id and type from params
+        std::string originatorId;
+        originatorTypes originatorType;
+
         entries.insert(std::make_pair(
             id, std::make_unique<faultLog::Entry>(
                     bus, objPath.c_str(), id, stoull(msString),
@@ -378,7 +388,7 @@ void Manager::createEntry(const fs::path& file)
                     sectionType, fruid, severity, nvipSignature, nvSeverity,
                     nvSocketNumber, pcieVendorID, pcieDeviceID, pcieClassCode,
                     pcieFunctionNumber, pcieDeviceNumber, pcieSegmentNumber,
-                    pcieDeviceBusNumber, pcieSecondaryBusNumber, pcieSlotNumber, *this)));
+                    pcieDeviceBusNumber, pcieSecondaryBusNumber, pcieSlotNumber,originatorId, originatorType, *this)));
     }
 
     catch (const std::invalid_argument &e)

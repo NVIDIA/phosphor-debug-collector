@@ -1,3 +1,4 @@
+#include "../config.h"
 #include "create_dump_dbus.hpp"
 
 #define FMT_HEADER_ONLY
@@ -19,7 +20,6 @@
 #include <sdbusplus/exception.hpp>
 #include <vector>
 
-#include "../config.h"
 
 namespace phosphor
 {
@@ -207,6 +207,8 @@ int CreateDumpDbus::createDump(const std::string& type, std::string& response)
     constexpr auto METHOD_NAME = "CreateDump";
 
     std::string path;
+    std::map<std::string, std::variant<std::string, uint64_t>> params;
+    params["DumpType"] = type;
     std::map<std::string, std::string> paramMap{};
     if (type.empty() || type == "BMC")
     {
@@ -214,15 +216,14 @@ int CreateDumpDbus::createDump(const std::string& type, std::string& response)
     }
     else
     {
-        path = std::string(MAPPER_PATH_PREFIX) + "system";
-        paramMap["DiagnosticType"] = type;
+        params["DiagnosticType"] = type;
     }
 
     auto bus = bus::new_default();
     auto method = bus.new_method_call(MAPPER_BUSNAME, path.c_str(),
                                       MAPPER_INTERFACE, METHOD_NAME);
 
-    method.append(paramMap);
+    method.append(params);
     message::details::string_path_wrapper entry;
 
     int ret = 0;

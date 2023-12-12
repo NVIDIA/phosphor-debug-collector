@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#
+# config: 123 60
+# @brief: List the open file descriptors
+#
+
+# shellcheck disable=SC1091
+. "$DREPORT_INCLUDE"/functions
+
+file_name="procfd.log"
+desc="proc fd"
+cmd="ls -Al /proc/*/fd/ 2> /dev/null"
+add_cmd_output "$cmd" "$file_name" "$desc"

@@ -5,10 +5,8 @@
 #include "dump_utils.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 
-#include <fmt/core.h>
-
 #include <phosphor-logging/elog-errors.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
 
 namespace phosphor
 {
@@ -27,31 +25,44 @@ int openPLDM()
     if (fd < 0)
     {
         auto e = errno;
-        log<level::ERR>(
-            fmt::format("pldm_open failed, errno({}), FD({})", e, fd).c_str());
-        elog<NotAllowed>(Reason("Required host dump action via pldm is not "
-                                "allowed due to pldm_open failed"));
+        lg2::error(
+            "pldm_open failed, errno: {ERRNO}, FD: FD", "ERRNO", e, "FD",
+            static_cast<std::underlying_type<pldm_requester_error_codes>::type>(
+                fd));
+        elog<NotAllowed>(
+            Reason("Required host dump action via pldm is not allowed due "
+                   "to pldm_open failed"));
     }
     return fd;
 }
 
 uint8_t getPLDMInstanceID(uint8_t eid)
 {
-
     constexpr auto pldmRequester = "xyz.openbmc_project.PLDM.Requester";
     constexpr auto pldm = "/xyz/openbmc_project/pldm";
-
-    auto bus = sdbusplus::bus::new_default();
-    auto service = phosphor::dump::getService(bus, pldm, pldmRequester);
-
-    auto method = bus.new_method_call(service.c_str(), pldm, pldmRequester,
-                                      "GetInstanceId");
-    method.append(eid);
-    auto reply = bus.call(method);
-
     uint8_t instanceID = 0;
-    reply.read(instanceID);
 
+    try
+    {
+        auto bus = sdbusplus::bus::new_default();
+        auto service = phosphor::dump::getService(bus, pldm, pldmRequester);
+
+        auto method = bus.new_method_call(service.c_str(), pldm, pldmRequester,
+                                          "GetInstanceId");
+        method.append(eid);
+        auto reply = bus.call(method);
+
+        reply.read(instanceID);
+
+        lg2::info("Got instanceId: {INSTANCE_ID} from PLDM eid: {EID}",
+                  "INSTANCE_ID", instanceID, "EID", eid);
+    }
+    catch (const sdbusplus::exception::SdBusError& e)
+    {
+        lg2::error("Failed to get instance id error: {ERROR}", "ERROR", e);
+        elog<NotAllowed>(Reason("Failure in communicating with pldm service, "
+                                "service may not be running"));
+    }
     return instanceID;
 }
 

@@ -23,9 +23,9 @@ namespace bmc
 using namespace phosphor::logging;
 
 template <typename T>
-using ServerObject = typename sdbusplus::server::object::object<T>;
+using ServerObject = typename sdbusplus::server::object_t<T>;
 
-using EntryIfaces = sdbusplus::server::object::object<
+using EntryIfaces = sdbusplus::server::object_t<
     sdbusplus::xyz::openbmc_project::Dump::Entry::server::BMC>;
 
 // Timeout is kept similar to bmcweb dump creation task timeout
@@ -34,6 +34,9 @@ constexpr auto bmcDumpMaxTimeLimitInSec = 2700;
 
 namespace fs = std::filesystem;
 
+using originatorTypes = sdbusplus::xyz::openbmc_project::Common::server::
+    OriginatedBy::OriginatorTypes;
+
 class Manager;
 
 /** @class Entry
@@ -41,7 +44,7 @@ class Manager;
  *  @details A concrete implementation for the
  *  xyz.openbmc_project.Dump.Entry DBus API
  */
-class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
+class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
 {
   public:
     Entry() = delete;
@@ -58,18 +61,21 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
      *  @param[in] timeStamp - Dump creation timestamp
      *             since the epoch.
      *  @param[in] fileSize - Dump file size in bytes.
-     *  @param[in] file - Name of dump file.
+     *  @param[in] file - Absolute path to the dump file.
      *  @param[in] status - status of the dump.
+     *  @param[in] originatorId - Id of the originator of the dump
+     *  @param[in] originatorType - Originator type
      *  @param[in] parent - The dump entry's parent.
      */
-    Entry(sdbusplus::bus::bus& bus, const std::string& objPath, uint32_t dumpId,
-          uint64_t timeStamp, uint64_t fileSize, const fs::path& file,
-          phosphor::dump::OperationStatus status,
-          phosphor::dump::Manager& parent, pid_t dumpPGID) :
-        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),
+    Entry(sdbusplus::bus_t& bus, const std::string& objPath, uint32_t dumpId,
+          uint64_t timeStamp, uint64_t fileSize,
+          const std::filesystem::path& file,
+          phosphor::dump::OperationStatus status, std::string originatorId,
+          originatorTypes originatorType, phosphor::dump::Manager& parent) :
         phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize,
-                              status, parent),
-        file(file), entryProcessGroupID(dumpPGID)
+                              file, status, originatorId, originatorType,
+                              parent),
+        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit)
     {
         // Emit deferred signal.
         this->phosphor::dump::bmc::EntryIfaces::emit_object_added();

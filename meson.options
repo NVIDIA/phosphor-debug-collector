@@ -37,11 +37,6 @@ option('CORE_FILE_DIR', type : 'string',
         description : 'Directory where core dumps are placed'
       )
 
-option('OBJ_INTERNAL', type : 'string',
-        value : '/xyz/openbmc_project/dump/internal/manager',
-        description : 'Internal dump manager D-Bus object path'
-      )
-
 option('BMC_DUMP_OBJ_ENTRY', type : 'string',
         value : '/xyz/openbmc_project/dump/bmc/entry',
         description : 'The BMC dump entry D-Bus object path'
@@ -134,6 +129,28 @@ option('SYSTEM_DUMP_TOTAL_SIZE', type : 'integer',
 option('SYSTEM_DUMP_MAX_LIMIT', type : 'integer',
         value : 10,
         description : 'Total system dumps to be retained on bmc, 0 represents unlimited dumps'
+      )
+
+option('dump_rotate_config', type: 'feature',
+        value : 'disabled',
+        description : 'Enable rotate config for bmc dump'
+      )
+
+# Fault log options
+
+option('FAULTLOG_DUMP_PATH', type : 'string',
+        value : '/var/lib/phosphor-debug-collector/faultlogs/',
+        description : 'Directory where fault logs are placed'
+      )
+
+option('FAULTLOG_DUMP_OBJPATH', type : 'string',
+        value : '/xyz/openbmc_project/dump/faultlog',
+        description : 'The fault log dump manager D-Bus object path'
+      )
+
+option('FAULTLOG_DUMP_OBJ_ENTRY', type : 'string',
+        value : '/xyz/openbmc_project/dump/faultlog/entry',
+        description : 'The fault log dump entry D-Bus object path'
       )
 
 # Configurations for openpower-dump extension

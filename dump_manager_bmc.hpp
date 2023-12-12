@@ -3,8 +3,6 @@
 #include "dump_manager.hpp"
 #include "dump_utils.hpp"
 #include "watch.hpp"
-#include "xyz/openbmc_project/Dump/Internal/Create/server.hpp"
-#include "bmc_dump_entry.hpp"
 
 #include <sdeventplus/source/child.hpp>
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
@@ -18,43 +16,24 @@ namespace dump
 {
 namespace bmc
 {
-namespace internal
-{
 
-class Manager;
-
-} // namespace internal
-
-using CreateIface = sdbusplus::server::object::object<
+using CreateIface = sdbusplus::server::object_t<
     sdbusplus::xyz::openbmc_project::Dump::server::Create>;
 
 using UserMap = phosphor::dump::inotify::UserMap;
 
-using Type =
-    sdbusplus::xyz::openbmc_project::Dump::Internal::server::Create::Type;
-
-namespace fs = std::filesystem;
-
 using Watch = phosphor::dump::inotify::Watch;
 using ::sdeventplus::source::Child;
-// Type to dreport type  string map
-static const std::map<Type, std::string> TypeMap = {
-    {Type::ApplicationCored, "core"},
-    {Type::UserRequested, "user"},
-    {Type::InternalFailure, "elog"},
-    {Type::Checkstop, "checkstop"},
-    {Type::Ramoops, "ramoops"}};
 
 /** @class Manager
  *  @brief OpenBMC Dump  manager implementation.
  *  @details A concrete implementation for the
  *  xyz.openbmc_project.Dump.Create DBus API
  */
-class Manager : virtual public CreateIface,
-                virtual public phosphor::dump::Manager
+class Manager :
+    virtual public CreateIface,
+    virtual public phosphor::dump::Manager
 {
-    friend class internal::Manager;
-
   public:
     Manager() = delete;
     Manager(const Manager&) = default;
@@ -70,7 +49,7 @@ class Manager : virtual public CreateIface,
      *  @param[in] baseEntryPath - Base path for dump entry.
      *  @param[in] filePath - Path where the dumps are stored.
      */
-    Manager(sdbusplus::bus::bus& bus, const EventPtr& event, const char* path,
+    Manager(sdbusplus::bus_t& bus, const EventPtr& event, const char* path,
             const std::string& baseEntryPath, const char* filePath) :
         CreateIface(bus, path),
         phosphor::dump::Manager(bus, path, baseEntryPath),
@@ -81,20 +60,7 @@ class Manager : virtual public CreateIface,
             std::bind(std::mem_fn(&phosphor::dump::bmc::Manager::watchCallback),
                       this, std::placeholders::_1)),
         dumpDir(filePath)
-    {
-        // add watch for sub directories
-        fs::path dumpPath(filePath);
-        auto tempType = TypeMap.find(Type::ApplicationCored);
-        dumpPath /= tempType->second;
-
-        auto watchObj = std::make_unique<Watch>(
-            eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE | IN_CREATE, EPOLLIN,
-            dumpPath,
-            std::bind(std::mem_fn(&phosphor::dump::bmc::Manager::watchCallback),
-                      this, std::placeholders::_1));
-
-        childWatchMap.emplace(dumpPath, std::move(watchObj));        
-    }
+    {}
 
     /** @brief Implementation of dump watch call back
      *  @param [in] fileInfo - map of file info  path:event
@@ -112,56 +78,27 @@ class Manager : virtual public CreateIface,
      *  @return object_path - The object path of the new dump entry.
      */
     sdbusplus::message::object_path
-        createDump(std::map<std::string, std::string> params) override;
-
-    /** @brief Checks if any BMC dump creation is in progress
-     *  @return 0 if no dump creation is in progress, 1 if otherwise 
-     */
-    bool checkDumpCreationInProgress();    
-
-    /** @brief setter used to invalidate PGID to prevent race in scenario:
-     * 1. already past timeout but not terminated yet 
-     * 2. dreport makes it just before termination
-     * 3. progress tracking timer callback fires but sees invalidated GPID
-     *    in result does nothing
-     * also prevents terminating wrong process in case of 1. and 2. from 
-     * previous scenario and 3. PID reuse
-     *  @param [in] id - entry id which dump process exited (RC doesn't matter)
-     */
-    void clearEntryGroupProcessId(int id)
-    {
-        dynamic_cast<phosphor::dump::bmc::Entry*>(entries[id].get())
-             ->clearProcessGroupId();
-    }
+        createDump(phosphor::dump::DumpCreateParams params) override;
 
   private:
-
-    /** @brief Construct dump d-bus objects from their persisted
-     *        representations.
-     *  @param[in] dir - dump dir 
-     */
-    void restoreDir(fs::path dir);
-
     /** @brief Create Dump entry d-bus object
      *  @param[in] fullPath - Full path of the Dump file name
      */
-    void createEntry(const fs::path& fullPath);
+    void createEntry(const std::filesystem::path& fullPath);
 
-    /**  @brief Capture BMC Dump based on the Dump type.
-     *  @param[in] type - Type of the Dump.
-     *  @param[in] fullPaths - List of absolute paths to the files
+    /** @brief Capture BMC Dump based on the Dump type.
+     *  @param[in] type - Type of the dump to pass to dreport
+     *  @param[in] path - An absolute path to the file
      *             to be included as part of Dump package.
-     *  @param[out] dumpPGID - dump process group Id
      *  @return id - The Dump entry id number.
      */
-    uint32_t captureDump(Type type, const std::vector<std::string>& fullPaths,
-                            pid_t &dumpPGID);
+    uint32_t captureDump(DumpTypes type, const std::string& path);
 
     /** @brief Remove specified watch object pointer from the
      *        watch map and associated entry from the map.
      *        @param[in] path - unique identifier of the map
      */
-    void removeWatch(const fs::path& path);
+    void removeWatch(const std::filesystem::path& path);
 
     /** @brief Calculate per dump allowed size based on the available
      *        size in the dump location.
@@ -178,20 +115,17 @@ class Manager : virtual public CreateIface,
     /** @brief Path to the dump file*/
     std::string dumpDir;
 
+    /** @brief Flag to reject user intiated dump if a dump is in progress*/
+    // TODO: https://github.com/openbmc/phosphor-debug-collector/issues/19
+    static bool fUserDumpInProgress;
+
     /** @brief Child directory path and its associated watch object map
      *        [path:watch object]
      */
-    std::map<fs::path, std::unique_ptr<Watch>> childWatchMap;
+    std::map<std::filesystem::path, std::unique_ptr<Watch>> childWatchMap;
 
     /** @brief map of SDEventPlus child pointer added to event loop */
     std::map<pid_t, std::unique_ptr<Child>> childPtrMap;
-
-    /** @brief Erase BMC dump entry and delete respective dump file
-     *         from permanent location on reaching maximum allowed
-     *         entries.
-     */
-    void limitDumpEntries(Type type);
-
 };
 
 } // namespace bmc

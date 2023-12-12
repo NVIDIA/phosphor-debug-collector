@@ -2,14 +2,11 @@
 
 #include "config.h"
 
-#include <phosphor-logging/log.hpp>
-
 #include <filesystem>
 #include <string>
 #include <vector>
 
 namespace fs = std::filesystem;
-using namespace phosphor::logging;
 
 namespace phosphor
 {
@@ -38,10 +35,15 @@ class Manager
 
   private:
     /** @brief Helper function for initiating dump request using
-     *         D-bus internal create interface.
+     *         createDump D-Bus interface.
      *  @param [in] files - ramoops files list
      */
     void createHelper(const std::vector<std::string>& files);
+
+    /** @brief Create an error indicating ramoops was found
+     *
+     */
+    void createError();
 };
 
 } // namespace ramoops

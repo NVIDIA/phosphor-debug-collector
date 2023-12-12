@@ -19,7 +19,6 @@
 #include "pldm_utils.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 
-#include <fmt/core.h>
 #include <libpldm/base.h>
 #include <libpldm/file_io.h>
 #include <libpldm/platform.h>
@@ -27,7 +26,7 @@
 
 #include <fstream>
 #include <phosphor-logging/elog-errors.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 
 namespace phosphor
@@ -71,7 +70,7 @@ mctp_eid_t readEID()
     std::ifstream eidFile{eidPath};
     if (!eidFile.good())
     {
-        log<level::ERR>("Could not open host EID file");
+        lg2::error("Could not open host EID file");
         elog<NotAllowed>(Reason("Required host dump action via pldm is not "
                                 "allowed due to mctp end point read failed"));
     }
@@ -85,7 +84,7 @@ mctp_eid_t readEID()
         }
         else
         {
-            log<level::ERR>("EID file was empty");
+            lg2::error("EID file was empty");
             elog<NotAllowed>(
                 Reason("Required host dump action via pldm is not "
                        "allowed due to mctp end point read failed"));
@@ -119,31 +118,26 @@ void requestOffload(uint32_t id)
 
     if (rc != PLDM_SUCCESS)
     {
-        log<level::ERR>(
-            fmt::format("Message encode failure. RC({})", rc).c_str());
+        lg2::error("Message encode failure. RC: {RC}", "RC", rc);
         elog<NotAllowed>(Reason("Host dump offload via pldm is not "
                                 "allowed due to encode failed"));
     }
 
-    uint8_t* responseMsg = nullptr;
-    size_t responseMsgSize{};
-
     CustomFd fd(openPLDM());
 
-    rc = pldm_send_recv(eid, fd(), requestMsg.data(), requestMsg.size(),
-                        &responseMsg, &responseMsgSize);
+    lg2::info("Sending request to offload dump id: {ID}, eid: {EID}", "ID", id,
+              "EID", eid);
+
+    rc = pldm_send(eid, fd(), requestMsg.data(), requestMsg.size());
     if (rc < 0)
     {
         auto e = errno;
-        log<level::ERR>(
-            fmt::format("pldm_send failed, RC({}), errno({})", rc, e).c_str());
+        lg2::error("pldm_send failed, RC: {RC}, errno: {ERRNO}", "RC", rc,
+                   "ERRNO", e);
         elog<NotAllowed>(Reason("Host dump offload via pldm is not "
                                 "allowed due to fileack send failed"));
     }
-    pldm_msg* response = reinterpret_cast<pldm_msg*>(responseMsg);
-    log<level::INFO>(fmt::format("Done. PLDM message, RC({})",
-                                 static_cast<uint16_t>(response->payload[0]))
-                         .c_str());
+    lg2::info("Done. PLDM message, id: {ID}, RC: {RC}", "ID", id, "RC", rc);
 }
 
 void requestDelete(uint32_t dumpId, uint32_t dumpType)
@@ -177,61 +171,41 @@ void requestDelete(uint32_t dumpId, uint32_t dumpType)
 
     if (retCode != PLDM_SUCCESS)
     {
-        log<level::ERR>(
-            fmt::format("Failed to encode pldm FileAck to delete host "
-                        "dump,SRC_DUMP_ID({}), "
-                        "PLDM_FILE_IO_TYPE({}),PLDM_RETURN_CODE({})",
-                        dumpId, pldmDumpType, retCode)
-                .c_str());
+        lg2::error(
+            "Failed to encode pldm FileAck to delete host dump, "
+            "SRC_DUMP_ID: {SRC_DUMP_ID}, PLDM_FILE_IO_TYPE: {PLDM_DUMP_TYPE}, "
+            "PLDM_RETURN_CODE: {RET_CODE}",
+            "SRC_DUMP_ID", dumpId, "PLDM_DUMP_TYPE",
+            static_cast<std::underlying_type<pldm_fileio_file_type>::type>(
+                pldmDumpType),
+            "RET_CODE", retCode);
         elog<NotAllowed>(Reason("Host dump deletion via pldm is not "
                                 "allowed due to encode fileack failed"));
     }
 
-    uint8_t* pldmRespMsg = nullptr;
-    size_t pldmRespMsgSize;
-
     CustomFd pldmFd(openPLDM());
 
-    retCode =
-        pldm_send_recv(mctpEndPointId, pldmFd(), fileAckReqMsg.data(),
-                       fileAckReqMsg.size(), &pldmRespMsg, &pldmRespMsgSize);
-
-    std::unique_ptr<uint8_t, decltype(std::free)*> pldmRespMsgPtr{pldmRespMsg,
-                                                                  std::free};
+    retCode = pldm_send(mctpEndPointId, pldmFd(), fileAckReqMsg.data(),
+                        fileAckReqMsg.size());
     if (retCode != PLDM_REQUESTER_SUCCESS)
     {
         auto errorNumber = errno;
-        log<level::ERR>(
-            fmt::format("Failed to send pldm FileAck to delete host dump, "
-                        "SRC_DUMP_ID({}), PLDM_FILE_IO_TYPE({}), "
-                        "PLDM_RETURN_CODE({}), ERRNO({}), ERRMSG({})",
-                        dumpId, pldmDumpType, retCode, errorNumber,
-                        strerror(errorNumber))
-                .c_str());
+        lg2::error(
+            "Failed to send pldm FileAck to delete host dump, "
+            "SRC_DUMP_ID: {SRC_DUMP_ID}, PLDM_FILE_IO_TYPE: {PLDM_DUMP_TYPE}, "
+            "PLDM_RETURN_CODE: {RET_CODE}, ERRNO: {ERRNO}, ERRMSG: {ERRMSG}",
+            "SRC_DUMP_ID", dumpId, "PLDM_DUMP_TYPE",
+            static_cast<std::underlying_type<pldm_fileio_file_type>::type>(
+                pldmDumpType),
+            "RET_CODE", retCode, "ERRNO", errorNumber, "ERRMSG",
+            strerror(errorNumber));
         elog<NotAllowed>(Reason("Host dump deletion via pldm is not "
                                 "allowed due to fileack send failed"));
     }
 
-    uint8_t completionCode;
-
-    retCode =
-        decode_file_ack_resp(reinterpret_cast<pldm_msg*>(pldmRespMsgPtr.get()),
-                             pldmRespMsgSize - pldmMsgHdrSize, &completionCode);
-
-    if (retCode || completionCode)
-    {
-        log<level::ERR>(
-            fmt::format("Failed to delete host dump, SRC_DUMP_ID({}), "
-                        "PLDM_FILE_IO_TYPE({}), PLDM_RETURN_CODE({}), "
-                        "PLDM_COMPLETION_CODE({})",
-                        dumpId, pldmDumpType, retCode, completionCode)
-                .c_str());
-        elog<NotAllowed>(Reason("Host dump deletion via pldm is "
-                                "failed"));
-    }
-
-    log<level::INFO>(
-        fmt::format("Deleted host dump, SRC_DUMP_ID({})", dumpId).c_str());
+    lg2::info(
+        "Sent request to host to delete the dump, SRC_DUMP_ID: {SRC_DUMP_ID}",
+        "SRC_DUMP_ID", dumpId);
 }
 } // namespace pldm
 } // namespace dump

@@ -12,9 +12,8 @@ namespace phosphor
 namespace dump
 {
 
-void loadExtensions(sdbusplus::bus::bus& bus, DumpManagerList& dumpList)
+void loadExtensions(sdbusplus::bus_t& bus, DumpManagerList& dumpList)
 {
-
     dumpList.push_back(std::make_unique<openpower::dump::system::Manager>(
         bus, SYSTEM_DUMP_OBJPATH, SYSTEM_DUMP_OBJ_ENTRY));
     dumpList.push_back(std::make_unique<openpower::dump::resource::Manager>(

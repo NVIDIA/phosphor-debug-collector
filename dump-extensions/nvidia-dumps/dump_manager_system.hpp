@@ -7,9 +7,6 @@
 #include "watch.hpp"
 #include "xyz/openbmc_project/Dump/NewDump/server.hpp"
 
-#include <experimental/filesystem>
-#include <map>
-#include <phosphor-logging/log.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
 #include <sdeventplus/source/child.hpp>
@@ -21,8 +18,6 @@ namespace dump
 {
 namespace system
 {
-
-using namespace phosphor::logging;
 
 using CreateIface = sdbusplus::server::object::object<
     sdbusplus::xyz::openbmc_project::Dump::server::Create>;
@@ -57,7 +52,7 @@ class Manager : virtual public CreateIface,
      *  @param[in] baseEntryPath - Base path for dump entry.
      *  @param[in] filePath - Path where the dumps are stored.
      */
-    Manager(sdbusplus::bus::bus& bus, const EventPtr& event, const char* path,
+    Manager(sdbusplus::bus_t& bus, const EventPtr& event, const char* path,
             const std::string& baseEntryPath, const char* filePath) :
         CreateIface(bus, path),
         phosphor::dump::Manager(bus, path, baseEntryPath),
@@ -88,7 +83,7 @@ class Manager : virtual public CreateIface,
      *  @return object_path - The object path of the new dump entry.
      */
     sdbusplus::message::object_path
-        createDump(std::map<std::string, std::string> params) override;
+        createDump(phosphor::dump::DumpCreateParams params) override;
 
     /** @brief Used to serve case where create dump failed
      *  @param [in] id - entry id which failed
@@ -113,7 +108,7 @@ class Manager : virtual public CreateIface,
      *  @param[in] parama - Additional arguments for system dump.
      *  @return id - The Dump entry id number.
      */
-    uint32_t captureDump(std::map<std::string, std::string> params);
+    uint32_t captureDump(phosphor::dump::DumpCreateParams params);
 
     /** @brief Remove specified watch object pointer from the
      *        watch map and associated entry from the map.

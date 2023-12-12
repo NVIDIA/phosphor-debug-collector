@@ -7,6 +7,9 @@
 #include <cereal/access.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server.hpp>
+#include <xyz/openbmc_project/Dump/Create/server.hpp>
+
+#include <filesystem>
 #include <set>
 
 namespace phosphor
@@ -16,7 +19,7 @@ namespace dump
 namespace elog
 {
 
-using IMgr = phosphor::dump::bmc::internal::Manager;
+using Mgr = phosphor::dump::bmc::Manager;
 using EId = uint32_t;
 using ElogList = std::set<EId>;
 
@@ -37,9 +40,9 @@ class Watch
 
     /** @brief constructs watch for elog add and delete signals.
      *  @param[in] bus -  The Dbus bus object
-     *  @param[in] intMgr - Dump internal Manager object
+     *  @param[in] mgr - Dump Manager object
      */
-    Watch(sdbusplus::bus::bus& bus, IMgr& iMgr);
+    Watch(sdbusplus::bus_t& bus, Mgr& mgr);
 
   private:
     friend class cereal::access;
@@ -65,12 +68,12 @@ class Watch
      *           Internal error type dump request.
      *  @param[in] msg  - Data associated with subscribed signal
      */
-    void addCallback(sdbusplus::message::message& msg);
+    void addCallback(sdbusplus::message_t& msg);
 
     /** @brief Callback function for error log delete.
      *  @param[in] msg  - Data associated with subscribed signal
      */
-    void delCallback(sdbusplus::message::message& msg);
+    void delCallback(sdbusplus::message_t& msg);
 
     /** @brief get elog ID from elog entry object string.
      *  @param[in] objectPath  - elog entry object path.
@@ -82,8 +85,8 @@ class Watch
         return std::stoul(path.filename());
     }
 
-    /**  @brief Dump internal Manager object. */
-    IMgr& iMgr;
+    /**  @brief BMC Dump Manager object. */
+    Mgr& mgr;
 
     /** @brief sdbusplus signal match for elog add */
     sdbusplus::bus::match_t addMatch;

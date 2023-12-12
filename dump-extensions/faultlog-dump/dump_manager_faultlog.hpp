@@ -88,7 +88,7 @@ class Manager : virtual public CreateIface,
      *  @return object_path - The object path of the new dump entry.
      */
     sdbusplus::message::object_path
-        createDump(std::map<std::string, std::string> params) override;
+        createDump(phosphor::dump::DumpCreateParams params) override;
 
   private:
     /** @brief Create Dump entry d-bus object
@@ -100,7 +100,7 @@ class Manager : virtual public CreateIface,
      *  @param[in] parama - Additional arguments for faultLog dump.
      *  @return FaultLogEntryInfo - The Dump entry info.
      */
-    FaultLogEntryInfo captureDump(std::map<std::string, std::string> params);
+    FaultLogEntryInfo captureDump(phosphor::dump::DumpCreateParams params);
 
     /** @brief sd_event_add_child callback
      *

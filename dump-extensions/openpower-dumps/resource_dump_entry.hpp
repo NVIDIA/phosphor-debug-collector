@@ -16,12 +16,14 @@ namespace dump
 namespace resource
 {
 template <typename T>
-using ServerObject = typename sdbusplus::server::object::object<T>;
+using ServerObject = typename sdbusplus::server::object_t<T>;
 
-using EntryIfaces = sdbusplus::server::object::object<
+using EntryIfaces = sdbusplus::server::object_t<
     sdbusplus::com::ibm::Dump::Entry::server::Resource>;
 
 namespace fs = std::experimental::filesystem;
+using originatorTypes = sdbusplus::xyz::openbmc_project::Common::server::
+    OriginatedBy::OriginatorTypes;
 
 class Manager;
 
@@ -31,7 +33,7 @@ class Manager;
  *  A concrete implementation for the
  *  com::ibm::Dump::Entry::Resource DBus API
  */
-class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
+class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
 {
   public:
     Entry() = delete;
@@ -52,16 +54,19 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
      *  @param[in] vspStr- Input to host to generate the resource dump.
      *  @param[in] pwd - Password needed by host to validate the request.
      *  @param[in] status - status  of the dump.
+     *  @param[in] originatorId - Id of the originator of the dump
+     *  @param[in] originatorType - Originator type
      *  @param[in] parent - The dump entry's parent.
      */
-    Entry(sdbusplus::bus::bus& bus, const std::string& objPath, uint32_t dumpId,
+    Entry(sdbusplus::bus_t& bus, const std::string& objPath, uint32_t dumpId,
           uint64_t timeStamp, uint64_t dumpSize, const uint32_t sourceId,
           std::string vspStr, std::string pwd,
-          phosphor::dump::OperationStatus status,
-          phosphor::dump::Manager& parent) :
-        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),
+          phosphor::dump::OperationStatus status, std::string originatorId,
+          originatorTypes originatorType, phosphor::dump::Manager& parent) :
         phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, dumpSize,
-                              status, parent)
+                              std::string(), status, originatorId,
+                              originatorType, parent),
+        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit)
     {
         sourceDumpId(sourceId);
         vspString(vspStr);

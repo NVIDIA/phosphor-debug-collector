@@ -2,7 +2,6 @@
 
 #include "dump_offload.hpp"
 
-#include <fmt/core.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -12,6 +11,7 @@
 #include <fstream>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <xyz/openbmc_project/Common/File/error.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 
@@ -54,10 +54,8 @@ void writeOnUnixSocket(const int socket, const char* buf,
                             NULL, &timeVal);
         if (retVal <= 0)
         {
-            log<level::ERR>(
-                fmt::format("writeOnUnixSocket: select() failed, errno({})",
-                            errno)
-                    .c_str());
+            lg2::error("writeOnUnixSocket: select() failed, errno: {ERRNO}",
+                       "ERRNO", errno);
             std::string msg = "select() failed " + std::string(strerror(errno));
             throw std::runtime_error(msg);
         }
@@ -71,12 +69,10 @@ void writeOnUnixSocket(const int socket, const char* buf,
                     numOfBytesWrote = 0;
                     continue;
                 }
-                log<level::ERR>(
-                    fmt::format("writeOnUnixSocket: write() failed, errno({})",
-                                errno)
-                        .c_str());
-                std::string msg =
-                    "write() on socket failed " + std::string(strerror(errno));
+                lg2::error("writeOnUnixSocket: write() failed, errno: {ERRNO}",
+                           "ERRNO", errno);
+                std::string msg = "write() on socket failed " +
+                                  std::string(strerror(errno));
                 throw std::runtime_error(msg);
             }
         }
@@ -100,35 +96,32 @@ int socketInit(const std::string& sockPath)
     if (strnlen(sockPath.c_str(), sizeof(socketAddr.sun_path)) ==
         sizeof(socketAddr.sun_path))
     {
-        log<level::ERR>("UNIX socket path too long");
-        std::string msg =
-            "UNIX socket path is too long " + std::string(strerror(errno));
+        lg2::error("UNIX socket path too long");
+        std::string msg = "UNIX socket path is too long " +
+                          std::string(strerror(errno));
         throw std::length_error(msg);
     }
     strncpy(socketAddr.sun_path, sockPath.c_str(),
             sizeof(socketAddr.sun_path) - 1);
     if ((unixSocket = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) == -1)
     {
-        log<level::ERR>(
-            fmt::format("socketInit: socket() failed, errno({})", errno)
-                .c_str());
+        lg2::error("socketInit: socket() failed, errno: {ERRNO}", "ERRNO",
+                   errno);
         std::string msg = "socket() failed " + std::string(strerror(errno));
         throw std::runtime_error(msg);
     }
     if (bind(unixSocket, (struct sockaddr*)&socketAddr, sizeof(socketAddr)) ==
         -1)
     {
-        log<level::ERR>(
-            fmt::format("socketInit: bind() failed, errno({})", errno).c_str());
+        lg2::error("socketInit: bind() failed, errno: {ERRNO}", "ERRNO", errno);
         close(unixSocket);
         std::string msg = "socket bind failed " + std::string(strerror(errno));
         throw std::runtime_error(msg);
     }
     if (listen(unixSocket, 1) == -1)
     {
-        log<level::ERR>(
-            fmt::format("socketInit: listen() failed, errno({})", errno)
-                .c_str());
+        lg2::error("socketInit: listen() failed, errno: {ERRNO}", "ERRNO",
+                   errno);
         close(unixSocket);
         std::string msg = "listen() failed " + std::string(strerror(errno));
         throw std::runtime_error(msg);
@@ -146,7 +139,6 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
 
     try
     {
-
         CustomFd unixSocket = socketInit(writePath);
 
         fd_set readFD;
@@ -161,10 +153,8 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
         int retVal = select(numOfFDs, &readFD, NULL, NULL, &timeVal);
         if (retVal <= 0)
         {
-            log<level::ERR>(
-                fmt::format("select() failed, errno({}), DUMP_ID({})", errno,
-                            dumpId)
-                    .c_str());
+            lg2::error("select() failed, errno: {ERRNO}, DUMP_ID: {DUMP_ID}",
+                       "ERRNO", errno, "DUMP_ID", dumpId);
             std::string msg = "select() failed " + std::string(strerror(errno));
             throw std::runtime_error(msg);
         }
@@ -173,12 +163,11 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
             CustomFd socketFD = accept(unixSocket(), NULL, NULL);
             if (socketFD() < 0)
             {
-                log<level::ERR>(
-                    fmt::format("accept() failed, errno({}), DUMP_ID({})",
-                                errno, dumpId)
-                        .c_str());
-                std::string msg =
-                    "accept() failed " + std::string(strerror(errno));
+                lg2::error(
+                    "accept() failed, errno: {ERRNO}, DUMP_ID: {DUMP_ID}",
+                    "ERRNO", errno, "DUMP_ID", dumpId);
+                std::string msg = "accept() failed " +
+                                  std::string(strerror(errno));
                 throw std::runtime_error(msg);
             }
 
@@ -186,20 +175,18 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
             if (!infile.good())
             {
                 // Unable to open the dump file
-                log<level::ERR>(
-                    fmt::format("Failed to open the dump from file, errno({}), "
-                                "DUMPFILE({}), DUMP_ID({})",
-                                errno, file.c_str(), dumpId)
-                        .c_str());
+                lg2::error("Failed to open the dump from file, errno: {ERRNO}, "
+                           "DUMPFILE: {DUMP_FILE}, DUMP_ID: {DUMP_ID}",
+                           "ERRNO", errno, "DUMP_FILE", file, "DUMP_ID",
+                           dumpId);
                 elog<Open>(ErrnoOpen(errno), PathOpen(file.c_str()));
             }
 
             infile.exceptions(std::ifstream::failbit | std::ifstream::badbit |
                               std::ifstream::eofbit);
 
-            log<level::INFO>(fmt::format("Opening File for RW, FILENAME({})",
-                                         file.filename().c_str())
-                                 .c_str());
+            lg2::info("Opening File for RW, FILENAME: {FILENAME}", "FILENAME",
+                      file.filename().c_str());
 
             std::filebuf* pbuf = infile.rdbuf();
 
@@ -218,30 +205,20 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
     }
     catch (const std::ifstream::failure& oe)
     {
-        if (std::remove(writePath.c_str()) < 0)
-        {
-            log<level::ERR>(fmt::format("Failed to remove, errormsg({}), "
-                                        "OPENINTERFACE({}), DUMP_ID({})",
-                                        oe.what(), file.c_str(), dumpId)
-                                .c_str());
-        }
-
+        std::remove(writePath.c_str());
         auto err = errno;
-        log<level::ERR>(
-            fmt::format(
-                "Failed to open, errormsg({}), OPENINTERFACE({}), DUMP_ID({})",
-                oe.what(), file.c_str(), dumpId)
-                .c_str());
+        lg2::error("Failed to open, errormsg: {ERROR}, "
+                   "OPENINTERFACE: {OPEN_INTERFACE}, DUMP_ID: {DUMP_ID}",
+                   "ERROR", oe, "OPEN_INTERFACE", file, "DUMP_ID", dumpId);
         elog<Open>(ErrnoOpen(err), PathOpen(file.c_str()));
     }
     catch (const std::exception& e)
     {
         std::remove(writePath.c_str());
         auto err = errno;
-        log<level::ERR>(fmt::format("Failed to offload dump, errormsg({}), "
-                                    "DUMPFILE({}), DUMP_ID({})",
-                                    e.what(), writePath.c_str(), dumpId)
-                            .c_str());
+        lg2::error("Failed to offload dump, errormsg: {ERROR}, "
+                   "DUMPFILE: {DUMP_FILE}, DUMP_ID: {DUMP_ID}",
+                   "ERROR", e, "DUMP_FILE", writePath, "DUMP_ID", dumpId);
         elog<Write>(ErrnoWrite(err), PathWrite(writePath.c_str()));
     }
     std::remove(writePath.c_str());

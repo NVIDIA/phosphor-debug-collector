@@ -13,7 +13,7 @@ if not gtest_dep.found() or not gmock_dep.found()
         gmock_dep = gtest_proj.dependency('gmock')
   else
         assert(
-            not get_option('tests').enabled(),
+            not get_option('tests').allowed(),
             'Googletest is required if tests are enabled'
         )
   endif
@@ -36,7 +36,6 @@ foreach t : tests
                                     gmock_dep,
                                     dump,
                                     phosphor_logging_dep,
-                                    fmt_dep,
                                     ]),
        workdir: meson.current_source_dir())
 endforeach

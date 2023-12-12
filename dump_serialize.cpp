@@ -1,9 +1,9 @@
 #include "dump_serialize.hpp"
 
-#include <fmt/core.h>
-
 #include <cereal/archives/binary.hpp>
 #include <cereal/types/set.hpp>
+#include <phosphor-logging/lg2.hpp>
+
 #include <fstream>
 #include <phosphor-logging/log.hpp>
 
@@ -16,7 +16,7 @@ namespace elog
 
 using namespace phosphor::logging;
 
-void serialize(const ElogList& list, const fs::path& dir)
+void serialize(const ElogList& list, const std::filesystem::path& dir)
 {
     std::ofstream os(dir.c_str(), std::ios::binary);
     cereal::BinaryOutputArchive oarchive(os);
@@ -38,9 +38,7 @@ bool deserialize(const fs::path& path, ElogList& list)
     }
     catch (const cereal::Exception& e)
     {
-        log<level::ERR>(
-            fmt::format("Failed to deserialize, errormsg({})", e.what())
-                .c_str());
+        lg2::error("Failed to deserialize, errormsg: {ERROR}", "ERROR", e);
         std::filesystem::remove(path);
         return false;
     }
