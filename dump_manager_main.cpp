@@ -71,12 +71,6 @@ int main()
 
         dumpMgrList.push_back(std::move(bmcDumpMgr));
 
-        std::unique_ptr<phosphor::dump::faultlog::Manager> faultLogMgr =
-            std::make_unique<phosphor::dump::faultlog::Manager>(
-                bus, FAULTLOG_DUMP_OBJPATH, FAULTLOG_DUMP_OBJ_ENTRY,
-                FAULTLOG_DUMP_PATH);
-        dumpMgrList.push_back(std::move(faultLogMgr));
-
         phosphor::dump::loadExtensions(bus, dumpMgrList);
 
 #ifdef FAULTLOG_DUMP_EXTENSION
