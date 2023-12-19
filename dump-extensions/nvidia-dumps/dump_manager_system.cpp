@@ -359,6 +359,19 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
             elog<InvalidArgument>(INV_ARG("DiagnosticType"),
                                   INV_VAL(diagnosticType.c_str()));
         }
+#ifdef FAULTLOG_DUMP_EXTENSION
+        if (diagnosticType == typeSelftest)
+        {
+            log<level::ERR>("Unsupported DiagnosticType option",
+                            entry("DIAG_TYPE=%s", diagnosticType.c_str()));
+            using INV_ARG =
+                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
+            using INV_VAL =
+                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
+            elog<InvalidArgument>(INV_ARG("DiagnosticType"),
+                                  INV_VAL(diagnosticType.c_str()));
+        }
+#endif
     }
 
     pid_t pid = fork();
