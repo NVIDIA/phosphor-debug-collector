@@ -206,6 +206,17 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
                                   INV_VAL(diagnosticType.c_str()));
         }
     }
+    else
+    {
+        log<level::ERR>("Empty DiagnosticType option",
+                        entry("DIAG_TYPE=%s", diagnosticType.c_str()));
+        using INV_ARG =
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
+        using INV_VAL =
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
+        elog<InvalidArgument>(INV_ARG("DiagnosticType"),
+                              INV_VAL(diagnosticType.c_str()));
+    }
 
     pid_t pid = fork();
 
