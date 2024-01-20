@@ -24,7 +24,8 @@ command="busctl introspect xyz.openbmc_project.GpuOobRecovery \
 add_cmd_output "$command" "$file_name" "$desc"
 
 desc="hmc ready status get"
-command="busctl call xyz.openbmc_project.GpuMgr \
+command="echo -e \"\n\nHMC Ready Status:\" ; \
+            busctl call xyz.openbmc_project.GpuMgr \
             /xyz/openbmc_project/GpuMgr xyz.openbmc_project.GpuMgr.Server \
             GetReadyStatus"
 
