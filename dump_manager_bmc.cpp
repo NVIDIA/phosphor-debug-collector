@@ -298,7 +298,7 @@ void Manager::createEntry(const fs::path& file)
     // If there is an existing entry update it and return.
     auto dumpEntry = entries.find(id);
     if (dumpEntry != entries.end())
-    {
+    {          
         dynamic_cast<phosphor::dump::bmc::Entry*>(dumpEntry->second.get())
             ->update(stoull(msString), fs::file_size(file), file);
         return;
@@ -404,7 +404,7 @@ void Manager::restoreDir(fs::path dir)
                 auto fileIt = fs::directory_iterator(p.path());
                 // Create dump entry d-bus object.
                 if (fileIt != fs::end(fileIt))
-                {
+                {               
                     createEntry(fileIt->path());
                 }
             }
