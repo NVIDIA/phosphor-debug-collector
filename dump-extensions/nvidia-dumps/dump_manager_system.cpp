@@ -233,59 +233,6 @@ uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath
     elog<InternalFailure>();
 }
 
-static void fdrDumpGetActionArgument(std::map<std::string, std::string>& params,
-                                     std::string& action)
-{
-    const std::string key = "Action";
-    const std::string cleanAction = "Clean";
-    const std::string collectAction = "Collect";
-
-    if (auto search = params.find(key); search != params.end())
-    {
-        if (search->second == cleanAction)
-        {
-            action = "clean";
-        }
-        else if (search->second == collectAction)
-        {
-            action = "collect";
-        }
-        else
-        {
-            log<level::ERR>("System dump: Unsupport argument for action");
-        }
-    }
-}
-
-uint32_t fdrDump(const std::string& dumpId, const std::string& dumpPath,
-                 const std::string& action)
-{
-    // Construct FDR dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = FDR_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string aOption = "-a";
-    arg_v.push_back(&aOption[0]);
-    arg_v.push_back(const_cast<char*>(action.c_str()));
-
-    arg_v.push_back(nullptr);
-
-    execv(arg_v[0], &arg_v[0]);
-
-    // FDR Dump execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during fdr dump function execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
-}
-
 uint32_t Manager::captureDump(std::map<std::string, std::string> params)
 {
     // check if minimum required space is available on destination partition
@@ -341,14 +288,12 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
     const std::string typeFPGA = "FPGA";
     const std::string typeEROT = "EROT";
     const std::string typeLTSSM = "RetLTSSM";
-    const std::string typeFDR = "FDR";
     auto diagnosticType = params["DiagnosticType"];
     params.erase("DiagnosticType");
     if (!diagnosticType.empty())
     {
         if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
-            diagnosticType != typeEROT && diagnosticType != typeLTSSM &&
-            diagnosticType != typeFDR)
+            diagnosticType != typeEROT && diagnosticType != typeLTSSM)
         {
             log<level::ERR>("Unrecognized DiagnosticType option",
                             entry("DIAG_TYPE=%s", diagnosticType.c_str()));
@@ -428,13 +373,6 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
         else if (diagnosticType == typeLTSSM)
         {
             retimerLtssmDump(id, dumpPath);
-        }
-        else if (diagnosticType == typeFDR)
-        {
-            std::string action = "collect";
-
-            fdrDumpGetActionArgument(params, action);
-            fdrDump(id, dumpPath, action);
         }
         else
         {
