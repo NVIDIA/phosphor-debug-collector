@@ -228,3 +228,53 @@ option('FAULTLOG_DUMP_MAX_SIZE', type : 'integer',
 option('faultlog-dump-rotation', type : 'feature',
         description : 'Rotate dump when total size of dumps exceed the quota', value: 'disabled'
       )
+
+# FDR dump options
+option('FDR_DUMP_BIN_PATH', type : 'string',
+        value : '/usr/bin/fdr_dump.sh',
+        description : 'The path of FDR dump script'
+      )
+
+option('fdr-dump-extension', type: 'feature',
+        value : 'disabled',
+        description : 'Enable FDR dump'
+      )
+
+option('FDR_DUMP_OBJPATH', type : 'string',
+        value : '/xyz/openbmc_project/dump/fdr',
+        description : 'The FDR dump manager D-Bus object path'
+      )
+
+option('FDR_DUMP_OBJ_ENTRY', type : 'string',
+        value : '/xyz/openbmc_project/dump/fdr/entry',
+        description : 'The FDR dump entry D-Bus object path'
+      )
+
+option('FDR_DUMP_MAX_LIMIT', type : 'integer',
+        value : 1,
+        description : 'Total FDR dumps to be retained on bmc, 0 represents unlimited dumps'
+      )
+
+option('FDR_DUMP_PATH', type : 'string',
+        value : '/var/lib/logging/dumps/fdr/',
+        description : 'Directory where FDR dumps are placed'
+)
+
+option('FDR_DUMP_TOTAL_SIZE', type : 'integer',
+        value : 1024,
+        description : 'Total size of the dump in kilo bytes'
+      )
+
+option('FDR_DUMP_MIN_SPACE_REQD', type : 'integer',
+        value : 50,
+        description : 'Minimum space required for one FDR dump in kilo bytes'
+      )
+
+option('FDR_DUMP_MAX_SIZE', type : 'integer',
+        value : 500,
+        description : 'Maximum size of one FDR dump in kilo bytes'
+      )
+
+option('fdr-dump-rotation', type : 'feature',
+        description : 'Rotate dump when total size of dumps exceed the quota', value: 'disabled'
+      )

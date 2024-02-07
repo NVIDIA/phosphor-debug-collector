@@ -143,7 +143,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
      *  @param[in] file - Name of dump file.
      */
     void update(uint64_t timeStamp, uint64_t fileSize, const fs::path& filePath)
-    {
+    {        
         elapsed(timeStamp);
         size(fileSize);
         // TODO: Handled dump failed case with #ibm-openbmc/2808
@@ -153,7 +153,9 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         // #ibm-openbmc/2597
         completedTime(timeStamp);
         progress(100);
-        progressTimer->stop();
+        if (progressTimer != nullptr) {
+            progressTimer->stop();
+        }
     }
 
     /** @brief To get the dump file name path 

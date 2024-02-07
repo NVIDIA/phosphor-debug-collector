@@ -147,6 +147,10 @@ conf_data.set('BMC_DUMP_ROTATE_CONFIG', get_option('dump_rotate_config').allowed
                description : 'Turn on rotate config for bmc dump'
              )
 
+conf_data.set('FDR_DUMP_EXTENSION', get_option('fdr-dump-extension').enabled(),
+               description : 'FDR dump extension'
+             )
+
 configure_file(configuration : conf_data,
                output : 'config.h'
               )

@@ -1,7 +1,6 @@
 #include "config.h"
 
-#include "dump_manager_system.hpp"
-#include "dump_utils.hpp"
+#include "dump_manager_fdr.hpp"
 
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
@@ -10,44 +9,42 @@
 #include <sys/inotify.h>
 #include <unistd.h>
 
-#include <array>
 #include <chrono>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <regex>
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
-#include <chrono>
-#include <iostream>
+#include <string>
+
+#include "dump-extensions/fdr-dump/fdr_dump_config.h"
 
 namespace phosphor
 {
 namespace dump
 {
-namespace system
+namespace FDR
 {
 
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using namespace phosphor::logging;
 
-// TODO: Merge system dump with bmc dump to avoid code duplication.
-
 void Manager::limitDumpEntries()
 {
-    // Delete dumps only when system dump max limit is configured
-#if SYSTEM_DUMP_MAX_LIMIT == 0
-    // Do nothing - system dump max limit is not configured
+    // Delete dumps only when FDR dump max limit is configured
+#if FDR_DUMP_MAX_LIMIT == 0
+    // Do nothing - FDR dump max limit is not configured
     return;
-#else // #if SYSTEM_DUMP_MAX_LIMIT == 0
+#else  // #if FDR_DUMP_MAX_LIMIT == 0
     // Delete dumps on reaching allowed entries
     auto totalDumps = entries.size();
-    if (totalDumps < SYSTEM_DUMP_MAX_LIMIT)
+    if (totalDumps < FDR_DUMP_MAX_LIMIT)
     {
         // Do nothing - Its within allowed entries
         return;
     }
     // Get the oldest dumps
-    int excessDumps = totalDumps - (SYSTEM_DUMP_MAX_LIMIT - 1);
+    int excessDumps = totalDumps - (FDR_DUMP_MAX_LIMIT - 1);
     // Delete the oldest dumps
     for (auto d = entries.begin(); d != entries.end() && excessDumps; d++)
     {
@@ -57,11 +54,11 @@ void Manager::limitDumpEntries()
     }
 
     return;
-#endif // #if SYSTEM_DUMP_MAX_LIMIT == 0
+#endif // #if FDR_DUMP_MAX_LIMIT == 0
 }
 
 sdbusplus::message::object_path
-    Manager::createDump(phosphor::dump::DumpCreateParams params)
+    Manager::createDump(std::map<std::string, std::string> params)
 {
     // Limit dumps to max allowed entries
     limitDumpEntries();
@@ -72,23 +69,16 @@ sdbusplus::message::object_path
 
     try
     {
-        // Get the originator id and type from params
-        std::string originatorId;
-        originatorTypes originatorType;
-
-        phosphor::dump::extractOriginatorProperties(params, originatorId,
-                                                    originatorType);
         std::time_t timeStamp = std::time(nullptr);
         entries.insert(std::make_pair(
-            id, std::make_unique<system::Entry>(
+            id, std::make_unique<FDR::Entry>(
                     bus, objPath.c_str(), id, timeStamp, 0, std::string(),
-                    phosphor::dump::OperationStatus::InProgress, originatorId,
-                    originatorType,*this)));
+                    phosphor::dump::OperationStatus::InProgress, *this)));
     }
     catch (const std::invalid_argument& e)
     {
         log<level::ERR>(e.what());
-        log<level::ERR>("Error in creating system dump entry",
+        log<level::ERR>("Error in creating FDR dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
                         entry("ID=%d", id));
         elog<InternalFailure>();
@@ -97,55 +87,36 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
-// captureDump helper functions
-uint32_t executeDreport(const std::string& dumpType, const std::string& dumpId,
-                        const std::string& dumpPath, const size_t size,
-                        const std::array<std::string, 3>& addArgs)
+static void fdrDumpGetActionArgument(std::map<std::string, std::string>& params,
+                                     std::string& action)
 {
-    // Construct dreport arguments
-    std::vector<char*> arg_v;
-    std::string fPath = "/usr/bin/dreport";
-    arg_v.push_back(&fPath[0]);
-    std::string dOption = "-d";
-    arg_v.push_back(&dOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string sOption = "-s";
-    arg_v.push_back(&sOption[0]);
-    arg_v.push_back(const_cast<char*>(std::to_string(size).c_str()));
-    std::string qOption = "-q";
-    arg_v.push_back(&qOption[0]);
-    std::string vOption = "-v";
-    arg_v.push_back(&vOption[0]);
-    std::string tOption = "-t";
-    arg_v.push_back(&tOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpType.c_str()));
-    // Add additional arguments
-    std::string aOption = "-a";
-    for (int i = 0; i < (int)addArgs.size(); i++)
+    const std::string key = "Action";
+    const std::string cleanAction = "Clean";
+    const std::string collectAction = "Collect";
+
+    if (auto search = params.find(key); search != params.end())
     {
-        arg_v.push_back(&aOption[0]);
-        arg_v.push_back(const_cast<char*>((addArgs[i]).c_str()));
+        if (search->second == cleanAction)
+        {
+            action = "clean";
+        }
+        else if (search->second == collectAction)
+        {
+            action = "collect";
+        }
+        else
+        {
+            log<level::ERR>("System dump: Unsupport argument for action");
+        }
     }
-    arg_v.push_back(nullptr);
-
-    execv(arg_v[0], &arg_v[0]);
-
-    // dreport script execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during dreport function execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
 }
 
-uint32_t selfTest(const std::string& dumpId, const std::string& dumpPath)
+uint32_t fdrDump(const std::string& dumpId, const std::string& dumpPath,
+                 const std::string& action)
 {
-    // Construct selftest dump arguments
+    // Construct FDR dump arguments
     std::vector<char*> arg_v;
-    std::string fPath = SELFTEST_BIN_PATH;
+    std::string fPath = FDR_DUMP_BIN_PATH;
     arg_v.push_back(&fPath[0]);
     std::string pOption = "-p";
     arg_v.push_back(&pOption[0]);
@@ -153,94 +124,23 @@ uint32_t selfTest(const std::string& dumpId, const std::string& dumpPath)
     std::string iOption = "-i";
     arg_v.push_back(&iOption[0]);
     arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string dOption = "-v";
-    arg_v.push_back(&dOption[0]);
+    std::string aOption = "-a";
+    arg_v.push_back(&aOption[0]);
+    arg_v.push_back(const_cast<char*>(action.c_str()));
 
     arg_v.push_back(nullptr);
+
     execv(arg_v[0], &arg_v[0]);
 
-    // self test execution is failed.
-    auto error = errno;
-    log<level::ERR>("System dump: Error occurred during self test execution",
-                    entry("ERRNO=%d", error));
-    elog<InternalFailure>();
-}
-
-uint32_t fpgaRegDump(const std::string& dumpId, const std::string& dumpPath)
-{
-    // Construct fpga dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = FPGA_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-
-    arg_v.push_back(nullptr);
-    execv(arg_v[0], &arg_v[0]);
-
-    // FPGA register dump execution is failed.
+    // FDR Dump execution is failed.
     auto error = errno;
     log<level::ERR>(
-        "System dump: Error occurred during FPGA register dump execution",
+        "FDR dump: Error occurred during fdr dump function execution",
         entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
 
-uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
-{
-    // Construct erot dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = EROT_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-
-    arg_v.push_back(nullptr);
-
-    execv(arg_v[0], &arg_v[0]);
-
-    // dreport script execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during dreport function execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
-}
-
-uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath)
-{
-    // Construct Ltssm dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = RETIMER_LTSSM_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-
-    arg_v.push_back(nullptr);
-
-    execv(arg_v[0], &arg_v[0]);
-
-    // Retimer LTSSM Dump execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during retimerLtssmDump function execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
-}
-
-uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
+uint32_t Manager::captureDump(std::map<std::string, std::string> params)
 {
     // check if minimum required space is available on destination partition
     std::error_code ec{};
@@ -266,7 +166,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 #else
     uintmax_t sizeLeftKb = fs::space(partitionPath, ec).available / 1024;
 #endif
-    uintmax_t reqSizeKb = SYSTEM_DUMP_MIN_SPACE_REQD;
+    uintmax_t reqSizeKb = FDR_DUMP_MIN_SPACE_REQD;
 
     if (ec.value() != 0)
     {
@@ -277,7 +177,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     if (sizeLeftKb < reqSizeKb)
     {
         log<level::ERR>(
-            "Not enough space available to create system dump",
+            "Not enough space available to create FDR dump",
             entry("REQ_KB=%d", static_cast<unsigned int>(reqSizeKb)),
             entry("LEFT_KB=%d", static_cast<unsigned int>(sizeLeftKb)));
         using QuotaExceeded =
@@ -287,20 +187,13 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
     }
 
-    // Get Dump size.
-    auto size = getAllowedSize();
-
     // Validate request argument
-    const std::string typeSelftest = "SelfTest";
-    const std::string typeFPGA = "FPGA";
-    const std::string typeEROT = "EROT";
-    const std::string typeLTSSM = "RetLTSSM";
-    auto diagnosticType = std::get<std::string>(params["DiagnosticType"]);
+    const std::string typeFDR = "FDR";
+    auto diagnosticType = params["DiagnosticType"];
     params.erase("DiagnosticType");
     if (!diagnosticType.empty())
     {
-        if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
-            diagnosticType != typeEROT && diagnosticType != typeLTSSM)
+        if (diagnosticType != typeFDR)
         {
             log<level::ERR>("Unrecognized DiagnosticType option",
                             entry("DIAG_TYPE=%s", diagnosticType.c_str()));
@@ -311,19 +204,17 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
             elog<InvalidArgument>(INV_ARG("DiagnosticType"),
                                   INV_VAL(diagnosticType.c_str()));
         }
-#ifdef FAULTLOG_DUMP_EXTENSION
-        if (diagnosticType == typeSelftest)
-        {
-            log<level::ERR>("Unsupported DiagnosticType option",
-                            entry("DIAG_TYPE=%s", diagnosticType.c_str()));
-            using INV_ARG =
-                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
-            using INV_VAL =
-                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
-            elog<InvalidArgument>(INV_ARG("DiagnosticType"),
-                                  INV_VAL(diagnosticType.c_str()));
-        }
-#endif
+    }
+    else
+    {
+        log<level::ERR>("Empty DiagnosticType option",
+                        entry("DIAG_TYPE=%s", diagnosticType.c_str()));
+        using INV_ARG =
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
+        using INV_VAL =
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
+        elog<InvalidArgument>(INV_ARG("DiagnosticType"),
+                              INV_VAL(diagnosticType.c_str()));
     }
 
     pid_t pid = fork();
@@ -334,56 +225,16 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         auto id = std::to_string(lastEntryId + 1);
         dumpPath /= id;
 
-        std::string dumpType = "system";
+        if (diagnosticType == typeFDR)
+        {
+            std::string action = "collect";
 
-        // Construct additional arguments from params
-        std::array<std::string, 3> addArgs;
-        // Fix additional arguments order 'bf_ip', 'bf_username', 'bf_password'
-        // std::map<std::string, std::string>::iterator itr;
-        for (auto itr = params.begin(); itr != params.end(); ++itr)
-        {
-            auto kvPair = itr->first + "=" + std::get<std::string>(itr->second);
-            if (itr->first == "bf_ip")
-            {
-                addArgs[0] = kvPair;
-            }
-            else if (itr->first == "bf_username")
-            {
-                addArgs[1] = kvPair;
-            }
-            else if (itr->first == "bf_password")
-            {
-                addArgs[2] = kvPair;
-            }
-            else
-            {
-                log<level::ERR>("System dump: Unknown additional arguments");
-            }
-        }
-        
-        if (diagnosticType.empty())
-        {
-            executeDreport(dumpType, id, dumpPath, size, addArgs);
-        }
-        else if (diagnosticType == typeSelftest)
-        {
-            selfTest(id, dumpPath);
-        }
-        else if (diagnosticType == typeFPGA)
-        {
-            fpgaRegDump(id, dumpPath);
-        }
-        else if (diagnosticType == typeEROT)
-        {
-            erotDump(id, dumpPath);
-        }
-        else if (diagnosticType == typeLTSSM)
-        {
-            retimerLtssmDump(id, dumpPath);
+            fdrDumpGetActionArgument(params, action);
+            fdrDump(id, dumpPath, action);
         }
         else
         {
-            log<level::ERR>("System dump: Invalid DiagnosticType");
+            log<level::ERR>("FDR dump: Invalid DiagnosticType");
             elog<InternalFailure>();
         }
     }
@@ -429,7 +280,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     else
     {
         auto error = errno;
-        log<level::ERR>("System dump: Error occurred during fork",
+        log<level::ERR>("FDR dump: Error occurred during fork",
                         entry("ERRNO=%d", error));
         elog<InternalFailure>();
     }
@@ -449,7 +300,7 @@ void Manager::createEntry(const fs::path& file)
 
     if (!((std::regex_search(name, match, file_regex)) && (match.size() > 0)))
     {
-        log<level::ERR>("System dump: Invalid Dump file name",
+        log<level::ERR>("FDR dump: Invalid Dump file name",
                         entry("FILENAME=%s", file.filename().c_str()));
         return;
     }
@@ -463,7 +314,7 @@ void Manager::createEntry(const fs::path& file)
     auto dumpEntry = entries.find(id);
     if (dumpEntry != entries.end())
     {
-        dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())
+        dynamic_cast<phosphor::dump::FDR::Entry*>(dumpEntry->second.get())
             ->update(stoull(msString), fs::file_size(file), file);
         return;
     }
@@ -473,20 +324,16 @@ void Manager::createEntry(const fs::path& file)
 
     try
     {
-        // Get the originator id and type from params
-        std::string originatorId;
-        originatorTypes originatorType;
-
         entries.insert(std::make_pair(
             id,
-            std::make_unique<system::Entry>(
+            std::make_unique<FDR::Entry>(
                 bus, objPath.c_str(), id, stoull(msString), fs::file_size(file),
-                file, phosphor::dump::OperationStatus::Completed, originatorId, originatorType, *this)));
+                file, phosphor::dump::OperationStatus::Completed, *this)));
     }
     catch (const std::invalid_argument& e)
     {
         log<level::ERR>(e.what());
-        log<level::ERR>("Error in creating system dump entry",
+        log<level::ERR>("Error in creating FDR dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
                         entry("ID=%d", id),
                         entry("TIMESTAMP=%ull", stoull(msString)),
@@ -522,9 +369,9 @@ void Manager::watchCallback(const UserMap& fileInfo)
         {
             auto watchObj = std::make_unique<Watch>(
                 eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE, EPOLLIN, i.first,
-                std::bind(std::mem_fn(
-                              &phosphor::dump::system::Manager::watchCallback),
-                          this, std::placeholders::_1));
+                std::bind(
+                    std::mem_fn(&phosphor::dump::FDR::Manager::watchCallback),
+                    this, std::placeholders::_1));
 
             childWatchMap.emplace(i.first, std::move(watchObj));
         }
@@ -589,21 +436,21 @@ size_t Manager::getAllowedSize()
     // Set the Dump size to Maximum  if the free space is greater than
     // Dump max size otherwise return the available size.
 
-    size = (size > SYSTEM_DUMP_TOTAL_SIZE ? 0 : SYSTEM_DUMP_TOTAL_SIZE - size);
+    size = (size > FDR_DUMP_TOTAL_SIZE ? 0 : FDR_DUMP_TOTAL_SIZE - size);
 
-    if (size < SYSTEM_DUMP_MIN_SPACE_REQD)
+    if (size < FDR_DUMP_MIN_SPACE_REQD)
     {
         // Reached to maximum limit
         elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
     }
-    if (size > SYSTEM_DUMP_MAX_SIZE)
+    if (size > FDR_DUMP_MAX_SIZE)
     {
-        size = SYSTEM_DUMP_MAX_SIZE;
+        size = FDR_DUMP_MAX_SIZE;
     }
 
     return size;
 }
 
-} // namespace system
+} // namespace FDR
 } // namespace dump
 } // namespace phosphor
