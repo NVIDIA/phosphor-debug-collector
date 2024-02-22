@@ -11,7 +11,6 @@
 #include <sdbusplus/server/object.hpp>
 #include <sdeventplus/event.hpp>
 #include <sdeventplus/source/event.hpp>
-
 namespace phosphor
 {
 namespace dump

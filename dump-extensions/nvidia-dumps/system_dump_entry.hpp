@@ -58,9 +58,8 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
           phosphor::dump::OperationStatus status, std::string originatorId,
           originatorTypes originatorType, phosphor::dump::Manager& parent) :
         phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize,
-                              std::string(), status, originatorId, originatorType, parent),
-        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),
-        file(file)
+                              file, status, originatorId, originatorType, parent),
+        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit)
     {
         // Emit deferred signal.
         this->phosphor::dump::system::EntryIfaces::emit_object_added();
@@ -99,8 +98,6 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     }
 
   private:
-    /** @Dump file name */
-    fs::path file;
 };
 
 } // namespace system

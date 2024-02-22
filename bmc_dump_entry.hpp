@@ -173,8 +173,6 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     }
 
   private:
-    /** @brief Dump file name */
-    fs::path file;
 
     /**
      * @brief timer to update progress percent

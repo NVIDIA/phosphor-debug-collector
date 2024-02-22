@@ -199,7 +199,6 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
             // get file data
             pbuf->sgetn(buffer.get(), size);
             infile.close();
-
             writeOnUnixSocket(socketFD(), buffer.get(), size);
         }
     }
