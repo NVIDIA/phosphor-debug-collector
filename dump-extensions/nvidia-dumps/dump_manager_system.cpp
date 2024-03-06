@@ -240,6 +240,37 @@ uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath
     elog<InternalFailure>();
 }
 
+uint32_t retimerRegisterDump(const std::string& dumpId, const std::string& dumpPath, const std::string& retimer_address)
+{
+    // Construct Register dump arguments
+    std::vector<char*> arg_v;
+    std::string fPath = RETIMER_REGISTER_DUMP_BIN_PATH;
+    arg_v.push_back(&fPath[0]);
+    std::string pOption = "-p";
+    arg_v.push_back(&pOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    if (!retimer_address.empty())
+    {
+        std::string aOption = "-a";
+        arg_v.push_back(&aOption[0]);
+        arg_v.push_back(const_cast<char*>(retimer_address.c_str()));
+    }
+
+    arg_v.push_back(nullptr);
+
+    execv(arg_v[0], &arg_v[0]);
+
+    // Retimer Register Dump execution is failed.
+    auto error = errno;
+    log<level::ERR>(
+        "System dump: Error occurred during retimerRegisterDump function execution",
+        entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     // check if minimum required space is available on destination partition
@@ -295,12 +326,14 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     const std::string typeFPGA = "FPGA";
     const std::string typeEROT = "EROT";
     const std::string typeLTSSM = "RetLTSSM";
+    const std::string typeRetimerRegister = "RetRegister";
     auto diagnosticType = std::get<std::string>(params["DiagnosticType"]);
     params.erase("DiagnosticType");
     if (!diagnosticType.empty())
     {
         if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
-            diagnosticType != typeEROT && diagnosticType != typeLTSSM)
+            diagnosticType != typeEROT && diagnosticType != typeLTSSM &&
+            diagnosticType != typeRetimerRegister)
         {
             log<level::ERR>("Unrecognized DiagnosticType option",
                             entry("DIAG_TYPE=%s", diagnosticType.c_str()));
@@ -384,6 +417,11 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         else if (diagnosticType == typeLTSSM)
         {
             retimerLtssmDump(id, dumpPath);
+        }
+        else if (diagnosticType == typeRetimerRegister)
+        {
+            std::string retimer_address = std::get<std::string>(params["Address"]);
+            retimerRegisterDump(id, dumpPath, retimer_address);
         }
         else
         {
