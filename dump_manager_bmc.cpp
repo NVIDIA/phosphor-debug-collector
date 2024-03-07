@@ -196,6 +196,11 @@ uint32_t Manager::captureDump(Type type,
     // Get Dump size.
     auto size = getAllowedSize();
 
+    log<level::INFO>(
+        fmt::format("Capturing BMC dump of type ({})",
+            TypeMap.find(type)->second)
+                .c_str());
+
     pid_t pid = fork();
 
     if (pid == 0)
