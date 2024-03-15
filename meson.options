@@ -167,6 +167,14 @@ option('SYSTEM_DUMP_OBJ_ENTRY', type : 'string',
         description : 'The system dump entry D-Bus object path'
       )
 
+
+# Retimer debug mode options
+
+option('RETIMER_DEBUG_MODE_OBJPATH', type : 'string',
+        value : '/xyz/openbmc_project/dump/retimer',
+        description : 'The retimer Debug Mode state D-Bus object path'
+      )
+
 # Resource dump options
 
 option('RESOURCE_DUMP_OBJPATH', type : 'string',

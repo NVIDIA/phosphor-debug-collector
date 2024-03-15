@@ -4,6 +4,7 @@
 #include "dump_utils.hpp"
 #include "nvidia_dumps_config.hpp"
 #include "system_dump_entry.hpp"
+#include "retimer_debug_mode_state.hpp"
 #include "watch.hpp"
 #include "xyz/openbmc_project/Dump/NewDump/server.hpp"
 
@@ -63,7 +64,8 @@ class Manager : virtual public CreateIface,
             std::bind(
                 std::mem_fn(&phosphor::dump::system::Manager::watchCallback),
                 this, std::placeholders::_1)),
-        dumpDir(filePath)
+        dumpDir(filePath),
+        retimerDebugModeState(bus, RETIMER_DEBUG_MODE_OBJPATH)
     {
     }
 
@@ -138,6 +140,9 @@ class Manager : virtual public CreateIface,
 
     /** @brief map of SDEventPlus child pointer added to event loop */
     std::map<pid_t, std::unique_ptr<Child>> childPtrMap;
+
+    /** @brief D-bus object for indicating retimer debug mode state*/
+    phosphor::dump::retimer::DebugMode retimerDebugModeState;
 
     /** @brief Erase BMC dump entry and delete respective dump file
      *         from permanent location on reaching maximum allowed

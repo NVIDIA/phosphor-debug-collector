@@ -113,6 +113,9 @@ conf_data.set('SYSTEM_DUMP_TOTAL_SIZE', get_option('SYSTEM_DUMP_TOTAL_SIZE'),
 conf_data.set('SYSTEM_DUMP_MAX_LIMIT', get_option('SYSTEM_DUMP_MAX_LIMIT'),
                description : 'Total system dumps to be retained on bmc'
              )
+conf_data.set_quoted('RETIMER_DEBUG_MODE_OBJPATH', get_option('RETIMER_DEBUG_MODE_OBJPATH'),
+                      description : 'The retimer Debug Mode state D-Bus object path'
+                    )
 conf_data.set_quoted('OBJ_LOGGING', '/xyz/openbmc_project/logging',
                       description : 'The log manager DBus object path'
                     )
