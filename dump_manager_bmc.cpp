@@ -9,7 +9,7 @@
 
 #include <sys/inotify.h>
 #include <unistd.h>
-
+#include <fmt/format.h>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/lg2.hpp>
@@ -111,6 +111,11 @@ uint32_t Manager::captureDump(DumpTypes type, const std::string& path)
 {
     // Get Dump size.
     auto size = getAllowedSize();
+
+    log<level::INFO>(
+        fmt::format("Capturing BMC dump of type ({})",
+            dumpTypeToString(type).value())
+                .c_str());
 
     pid_t pid = fork();
 

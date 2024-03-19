@@ -326,6 +326,10 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 #endif
     }
 
+    log<level::INFO>(
+        fmt::format("Capturing system dump of type ({})", diagnosticType)
+            .c_str());
+
     pid_t pid = fork();
 
     if (pid == 0)

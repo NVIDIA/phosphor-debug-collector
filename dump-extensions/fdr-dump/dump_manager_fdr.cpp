@@ -217,6 +217,10 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
                               INV_VAL(diagnosticType.c_str()));
     }
 
+    log<level::INFO>(
+        fmt::format("Capturing FDR dump of type ({})", diagnosticType)
+            .c_str());
+
     pid_t pid = fork();
 
     if (pid == 0)
