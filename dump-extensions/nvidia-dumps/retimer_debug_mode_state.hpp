@@ -34,8 +34,11 @@ class DebugMode : virtual public DebugModeIface
     DebugMode(sdbusplus::bus::bus& bus, const char* path) :
         DebugModeIface(bus, path)
     {
-      debugMode(false);
+      DebugModeIface::debugMode(false);
     }
+
+    bool debugMode() const override;
+    bool debugMode(bool value) override;
 };
 
 } // namespace retimer
