@@ -83,7 +83,7 @@ sdbusplus::message::object_path
             id, std::make_unique<system::Entry>(
                     bus, objPath.c_str(), id, timeStamp, 0, std::string(),
                     phosphor::dump::OperationStatus::InProgress, originatorId,
-                    originatorType,*this)));
+                    originatorType,*this, std::get<std::string>(params["DiagnosticType"]))));
     }
     catch (const std::invalid_argument& e)
     {
@@ -363,6 +363,11 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         fmt::format("Capturing system dump of type ({})", diagnosticType)
             .c_str());
 
+    if (diagnosticType == typeLTSSM)
+    {
+        retimerDebugModeState.debugMode(true);
+    }
+
     pid_t pid = fork();
 
     if (pid == 0)
@@ -507,6 +512,10 @@ void Manager::createEntry(const fs::path& file)
     {
         dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())
             ->update(stoull(msString), fs::file_size(file), file);
+        if (dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())->getDumpType() == "RetLTSSM")
+        {
+            retimerDebugModeState.debugMode(false);
+        }
         return;
     }
 

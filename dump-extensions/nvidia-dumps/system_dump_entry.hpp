@@ -64,6 +64,32 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         // Emit deferred signal.
         this->phosphor::dump::system::EntryIfaces::emit_object_added();
     }
+    /** @brief Constructor for the System Dump Entry Object with dump type included
+     *  @param[in] bus - Bus to attach to.
+     *  @param[in] objPath - Object path to attach to
+     *  @param[in] dumpId - Dump id.
+     *  @param[in] timeStamp - Dump creation timestamp
+     *             since the epoch.
+     *  @param[in] fileSize - Dump file size in bytes.
+     *  @param[in] file - Name of dump file.
+     *  @param[in] status - status  of the dump.
+     *  @param[in] dumpSize - Dump size in bytes.
+     *  @param[in] sourceId - DumpId provided by the source.
+     *  @param[in] parent - The dump entry's parent.
+     *  @param[in] diagnosticType - The dump entry's dump type.
+     */
+    Entry(sdbusplus::bus_t& bus, const std::string& objPath, uint32_t dumpId,
+          uint64_t timeStamp, uint64_t fileSize, const fs::path& file,
+          phosphor::dump::OperationStatus status, std::string originatorId,
+          originatorTypes originatorType, phosphor::dump::Manager& parent, std::string diagnosticType) :
+        phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize,
+                              file, status, originatorId, originatorType, parent),
+        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit)
+    {
+        // Emit deferred signal.
+        this->phosphor::dump::system::EntryIfaces::emit_object_added();
+        dumpType = diagnosticType;
+    }
 
     /** @brief Delete this d-bus object.
      */
@@ -97,7 +123,17 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         status(phosphor::dump::OperationStatus::Failed);
     }
 
+    /** @brief Method to get entry's dump type
+     *  @return A string of dump type.
+     */
+    std::string getDumpType()
+    {
+        return dumpType;
+    }
+
   private:
+    /** @brief A string implying the dump type of entry*/
+    std::string dumpType;
 };
 
 } // namespace system
