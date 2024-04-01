@@ -144,6 +144,9 @@ class Manager : virtual public CreateIface,
     /** @brief D-bus object for indicating retimer debug mode state*/
     phosphor::dump::retimer::DebugMode retimerDebugModeState;
 
+    /** @brief a set containing string of dump types that are in progress */
+    std::set<std::string> dumpInProgress;
+
     /** @brief Erase BMC dump entry and delete respective dump file
      *         from permanent location on reaching maximum allowed
      *         entries.

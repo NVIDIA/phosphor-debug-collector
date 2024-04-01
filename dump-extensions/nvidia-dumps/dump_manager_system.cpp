@@ -65,6 +65,16 @@ sdbusplus::message::object_path
 {
     // Limit dumps to max allowed entries
     limitDumpEntries();
+    // Check whether there is same dump already running
+    // Also ensure RetLTSSM and RetRegister will not run at the same time
+    auto dumpType = std::get<std::string>(params["DiagnosticType"]);
+    if ((Manager::dumpInProgress.find(dumpType) != Manager::dumpInProgress.end()) ||
+        (Manager::dumpInProgress.find("RetLTSSM") != Manager::dumpInProgress.end() && dumpType == "RetRegister") ||
+        (Manager::dumpInProgress.find("RetRegister") != Manager::dumpInProgress.end() && dumpType == "RetLTSSM"))
+    {
+        elog<Unavailable>();
+    }
+
     auto id = captureDump(params);
 
     // Entry Object path.
@@ -367,6 +377,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     {
         retimerDebugModeState.debugMode(true);
     }
+    
+    Manager::dumpInProgress.insert(diagnosticType);
 
     pid_t pid = fork();
 
@@ -437,7 +449,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     else if (pid > 0)
     {
         auto entryId = lastEntryId + 1;
-        Child::Callback callback = [this, pid, entryId](Child&,
+        Child::Callback callback = [this, pid, entryId, diagnosticType](Child&,
                                                         const siginfo_t* si) {
             if (si->si_status != 0)
             {
@@ -452,6 +464,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
             }
 
             this->childPtrMap.erase(pid);
+            // Remove dumpType from dumpInProgress when dump ends
+            Manager::dumpInProgress.erase(diagnosticType);
         };
 
         try
@@ -470,6 +484,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                     "creation ex({})",
                     ex.what())
                     .c_str());
+            // Remove dumpType from dumpInProgress
+            Manager::dumpInProgress.erase(diagnosticType);
             elog<InternalFailure>();
         }
     }
@@ -512,10 +528,13 @@ void Manager::createEntry(const fs::path& file)
     {
         dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())
             ->update(stoull(msString), fs::file_size(file), file);
-        if (dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())->getDumpType() == "RetLTSSM")
+        auto dumpType = dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())->getDumpType();
+        if (dumpType == "RetLTSSM")
         {
             retimerDebugModeState.debugMode(false);
         }
+        Manager::dumpInProgress.erase(dumpType);
+        
         return;
     }
 
