@@ -172,10 +172,10 @@ foreach yaml_file : dump_types_yaml_files
     configure_file(input : yaml_file.get('input'),
                    output : yaml_file.get('output'),
                    copy : true)
-    concatenate_command += meson.build_root() + '/' + yaml_file.get('output') + ' '
+    concatenate_command += meson.project_build_root() + '/' + yaml_file.get('output') + ' '
 endforeach
 
-concatenate_command += '> ' + meson.build_root() + '/' + combined_yaml_file
+concatenate_command += '> ' + meson.project_build_root() + '/' + combined_yaml_file
 run_command('sh', '-c', concatenate_command)
 
 python = find_program('python3')
@@ -188,7 +188,7 @@ dump_types_hpp = custom_target(
                         python,
                         map_gen_file_loc,
                         '-i',
-                        meson.build_root() + '/' +  combined_yaml_file,
+                        meson.project_build_root() + '/' +  combined_yaml_file,
                         '-j',
                         get_option('ERROR_MAP_YAML'),
                         '-t',
@@ -198,7 +198,7 @@ dump_types_hpp = custom_target(
                     ],
                     depend_files : [ 'dump_types.mako.hpp',
                                      'map_gen.py',
-                                     meson.build_root() + '/' +  combined_yaml_file,
+                                     meson.project_build_root() + '/' +  combined_yaml_file,
                                      get_option('ERROR_MAP_YAML')
                                    ],
                     output : 'dump_types.hpp'
@@ -210,7 +210,7 @@ dump_types_cpp = custom_target(
                         python,
                         map_gen_file_loc,
                         '-i',
-                        meson.build_root() + '/' +  combined_yaml_file,
+                        meson.project_build_root() + '/' +  combined_yaml_file,
                         '-j',
                         get_option('ERROR_MAP_YAML'),
                         '-t',
@@ -220,7 +220,7 @@ dump_types_cpp = custom_target(
                     ],
                     depend_files : [ 'dump_types.mako.cpp',
                                      'map_gen.py',
-                                     meson.build_root() + '/' +  combined_yaml_file,
+                                     meson.project_build_root() + '/' +  combined_yaml_file,
                                      get_option('ERROR_MAP_YAML')
                                    ],
                     output : 'dump_types.cpp'
