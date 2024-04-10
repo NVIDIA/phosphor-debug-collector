@@ -51,14 +51,14 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
      *  @param[in] status - status  of the dump.
      *  @param[in] parent - The dump entry's parent.
      */
-    Entry(sdbusplus::bus::bus& bus, const std::string& objPath, uint32_t dumpId,
+
+    Entry(sdbusplus::bus_t& bus, const std::string& objPath, uint32_t dumpId,
           uint64_t timeStamp, uint64_t fileSize, const fs::path& file,
-          phosphor::dump::OperationStatus status,
-          phosphor::dump::Manager& parent) :
+          phosphor::dump::OperationStatus status, std::string originatorId,
+          originatorTypes originatorType, phosphor::dump::Manager& parent) :
         EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),
         phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize,
-                              status, parent),
-        file(file)
+                              file, status, originatorId, originatorType, parent)
     {
         // Emit deferred signal.
         this->phosphor::dump::FDR::EntryIfaces::emit_object_added();
@@ -96,10 +96,6 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
     {
         status(phosphor::dump::OperationStatus::Failed);
     }
-
-  private:
-    /** @Dump file name */
-    fs::path file;
 };
 
 } // namespace FDR

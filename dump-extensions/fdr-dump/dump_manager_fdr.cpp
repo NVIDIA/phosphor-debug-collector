@@ -1,6 +1,7 @@
 #include "config.h"
 
 #include "dump_manager_fdr.hpp"
+#include "dump_utils.hpp"
 
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
@@ -58,7 +59,7 @@ void Manager::limitDumpEntries()
 }
 
 sdbusplus::message::object_path
-    Manager::createDump(std::map<std::string, std::string> params)
+    Manager::createDump(phosphor::dump::DumpCreateParams params)
 {
     // Limit dumps to max allowed entries
     limitDumpEntries();
@@ -69,11 +70,19 @@ sdbusplus::message::object_path
 
     try
     {
+        // Get the originator id and type from params
+        std::string originatorId;
+        originatorTypes originatorType;
+
+        phosphor::dump::extractOriginatorProperties(params, originatorId,
+                                                    originatorType);
+
         std::time_t timeStamp = std::time(nullptr);
         entries.insert(std::make_pair(
             id, std::make_unique<FDR::Entry>(
                     bus, objPath.c_str(), id, timeStamp, 0, std::string(),
-                    phosphor::dump::OperationStatus::InProgress, *this)));
+                    phosphor::dump::OperationStatus::InProgress,
+                    originatorId, originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {
@@ -87,7 +96,7 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
-static void fdrDumpGetActionArgument(std::map<std::string, std::string>& params,
+static void fdrDumpGetActionArgument(phosphor::dump::DumpCreateParams& params,
                                      std::string& action)
 {
     const std::string key = "Action";
@@ -96,17 +105,25 @@ static void fdrDumpGetActionArgument(std::map<std::string, std::string>& params,
 
     if (auto search = params.find(key); search != params.end())
     {
-        if (search->second == cleanAction)
+        if (std::holds_alternative<std::string>(search->second))
         {
-            action = "clean";
-        }
-        else if (search->second == collectAction)
-        {
-            action = "collect";
+            auto paramAction = std::get<std::string>(search->second);
+            if (paramAction == cleanAction)
+            {
+                action = "clean";
+            }
+            else if (paramAction == collectAction)
+            {
+                action = "collect";
+            }
+            else
+            {
+                log<level::ERR>("FDR dump: Unsupported argument for action");
+            }
         }
         else
         {
-            log<level::ERR>("System dump: Unsupport argument for action");
+            log<level::ERR>("FDR dump: Argument for action is missing");
         }
     }
 }
@@ -140,7 +157,7 @@ uint32_t fdrDump(const std::string& dumpId, const std::string& dumpPath,
     elog<InternalFailure>();
 }
 
-uint32_t Manager::captureDump(std::map<std::string, std::string> params)
+uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     // check if minimum required space is available on destination partition
     std::error_code ec{};
@@ -189,7 +206,7 @@ uint32_t Manager::captureDump(std::map<std::string, std::string> params)
 
     // Validate request argument
     const std::string typeFDR = "FDR";
-    auto diagnosticType = params["DiagnosticType"];
+    auto diagnosticType = std::get<std::string>(params["DiagnosticType"]);
     params.erase("DiagnosticType");
     if (!diagnosticType.empty())
     {
@@ -328,11 +345,15 @@ void Manager::createEntry(const fs::path& file)
 
     try
     {
+        // Get the originator id and type from params
+        std::string originatorId;
+        originatorTypes originatorType;
         entries.insert(std::make_pair(
             id,
             std::make_unique<FDR::Entry>(
                 bus, objPath.c_str(), id, stoull(msString), fs::file_size(file),
-                file, phosphor::dump::OperationStatus::Completed, *this)));
+                file, phosphor::dump::OperationStatus::Completed,
+                originatorId, originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {

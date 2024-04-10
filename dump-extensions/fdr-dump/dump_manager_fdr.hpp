@@ -83,7 +83,7 @@ class Manager : virtual public CreateIface,
      *  @return object_path - The object path of the new dump entry.
      */
     sdbusplus::message::object_path
-        createDump(std::map<std::string, std::string> params) override;
+        createDump(phosphor::dump::DumpCreateParams params) override;
 
     /** @brief Used to serve case where create dump failed
      *  @param [in] id - entry id which failed
@@ -108,7 +108,7 @@ class Manager : virtual public CreateIface,
      *  @param[in] parama - Additional arguments for FDR dump.
      *  @return id - The Dump entry id number.
      */
-    uint32_t captureDump(std::map<std::string, std::string> params);
+    uint32_t captureDump(phosphor::dump::DumpCreateParams params);
 
     /** @brief Remove specified watch object pointer from the
      *        watch map and associated entry from the map.
