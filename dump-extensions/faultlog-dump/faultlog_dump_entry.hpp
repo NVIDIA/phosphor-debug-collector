@@ -147,28 +147,28 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
             jsonData = json::parse(cperFile, nullptr, false);
             if (!jsonData.is_discarded())
             {
-                if (jsonData.contains("Header") && jsonData["Header"].contains("Section Count"))
+                if (jsonData.contains("Header") && jsonData["Header"].contains("SectionCount"))
                 {
-                    int secCount = jsonData["Header"]["Section Count"];
+                    int secCount = jsonData["Header"]["SectionCount"];
 
                     for (int i = 0; i < secCount; i++)
                     {
                         if (jsonData.contains("Sections") && jsonData["Sections"].is_array() &&
                             !jsonData["Sections"].empty())
                         {
-                            if (jsonData["Sections"][i].contains("Section Descriptor"))
+                            if (jsonData["Sections"][i].contains("SectionDescriptor"))
                             {
                                 // Extracting existing fields
-                                if (jsonData["Sections"][i]["Section Descriptor"].contains("Section Type")) {
-                                    sectionType(jsonData["Sections"][i]["Section Descriptor"]["Section Type"]);
+                                if (jsonData["Sections"][i]["SectionDescriptor"].contains("SectionType")) {
+                                    sectionType(jsonData["Sections"][i]["SectionDescriptor"]["SectionType"]);
                                 }
 
-                                if (jsonData["Sections"][i]["Section Descriptor"].contains("FRU Id")) {
-                                    fruid(jsonData["Sections"][i]["Section Descriptor"]["FRU Id"]);
+                                if (jsonData["Sections"][i]["SectionDescriptor"].contains("FRUId")) {
+                                    fruid(jsonData["Sections"][i]["SectionDescriptor"]["FRUId"]);
                                 }
 
-                                if (jsonData["Sections"][i]["Section Descriptor"].contains("Section Severity")) {
-                                    severity(jsonData["Sections"][i]["Section Descriptor"]["Section Severity"]);
+                                if (jsonData["Sections"][i]["SectionDescriptor"].contains("SectionSeverity")) {
+                                    severity(jsonData["Sections"][i]["SectionDescriptor"]["SectionSeverity"]);
                                 }
 
                                 if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("IPSignature")) {
@@ -179,46 +179,46 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
                                     nvSeverity(jsonData["Sections"][i]["Section"]["Severity"]);
                                 }
 
-                                if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("Socket Number")) {
-                                    int nvSockNumber = jsonData["Sections"][i]["Section"]["Socket Number"];
+                                if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("SocketNumber")) {
+                                    int nvSockNumber = jsonData["Sections"][i]["Section"]["SocketNumber"];
                                     nvSocketNumber(std::to_string(nvSockNumber));
                                 }
 
-                                if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("Device ID")) {
-                                    if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Vendor ID")) {
-                                        pcieVendorID(jsonData["Sections"][i]["Section"]["Device ID"]["Vendor ID"]);
+                                if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("DeviceID")) {
+                                    if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("VendorID")) {
+                                        pcieVendorID(jsonData["Sections"][i]["Section"]["DeviceID"]["VendorID"]);
                                     }
 
-                                    if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Device ID")) {
-                                        pcieDeviceID(jsonData["Sections"][i]["Section"]["Device ID"]["Device ID"]);
+                                    if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("DeviceID")) {
+                                        pcieDeviceID(jsonData["Sections"][i]["Section"]["DeviceID"]["DeviceID"]);
                                     }
 
-                                    if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Class Code")) {
-                                        pcieClassCode(jsonData["Sections"][i]["Section"]["Device ID"]["Class Code"]);
+                                    if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("ClassCode")) {
+                                        pcieClassCode(jsonData["Sections"][i]["Section"]["DeviceID"]["ClassCode"]);
                                     }
 
-                                    if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Function Number")) {
-                                        pcieFunctionNumber(jsonData["Sections"][i]["Section"]["Device ID"]["Function Number"]);
+                                    if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("FunctionNumber")) {
+                                        pcieFunctionNumber(jsonData["Sections"][i]["Section"]["DeviceID"]["FunctionNumber"]);
                                     }
 
-                                    if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Device Number")) {
-                                        pcieDeviceNumber(jsonData["Sections"][i]["Section"]["Device ID"]["Device Number"]);
+                                    if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("DeviceNumber")) {
+                                        pcieDeviceNumber(jsonData["Sections"][i]["Section"]["DeviceID"]["DeviceNumber"]);
                                     }
 
-                                    if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Segment Number")) {
-                                        pcieSegmentNumber(jsonData["Sections"][i]["Section"]["Device ID"]["Segment Number"]);
+                                    if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("SegmentNumber")) {
+                                        pcieSegmentNumber(jsonData["Sections"][i]["Section"]["DeviceID"]["SegmentNumber"]);
                                     }
 
-                                    if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Device Bus Number")) {
-                                        pcieDeviceBusNumber(jsonData["Sections"][i]["Section"]["Device ID"]["Device Bus Number"]);
+                                    if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("DeviceBusNumber")) {
+                                        pcieDeviceBusNumber(jsonData["Sections"][i]["Section"]["DeviceID"]["DeviceBusNumber"]);
                                     }
 
-                                    if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Secondary Bus Number")) {
-                                        pcieSecondaryBusNumber(jsonData["Sections"][i]["Section"]["Device ID"]["Secondary Bus Number"]);
+                                    if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("SecondaryBusNumber")) {
+                                        pcieSecondaryBusNumber(jsonData["Sections"][i]["Section"]["DeviceID"]["SecondaryBusNumber"]);
                                     }
 
-                                    if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Slot Number")) {
-                                        int pcieSlotNum = jsonData["Sections"][i]["Section"]["Device ID"]["Slot Number"];
+                                    if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("SlotNumber")) {
+                                        int pcieSlotNum = jsonData["Sections"][i]["Section"]["DeviceID"]["SlotNumber"];
                                         pcieSlotNumber(std::to_string(pcieSlotNum));
                                     }
                                 }
