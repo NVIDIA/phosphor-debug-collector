@@ -92,11 +92,13 @@ bool DebugMode::debugMode(bool value)
     unsigned char *outbuf;
     if (value)
     {
+        ServiceReadyIface::state(States::Enabled);
         static unsigned char command[3] = {0xe3, 0xff, 0x01};
         outbuf = &command[0];
     }
     else
     {
+        ServiceReadyIface::state(States::Disabled);
         static unsigned char command[3] = {0xe3, 0x00, 0x00};
         outbuf = &command[0];
     }
