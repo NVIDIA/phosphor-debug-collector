@@ -18,6 +18,7 @@
 
 #include "dump_entry.hpp"
 #include "xyz/openbmc_project/Dump/Entry/FaultLog/server.hpp"
+#include "xyz/openbmc_project/Common/FaultLogType/server.hpp"
 #include "xyz/openbmc_project/Dump/Entry/server.hpp"
 #include "xyz/openbmc_project/Object/Delete/server.hpp"
 #include "xyz/openbmc_project/Time/EpochTime/server.hpp"
@@ -43,8 +44,8 @@ using ServerObject = typename sdbusplus::server::object::object<T>;
 using EntryIfaces = sdbusplus::server::object::object<
     sdbusplus::xyz::openbmc_project::Dump::Entry::server::FaultLog, sdbusplus::xyz::openbmc_project::Dump::Entry::server::CPERDecode>;
 
-using FaultDataType = sdbusplus::xyz::openbmc_project::Dump::Entry::server::
-    FaultLog::FaultDataType;
+using FaultDataType = sdbusplus::xyz::openbmc_project::Common::server::
+    FaultLogType::FaultLogTypes;
 
 
 namespace fs = std::filesystem;

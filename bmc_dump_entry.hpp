@@ -83,7 +83,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         // Create timer for entries which are in progress
         if (phosphor::dump::Entry::status() == OperationStatus::InProgress)
         {
-            progressTimer = std::make_unique<phosphor::Timer>([this]() {
+            progressTimer = std::make_unique<sdbusplus::Timer>([this]() {
                 uint64_t now = std::time(nullptr);
                 uint64_t limit = phosphor::dump::Entry::startTime() + bmcDumpMaxTimeLimitInSec;
                 float timeProgress = now <= limit
@@ -178,7 +178,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
      * @brief timer to update progress percent
      *
      */
-    std::unique_ptr<phosphor::Timer> progressTimer;
+    std::unique_ptr<sdbusplus::Timer> progressTimer;
 
     /** @brief Dump process group Id when currently running > 0 or 0 if not
      * valid */
