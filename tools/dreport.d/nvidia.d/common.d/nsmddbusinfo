@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#
+# config: 2 20
+
+. "$DREPORT_INCLUDE/functions"
+
+DUMP_LOG_PREFIX="__dump_worker_"
+
+__separator () {
+    printf '.%.s' {1..100}
+}
+
+__introspect() {
+    __object_path=$1
+    BUSCTL_ARGS="--full --no-pager"
+
+    printf '\nOBJECT_PATH: %s\n\n' $__object_path
+    busctl introspect $__service_name $__object_path $BUSCTL_ARGS
+    printf $(__separator)
+}
+
+__worker_routine() {
+    worker_id=$1
+    total_paths=${#object_paths[@]}
+    for (( i=worker_id; i<total_paths; i+=WORKER_COUNT )); do
+        __introspect "${object_paths[i]}"
+    done > "/tmp/$DUMP_LOG_PREFIX$worker_id.log"
+}
+
+# @brief: Collect a bus service's object tree
+# @param $1: Bus service name
+__dump() {
+    __service_name=$1
+    ERR_EXIT=255
+    WORKER_COUNT=4
+
+    [[ $__service_name == "" ]] && printf "\$__service_name (\$1) can't be empty.\n" && return $ERR_EXIT
+
+    __object_paths="$(busctl tree "$__service_name"  --list)"
+    grep -E "^Failed to introspect.*" <<< "$__object_paths" && return 0
+
+    __separator
+    printf "\n\n%s's Object Tree: \n\n" $__service_name
+    __separator
+
+    # Splitting object paths into an array
+    IFS=$'\n' read -r -d '' -a object_paths < <(echo "$__object_paths")
+
+    # Spawn parallel workers
+    # Each worker starts at the same index as the `worker_id` (please look at __worker_routine)
+    # and iterates over the `object_paths` array with an offset of `WORKER_COUNT`
+    for (( worker=0; worker<WORKER_COUNT; worker++ )); do
+        __worker_routine $worker &
+    done
+
+    wait #for the workers
+
+    cat /tmp/$DUMP_LOG_PREFIX* # Join the worker logs.
+}
+
+file_name="nsmdbusinfo.log"
+service="xyz.openbmc_project.NSM"
+add_cmd_output "__dump $service" $file_name "nsmd dbus objects"
