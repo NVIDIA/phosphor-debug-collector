@@ -31,6 +31,9 @@ Options:
                               this limit. Default size is unlimited.
         -a, --args <args>     Additional <key>=<value> pair argument for
                               dump plugins.
+        -c, --compression     you can select the compression type either zstd
+                              or xz. xz is size efficient and zstd is time
+                              eficient.
         -v, —-verbose         Increase logging verbosity.
         -V, --version         Output version information.
         -q, —-quiet           Only log fatal errors to stderr
@@ -72,6 +75,7 @@ declare -x dump_dir="/tmp"
 declare -x dump_id="00000000"
 declare -x dump_type=$TYPE_USER
 declare -x verbose=$FALSE
+declare -x compression_type="xz"
 declare -x quiet=$FALSE
 declare -x dump_size="unlimited"
 declare -x name_dir=""
@@ -88,9 +92,15 @@ declare -x elog_id=""
 
 function cleanup_on_termination()
 {
-    echo "SIGTERM captured - cleanup $name_dir and $name_dir.tar.xz leftovers"
-    rm -r "$name_dir"
-    rm -r "$name_dir.tar.xz"
+    if [ "$compression_type" = "xz" ]; then
+        echo "SIGTERM captured - cleanup $name_dir and $name_dir.tar.xz leftovers"
+        rm -r "$name_dir"
+        rm -r "$name_dir.tar.xz"
+    else
+        echo "SIGTERM captured - cleanup $name_dir and $name_dir.zst leftovers"
+        rm -r "$name_dir"
+        rm -r "$name_dir.zst"
+    fi
     exit -1
 }
 
@@ -185,7 +195,11 @@ function set_elog_pid()
 # @brief Initial version of the summary log
 function init_summary()
 {
-    log_summary "Name:          $name.tar.xz"
+    if [ "$compression_type" = "xz" ]; then
+        log_summary "Name:          $name.tar.xz"
+    else
+        log_summary "Name:          $name.zst"
+    fi
     log_summary "Epochtime:     $EPOCHTIME"
     log_summary "ID:            $dump_id"
     log_summary "Type:          $dump_type"
@@ -252,15 +266,27 @@ function package()
 
     #tar and compress the files.
     if [ -f "$HEADER_EXTENSION" ]; then
-        tar -Jcf "$name_dir.tar.xz" -C \
-            $(dirname "$name_dir") $(basename "$name_dir")
-        echo "Adding Dump Header :"$HEADER_EXTENSION
-        ("$HEADER_EXTENSION")
-        cat "$name_dir.tar.xz" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
-        mv "/tmp/dumpheader_$EPOCHTIME" "$name_dir.tar.xz"
+        if [ "$compression_type" = "xz" ]; then
+            tar -Jcf "$name_dir.tar.xz" -C \
+                $(dirname "$name_dir") $(basename "$name_dir")
+            echo "Adding Dump Header :"$HEADER_EXTENSION
+            ("$HEADER_EXTENSION")
+            cat "$name_dir.tar.xz" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
+            mv "/tmp/dumpheader_$EPOCHTIME" "$name_dir.tar.xz"
+        else
+            tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
+            echo "Adding Dump Header :"$HEADER_EXTENSION
+            ("$HEADER_EXTENSION")
+            cat "$name_dir.zst" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
+            mv "/tmp/dumpheader_$EPOCHTIME" "$name_dir.zst"
+        fi
     else
-        tar -Jcf "$name_dir.tar.xz" -C \
-            $(dirname "$name_dir") $(basename "$name_dir")
+        if [ "$compression_type" = "xz" ]; then
+            tar -Jcf "$name_dir.tar.xz" -C \
+                $(dirname "$name_dir") $(basename "$name_dir")
+        else
+            tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
+        fi
     fi
 
     if [ $? -ne 0 ]; then
@@ -279,15 +305,28 @@ function package()
     fi
 
     #copy the compressed tar file into the destination
-    cp "$name_dir.tar.xz" "$dump_dir"
+    if [ "$compression_type" = "xz" ]; then
+        cp "$name_dir.tar.xz" "$dump_dir"
+    else
+        cp "$name_dir.zst" "$dump_dir"
+    fi
     if [ $? -ne 0 ]; then
-        echo "Failed to copy the $name_dir.tar.xz to $dump_dir"
-        rm "$name_dir.tar.xz"
+        if [ "$compression_type" = "xz" ]; then
+            echo "Failed to copy the $name_dir.tar.xz to $dump_dir"
+            rm "$name_dir.tar.xz"
+        else
+            echo "Failed to copy the $name_dir.zst to $dump_dir"
+            rm "$name_dir.zst"
+        fi
         return $INTERNAL_FAILURE
     fi
 
     #Remove the temporary copy of the file
-    rm "$name_dir.tar.xz"
+    if [ "$compression_type" = "xz" ]; then
+        rm "$name_dir.tar.xz"
+    else
+        rm "$name_dir.zst"
+    fi
 }
 
 # @brief Main function
@@ -318,8 +357,8 @@ function main()
     fi
 }
 
-TEMP=`getopt -o n:d:i:t:s:p:a:vVqh \
-      --long name:,dir:,dumpid:,type:,size:,path:,args:,verbose,version,quiet,help \
+TEMP=`getopt -o n:d:i:t:s:p:a:c:vVqh \
+      --long name:,dir:,dumpid:,type:,size:,path:,args:,compression:,verbose,version,quiet,help \
       -- "$@"`
 
 if [ $? -ne 0 ]
@@ -358,6 +397,9 @@ while [[ $# -gt 1 ]]; do
                 plugin_args=( "${plugin_args[@]}" "$v" )
             fi
             shift 2;;
+        -c|--compression)
+            compression_type=$2
+            shift 2 ;;
         -v|—-verbose)
             verbose=$TRUE
             shift ;;

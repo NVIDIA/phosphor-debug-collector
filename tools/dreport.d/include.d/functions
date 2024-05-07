@@ -91,7 +91,7 @@ function check_size()
     #get the file or directory size
     if [[ -d $source ]] && [[ -n $source ]]; then
         tar -cf "$source.tar" -C \
-            $(dirname "$source") $(basename "$source")
+           $(dirname "$source") $(basename "$source")
         size=$(stat -c%s "$source.tar")
         rm "$source.tar"
     else
@@ -101,15 +101,28 @@ function check_size()
     if [ $((size + cur_dump_size)) -gt $dump_size ]; then
         #Exceed the allowed limit,
         #tar and compress the files and check the size
-        tar -Jcf "$name_dir.tar.xz" -C \
-            $(dirname "$name_dir") $(basename "$name_dir")
-        size=$(stat -c%s "$name_dir.tar.xz")
+        if [ "$compression_type" = "xz" ]; then
+            tar -Jcf "$name_dir.tar.xz" -C \
+                $(dirname "$name_dir") $(basename "$name_dir")
+            size=$(stat -c%s "$name_dir.tar.xz")
+        else
+            tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
+            size=$(stat -c%s "$name_dir.zst")
+        fi
         if [ $size -gt $dump_size ]; then
             #Remove the the specific data from the name_dir and continue
-            rm "$source" "$name_dir.tar.xz"
+            if [ "$compression_type" = "xz" ]; then
+                rm "$source" "$name_dir.tar.xz"
+            else
+                rm "$source" "$name_dir.zst"
+            fi
             return $RESOURCE_UNAVAILABLE
         else
-            rm "$name_dir.tar.xz"
+            if [ "$compression_type" = "xz" ]; then
+                rm "$name_dir.tar.xz"
+            else
+                rm "$name_dir.zst"
+            fi
         fi
     fi
 

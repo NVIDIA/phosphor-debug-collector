@@ -154,6 +154,10 @@ conf_data.set('FDR_DUMP_EXTENSION', get_option('fdr-dump-extension').enabled(),
                description : 'FDR dump extension'
              )
 
+conf_data.set_quoted('CompressionType', get_option('COMPRESSION_TYPE'),
+                      description : 'compression type flag'
+                    )
+
 configure_file(configuration : conf_data,
                output : 'config.h'
               )

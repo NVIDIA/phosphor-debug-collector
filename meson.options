@@ -286,3 +286,8 @@ option('FDR_DUMP_MAX_SIZE', type : 'integer',
 option('fdr-dump-rotation', type : 'feature',
         description : 'Rotate dump when total size of dumps exceed the quota', value: 'disabled'
       )
+
+option('COMPRESSION_TYPE', type : 'string',
+        value : 'xz',
+        description : 'compression type for the bmc dump it can be xz or zstd'
+)
