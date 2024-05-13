@@ -297,6 +297,31 @@ uint32_t retimerRegisterDump(const std::string& dumpId, const std::string& dumpP
     elog<InternalFailure>();
 }
 
+uint32_t fwAttrsDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    // Construct firmware attributes dump arguments
+    std::vector<char*> arg_v;
+    std::string fPath = FWATTRS_DUMP_BIN_PATH;
+    arg_v.push_back(&fPath[0]);
+    std::string pOption = "-p";
+    arg_v.push_back(&pOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    std::string dOption = "-v";
+    arg_v.push_back(&dOption[0]);
+
+    arg_v.push_back(nullptr);
+    execv(arg_v[0], &arg_v[0]);
+
+    // firmware attributes dump execution is failed.
+    auto error = errno;
+    log<level::ERR>("System dump: Error occurred during firmware attributes dump execution",
+                    entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     // check if minimum required space is available on destination partition
@@ -353,13 +378,15 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     const std::string typeEROT = "EROT";
     const std::string typeLTSSM = "RetLTSSM";
     const std::string typeRetimerRegister = "RetRegister";
+    const std::string typeFwAtts = "FirmwareAttributes";
     auto diagnosticType = std::get<std::string>(params["DiagnosticType"]);
     params.erase("DiagnosticType");
     if (!diagnosticType.empty())
     {
         if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
             diagnosticType != typeEROT && diagnosticType != typeLTSSM &&
-            diagnosticType != typeRetimerRegister)
+            diagnosticType != typeRetimerRegister &&
+            diagnosticType != typeFwAtts)
         {
             log<level::ERR>("Unrecognized DiagnosticType option",
                             entry("DIAG_TYPE=%s", diagnosticType.c_str()));
@@ -455,6 +482,10 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         {
             std::string retimer_address = std::get<std::string>(params["Address"]);
             retimerRegisterDump(id, dumpPath, retimer_address);
+        }
+        else if (diagnosticType == typeFwAtts)
+        {
+            fwAttrsDump(id, dumpPath);
         }
         else
         {
