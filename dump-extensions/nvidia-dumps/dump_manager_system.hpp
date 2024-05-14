@@ -81,7 +81,7 @@ class Manager : virtual public CreateIface,
                 std::mem_fn(&phosphor::dump::system::Manager::watchCallback),
                 this, std::placeholders::_1)),
         dumpDir(filePath),
-        retimerDebugModeState(bus, RETIMER_DEBUG_MODE_OBJPATH)
+        retimerState(bus, RETIMER_DEBUG_MODE_OBJPATH)
     {
     }
 
@@ -157,8 +157,8 @@ class Manager : virtual public CreateIface,
     /** @brief map of SDEventPlus child pointer added to event loop */
     std::map<pid_t, std::unique_ptr<Child>> childPtrMap;
 
-    /** @brief D-bus object for indicating retimer debug mode state*/
-    phosphor::dump::retimer::DebugMode retimerDebugModeState;
+    /** @brief D-bus object for indicating retimer state*/
+    phosphor::dump::retimer::State retimerState;
 
     /** @brief a set containing string of dump types that are in progress */
     std::set<std::string> dumpInProgress;

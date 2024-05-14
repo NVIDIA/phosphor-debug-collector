@@ -29,6 +29,7 @@
 #include <chrono>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <regex>
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
@@ -52,7 +53,7 @@ using DebugModeIface =
     sdbusplus::server::object_t<sdbusplus::xyz::openbmc_project::Dump::server::DebugMode>;
 
 
-bool DebugMode::debugMode() const
+bool State::debugMode() const
 {
     /* FPGA aggregate command for reading retimer debug mode from HMC:
     i2ctransfer -y 2 w1@0x60 0xe3 r2
@@ -99,7 +100,7 @@ bool DebugMode::debugMode() const
     return false;
 }
 
-bool DebugMode::debugMode(bool value)
+bool State::debugMode(bool value)
 {
     /* FPGA aggregate command for setting retimer debug mode from HMC:
     i2ctransfer -y 2 w3@0x60 0xe3 0xff 0x01 */
@@ -143,6 +144,84 @@ bool DebugMode::debugMode(bool value)
     close(file);
 
     return DebugModeIface::debugMode(value);
+}
+
+std::string State::getVendorId() const
+{
+    return retimerVendorId;
+}
+
+std::string State::getDBusObject(sdbusplus::bus::bus& bus, const std::string& rootPath)
+{
+    std::vector<std::string> paths;
+
+    auto mapper = bus.new_method_call("xyz.openbmc_project.ObjectMapper", "/xyz/openbmc_project/object_mapper",
+                                      "xyz.openbmc_project.ObjectMapper", "GetSubTreePaths");
+    mapper.append(rootPath.c_str());
+    mapper.append(0); // Depth 0 to search all
+    mapper.append(std::vector<std::string>({SWITCH_INTERFACE}));
+    auto reply = bus.call(mapper);
+
+    reply.read(paths);
+    for (auto& path : paths)
+    {
+        if (path.find("PCIeRetimer") != std::string::npos)
+        {
+            return path;
+        }
+    }
+
+    return {};
+}
+
+std::string State::getService(sdbusplus::bus::bus& bus, const char* path, const char* interface) const
+{
+    using DbusInterfaceList = std::vector<std::string>;
+    std::map<std::string, std::vector<std::string>> mapperResponse;
+
+    auto mapper = bus.new_method_call("xyz.openbmc_project.ObjectMapper", "/xyz/openbmc_project/object_mapper",
+                                      "xyz.openbmc_project.ObjectMapper", "GetObject");
+    mapper.append(path, DbusInterfaceList({interface}));
+
+    auto mapperResponseMsg = bus.call(mapper);
+    mapperResponseMsg.read(mapperResponse);
+    return mapperResponse.begin()->first;
+}
+
+void State::listenRetimerVendorIdEvents(sdbusplus::bus::bus& bus)
+{
+    try
+    {
+        switchObjectAddedMatch = std::make_unique<sdbusplus::bus::match_t>(
+            bus,
+            ("interface='org.freedesktop.DBus.Properties',type='signal',"
+             "member='PropertiesChanged',arg0='xyz.openbmc_project.Inventory.Item.Switch',"),
+            std::bind(std::mem_fn(&State::switchObjectCallback), this,
+                    std::placeholders::_1));
+    }
+    catch (const std::exception &e)
+    {
+        lg2::error("Failed to set up event listening for retimer VendorId: {ERROR}", "ERROR", e);
+    }
+}
+
+void State::switchObjectCallback(sdbusplus::message::message& m)
+{
+    std::string path = m.get_path();
+    std::string interface;
+    std::map<std::string, std::variant<std::string>> changedProperties;
+    std::vector<std::string> invalidatedProperties;
+    m.read(interface, changedProperties, invalidatedProperties);
+    if (retimerVendorId.empty() && path.find("PCIeRetimer") != std::string::npos)
+    {
+        for (auto& propertyEntry : changedProperties)
+        {
+            if (propertyEntry.first == "VendorId")
+            {
+                retimerVendorId = std::get<0>(propertyEntry.second);
+            }
+        }
+    }
 }
 
 } // namespace retimer

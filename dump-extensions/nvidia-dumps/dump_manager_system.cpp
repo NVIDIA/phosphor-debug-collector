@@ -241,7 +241,7 @@ uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
     elog<InternalFailure>();
 }
 
-uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath)
+uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath, const std::string& vendorId)
 {
     // Construct Ltssm dump arguments
     std::vector<char*> arg_v;
@@ -253,6 +253,12 @@ uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath
     std::string iOption = "-i";
     arg_v.push_back(&iOption[0]);
     arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    if (!vendorId.empty())
+    {
+        std::string vOption = "-v";
+        arg_v.push_back(&vOption[0]);
+        arg_v.push_back(const_cast<char*>(vendorId.c_str()));
+    }
 
     arg_v.push_back(nullptr);
 
@@ -266,7 +272,7 @@ uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath
     elog<InternalFailure>();
 }
 
-uint32_t retimerRegisterDump(const std::string& dumpId, const std::string& dumpPath, const std::string& retimer_address)
+uint32_t retimerRegisterDump(const std::string& dumpId, const std::string& dumpPath, const std::string& retimer_address, const std::string& vendorId)
 {
     // Construct Register dump arguments
     std::vector<char*> arg_v;
@@ -283,6 +289,12 @@ uint32_t retimerRegisterDump(const std::string& dumpId, const std::string& dumpP
         std::string aOption = "-a";
         arg_v.push_back(&aOption[0]);
         arg_v.push_back(const_cast<char*>(retimer_address.c_str()));
+    }
+    if (!vendorId.empty())
+    {
+        std::string vOption = "-v";
+        arg_v.push_back(&vOption[0]);
+        arg_v.push_back(const_cast<char*>(vendorId.c_str()));
     }
 
     arg_v.push_back(nullptr);
@@ -418,7 +430,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 
     if (diagnosticType == typeLTSSM)
     {
-        retimerDebugModeState.debugMode(true);
+        retimerState.debugMode(true);
     }
     
     Manager::dumpInProgress.insert(diagnosticType);
@@ -476,12 +488,12 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         }
         else if (diagnosticType == typeLTSSM)
         {
-            retimerLtssmDump(id, dumpPath);
+            retimerLtssmDump(id, dumpPath, retimerState.getVendorId());
         }
         else if (diagnosticType == typeRetimerRegister)
         {
             std::string retimer_address = std::get<std::string>(params["Address"]);
-            retimerRegisterDump(id, dumpPath, retimer_address);
+            retimerRegisterDump(id, dumpPath, retimer_address, retimerState.getVendorId());
         }
         else if (diagnosticType == typeFwAtts)
         {
@@ -578,7 +590,7 @@ void Manager::createEntry(const fs::path& file)
         auto dumpType = dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())->getDumpType();
         if (dumpType == "RetLTSSM")
         {
-            retimerDebugModeState.debugMode(false);
+            retimerState.debugMode(false);
         }
         Manager::dumpInProgress.erase(dumpType);
         
