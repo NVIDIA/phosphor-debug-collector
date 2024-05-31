@@ -112,57 +112,69 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
-static void fdrDumpGetActionArgument(phosphor::dump::DumpCreateParams& params,
-                                     std::string& action)
-{
-    const std::string key = "Action";
-    const std::string cleanAction = "Clean";
-    const std::string collectAction = "Collect";
-
-    if (auto search = params.find(key); search != params.end())
-    {
-        if (std::holds_alternative<std::string>(search->second))
-        {
-            auto paramAction = std::get<std::string>(search->second);
-            if (paramAction == cleanAction)
-            {
-                action = "clean";
-            }
-            else if (paramAction == collectAction)
-            {
-                action = "collect";
-            }
-            else
-            {
-                log<level::ERR>("FDR dump: Unsupported argument for action");
-            }
-        }
-        else
-        {
-            log<level::ERR>("FDR dump: Argument for action is missing");
-        }
-    }
-}
-
-uint32_t fdrDump(const std::string& dumpId, const std::string& dumpPath,
-                 const std::string& action)
+uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
 {
     // Construct FDR dump arguments
     std::vector<char*> arg_v;
     std::string fPath = FDR_DUMP_BIN_PATH;
+    std::string time_start, time_end, max_dump_size, extended_source;
+
+
     arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string aOption = "-a";
-    arg_v.push_back(&aOption[0]);
-    arg_v.push_back(const_cast<char*>(action.c_str()));
+
+    arg_v.push_back(const_cast<char*>("-p"));
+    auto dump_path = std::get<std::string>(params["DumpPath"]);
+    arg_v.push_back(const_cast<char*>(dump_path.c_str()));
+    
+    arg_v.push_back(const_cast<char*>("-i"));
+    auto dump_id = std::get<std::string>(params["DumpID"]);
+    arg_v.push_back(const_cast<char*>(dump_id.c_str()));
+    
+    arg_v.push_back(const_cast<char*>("-a"));
+    if (auto search = params.find("Action"); search == params.end())
+        params["Action"] = "Collect";
+    auto dump_action = std::get<std::string>(params["Action"]);
+    std::transform(dump_action.begin(), dump_action.end(), dump_action.begin(), ::tolower);
+    arg_v.push_back(const_cast<char*>(dump_action.c_str()));
+
+    if (auto search = params.find("TimeRangeStart"); search != params.end())
+    {
+        if (std::holds_alternative<std::string>(search->second)){
+            arg_v.push_back(const_cast<char*>("-s"));
+            time_start = std::get<std::string>(params["TimeRangeStart"]);
+            arg_v.push_back(const_cast<char*>(time_start.c_str()));
+        }
+    }
+    
+    if (auto search = params.find("TimeRangeEnd"); search != params.end())
+    {
+        if (std::holds_alternative<std::string>(search->second)){
+            arg_v.push_back(const_cast<char*>("-e"));
+            time_end = std::get<std::string>(params["TimeRangeEnd"]);
+            arg_v.push_back(const_cast<char*>(time_end.c_str()));
+        }
+    }
+    
+    if (auto search = params.find("MaxDumpSize"); search != params.end())
+    {
+        if (std::holds_alternative<std::string>(search->second)){
+            arg_v.push_back(const_cast<char*>("-m"));
+            max_dump_size = std::get<std::string>(params["MaxDumpSize"]);
+            arg_v.push_back(const_cast<char*>(max_dump_size.c_str()));
+        }
+    }
+
+    if (auto search = params.find("ExtendedSource"); search != params.end())
+    {
+        if (std::holds_alternative<std::string>(search->second)){
+            arg_v.push_back(const_cast<char*>("-S"));
+            extended_source = std::get<std::string>(params["ExtendedSource"]);
+            arg_v.push_back(const_cast<char*>(extended_source.c_str()));
+        }
+    }
 
     arg_v.push_back(nullptr);
-
+    
     execv(arg_v[0], &arg_v[0]);
 
     // FDR Dump execution is failed.
@@ -172,6 +184,7 @@ uint32_t fdrDump(const std::string& dumpId, const std::string& dumpPath,
         entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
+
 
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
@@ -264,10 +277,9 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 
         if (diagnosticType == typeFDR)
         {
-            std::string action = "collect";
-
-            fdrDumpGetActionArgument(params, action);
-            fdrDump(id, dumpPath, action);
+            params["DumpID"] = id;
+            params["DumpPath"] = dumpPath;
+            fdrDump(params);
         }
         else
         {
