@@ -232,6 +232,7 @@ int CreateDumpDbus::createDump(const std::string& type, std::string& response)
     }
     else
     {
+        path = std::string(MAPPER_PATH_PREFIX) + "system";
         params["DiagnosticType"] = type;
     }
 
