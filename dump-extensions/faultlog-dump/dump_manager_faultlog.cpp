@@ -117,6 +117,7 @@ sdbusplus::message::object_path Manager::createDump(phosphor::dump::DumpCreatePa
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
+    std::string notifType = "NA";
     std::string sectionType = "NA";
     std::string fruID = "NA";
     std::string severity = "NA";
@@ -147,7 +148,7 @@ sdbusplus::message::object_path Manager::createDump(phosphor::dump::DumpCreatePa
             std::make_unique<faultLog::Entry>(
                 bus, objPath.c_str(), id, timeStamp, type, additionalTypeName,
                 primayLogId, 0, std::string(),
-                phosphor::dump::OperationStatus::InProgress, sectionType, fruID,
+                phosphor::dump::OperationStatus::InProgress, notifType, sectionType, fruID,
                 severity, nvipSignature, nvSeverity, nvSocketNumber, pcieVendorID,
                 pcieDeviceID, pcieClassCode, pcieFunctionNumber, pcieDeviceNumber,
                 pcieSegmentNumber, pcieDeviceBusNumber, pcieSecondaryBusNumber,
@@ -272,6 +273,7 @@ void Manager::createEntry(const fs::path& file)
         return;
     }
 
+    std::string notifType = "NA";
     std::string sectionType = "NA";
     std::string fruid = "NA";
     std::string severity = "NA";
@@ -317,6 +319,9 @@ void Manager::createEntry(const fs::path& file)
         jsonData = json::parse(cperFile, nullptr, false);
         if (!jsonData.is_discarded())
         {
+            if (jsonData.contains("Header") && jsonData["Header"].contains("NotificationType")){
+                notifType = jsonData["Header"]["NotificationType"];}
+
             if (jsonData.contains("Header") && jsonData["Header"].contains("SectionCount"))
             {
                 int secCount = jsonData["Header"]["SectionCount"];
@@ -404,7 +409,7 @@ void Manager::createEntry(const fs::path& file)
                     bus, objPath.c_str(), id, stoull(msString),
                     FaultDataType::CPER, "CPER", "0", fs::file_size(file), file,
                     phosphor::dump::OperationStatus::Completed,
-                    sectionType, fruid, severity, nvipSignature, nvSeverity,
+                    notifType, sectionType, fruid, severity, nvipSignature, nvSeverity,
                     nvSocketNumber, pcieVendorID, pcieDeviceID, pcieClassCode,
                     pcieFunctionNumber, pcieDeviceNumber, pcieSegmentNumber,
                     pcieDeviceBusNumber, pcieSecondaryBusNumber, pcieSlotNumber,originatorId, originatorType, *this)));

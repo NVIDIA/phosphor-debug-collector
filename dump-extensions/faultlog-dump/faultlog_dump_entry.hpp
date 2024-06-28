@@ -84,7 +84,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     Entry(sdbusplus::bus::bus &bus, const std::string &objPath, uint32_t dumpId,
           uint64_t timeStamp, FaultDataType typeIn,
           const std::string &additionalTypeNameIn, const std::string &primaryLogIdIn, uint64_t fileSize,
-          const fs::path &file, phosphor::dump::OperationStatus status, const std::string &SectionTypeIn, const std::string &fruIDIn, const std::string &severityIn, const std::string &nvIPSigIn, const std::string &nvSevIn, const std::string &nvSockNumIn, const std::string &pcieVendorIDIn, const std::string &pcieDeviceIDIn, const std::string &pcieClassCodeIn, const std::string &pcieFuncNumberIn, const std::string &pcieDeviceNumberIn, const std::string &pcieSegmentNumberIn, const std::string &pcieDeviceBusNumberIn, const std::string &pcieSecondaryBusNumberIn, const std::string &pcieSlotNumberIn,
+          const fs::path &file, phosphor::dump::OperationStatus status, const std::string &NotifTypeIn, const std::string &SectionTypeIn, const std::string &fruIDIn, const std::string &severityIn, const std::string &nvIPSigIn, const std::string &nvSevIn, const std::string &nvSockNumIn, const std::string &pcieVendorIDIn, const std::string &pcieDeviceIDIn, const std::string &pcieClassCodeIn, const std::string &pcieFuncNumberIn, const std::string &pcieDeviceNumberIn, const std::string &pcieSegmentNumberIn, const std::string &pcieDeviceBusNumberIn, const std::string &pcieSecondaryBusNumberIn, const std::string &pcieSlotNumberIn,
           std::string originatorId, originatorTypes originatorType, phosphor::dump::Manager &parent) :
         phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize, std::string(), status, originatorId, originatorType, parent),
         EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),
@@ -93,6 +93,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         type(typeIn);
         additionalTypeName(additionalTypeNameIn);
         primaryLogId(primaryLogIdIn);
+        notificationType(NotifTypeIn);
         sectionType(SectionTypeIn);
         fruid(fruIDIn);
         severity(severityIn);
@@ -147,6 +148,10 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
             jsonData = json::parse(cperFile, nullptr, false);
             if (!jsonData.is_discarded())
             {
+                if (jsonData.contains("Header") && jsonData["Header"].contains("NotificationType")) {
+                    notificationType(jsonData["Header"]["NotificationType"]);
+                }
+
                 if (jsonData.contains("Header") && jsonData["Header"].contains("SectionCount"))
                 {
                     int secCount = jsonData["Header"]["SectionCount"];
