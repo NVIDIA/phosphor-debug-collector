@@ -6,27 +6,15 @@
 #include "xyz/openbmc_project/Object/Delete/server.hpp"
 #include "xyz/openbmc_project/Time/EpochTime/server.hpp"
 
-<<<<<<< HEAD
-#include <filesystem>
-||||||| d8291e5
-=======
 #include <phosphor-logging/lg2.hpp>
->>>>>>> origin/master
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
 #include <sdeventplus/event.hpp>
 #include <sdeventplus/source/event.hpp>
-<<<<<<< HEAD
-||||||| d8291e5
-
-#include <filesystem>
-
-=======
 
 #include <filesystem>
 #include <fstream>
 
->>>>>>> origin/master
 namespace phosphor
 {
 namespace dump

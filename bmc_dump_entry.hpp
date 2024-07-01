@@ -152,13 +152,10 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         // TODO: serialization of this property will be handled with
         // #ibm-openbmc/2597
         completedTime(timeStamp);
-<<<<<<< HEAD
         progress(100);
         if (progressTimer != nullptr) {
             progressTimer->stop();
         }
-||||||| d8291e5
-=======
         serialize();
     }
 
@@ -223,7 +220,6 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     void emitSignal()
     {
         this->phosphor::dump::bmc::EntryIfaces::emit_object_added();
->>>>>>> origin/master
     }
 
     /** @brief To get the dump file name path 
