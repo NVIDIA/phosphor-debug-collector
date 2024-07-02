@@ -279,7 +279,6 @@ void Manager::createEntry(const fs::path& file)
     std::string severity = "NA";
     std::string nvipSignature = "NA";
     std::string nvSeverity = "NA";
-    int nvSockNumber;
     std::string nvSocketNumber = "NA";
     std::string pcieVendorID = "NA";
     std::string pcieDeviceID = "NA";
@@ -289,7 +288,6 @@ void Manager::createEntry(const fs::path& file)
     std::string pcieSegmentNumber = "NA";
     std::string pcieDeviceBusNumber = "NA";
     std::string pcieSecondaryBusNumber = "NA";
-    int pcieSlotNum;
     std::string pcieSlotNumber = "NA";
 
     auto idString = match[ID_POS];
@@ -315,76 +313,84 @@ void Manager::createEntry(const fs::path& file)
 
     if (cperFile.is_open())
     {
-        json jsonData;
-        jsonData = json::parse(cperFile, nullptr, false);
+        json jsonData = json::parse(cperFile, nullptr, false);
         if (!jsonData.is_discarded())
         {
-            if (jsonData.contains("Header") && jsonData["Header"].contains("NotificationType")){
-                notifType = jsonData["Header"]["NotificationType"];}
-
-            if (jsonData.contains("Header") && jsonData["Header"].contains("SectionCount"))
+            if (jsonData.contains("Header"))
             {
-                int secCount = jsonData["Header"]["SectionCount"];
+                const json& hdr = jsonData["Header"];
 
-                for (int i = 0; i < secCount; i++)
+                if (hdr.contains("NotificationType"))
+                    notifType = hdr["NotificationType"];
+
+                if (hdr.contains("SectionCount"))
                 {
+                    // int secCount = hdr["SectionCount"];  // unused
                     if (jsonData.contains("Sections") && jsonData["Sections"].is_array() &&
-                        !jsonData["Sections"].empty())
+                        jsonData["Sections"].size() > 0)
                     {
-                        if (jsonData["Sections"][i].contains("SectionDescriptor"))
+                        // TODO: Log multiple-sections
+
+                        // Log only the 1st section (most CPERs have only 1)
+                        const json& toLog = jsonData["Sections"][0];
+
+                        if (toLog.contains("SectionDescriptor"))
                         {
+                            const json& descToLog = toLog["SectionDescriptor"];
+
                             // Extracting existing fields
-                            if (jsonData["Sections"][i]["SectionDescriptor"].contains("SectionType")){
-                                sectionType = jsonData["Sections"][i]["SectionDescriptor"]["SectionType"];}
+                            if (descToLog.contains("SectionType"))
+                                sectionType = descToLog["SectionType"];
 
-                            if (jsonData["Sections"][i]["SectionDescriptor"].contains("FRUId")){
-                                fruid = jsonData["Sections"][i]["SectionDescriptor"]["FRUId"];}
+                            if (descToLog.contains("FRUId"))
+                                fruid = descToLog["FRUId"];
 
-                            if (jsonData["Sections"][i]["SectionDescriptor"].contains("SectionSeverity")){
-                                severity = jsonData["Sections"][i]["SectionDescriptor"]["SectionSeverity"];}
+                            if (descToLog.contains("SectionSeverity"))
+                                severity = descToLog["SectionSeverity"];
 
-                            if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("IPSignature")){
-                                nvipSignature = jsonData["Sections"][i]["Section"]["IPSignature"];}
-
-                            if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("Severity")){
-                                nvSeverity = jsonData["Sections"][i]["Section"]["Severity"];}
-
-                            if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("SocketNumber"))
+                            if (toLog.contains("Section"))
                             {
-                                nvSockNumber = jsonData["Sections"][i]["Section"]["SocketNumber"];
-                                nvSocketNumber = std::to_string(nvSockNumber);
-                            }
+                                const json& sectionToLog = toLog["Section"];
 
-                            if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("DeviceID"))
-                            {
-                                if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("VendorID")){
-                                    pcieVendorID = jsonData["Sections"][i]["Section"]["DeviceID"]["VendorID"];}
+                                if (sectionToLog.contains("IPSignature"))
+                                    nvipSignature = sectionToLog["IPSignature"];
 
-                                if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("DeviceID")){
-                                    pcieDeviceID = jsonData["Sections"][i]["Section"]["DeviceID"]["DeviceID"];}
+                                if (sectionToLog.contains("Severity"))
+                                    nvSeverity = sectionToLog["Severity"];
 
-                                if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("ClassCode")){
-                                    pcieClassCode = jsonData["Sections"][i]["Section"]["DeviceID"]["ClassCode"];}
+                                if (sectionToLog.contains("SocketNumber"))
+                                    nvSocketNumber = sectionToLog["SocketNumber"].dump();
 
-                                if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("FunctionNumber")){
-                                    pcieFunctionNumber = jsonData["Sections"][i]["Section"]["DeviceID"]["FunctionNumber"];}
-
-                                if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("DeviceNumber")){
-                                    pcieDeviceNumber = jsonData["Sections"][i]["Section"]["DeviceID"]["DeviceNumber"];}
-
-                                if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("SegmentNumber")){
-                                    pcieSegmentNumber = jsonData["Sections"][i]["Section"]["DeviceID"]["SegmentNumber"];}
-
-                                if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("DeviceBusNumber")){
-                                    pcieDeviceBusNumber = jsonData["Sections"][i]["Section"]["DeviceID"]["DeviceBusNumber"];}
-
-                                if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("SecondaryBusNumber")){
-                                    pcieSecondaryBusNumber = jsonData["Sections"][i]["Section"]["DeviceID"]["SecondaryBusNumber"];}
-
-                                if (jsonData["Sections"][i]["Section"]["DeviceID"].contains("SlotNumber"))
+                                if (sectionToLog.contains("DeviceID"))
                                 {
-                                    pcieSlotNum = jsonData["Sections"][i]["Section"]["DeviceID"]["SlotNumber"];
-                                    pcieSlotNumber = std::to_string(pcieSlotNum);
+                                    const json& devID = sectionToLog["DeviceID"];
+
+                                    if (devID.contains("VendorID"))
+                                        pcieVendorID = devID["VendorID"];
+
+                                    if (devID.contains("DeviceID"))
+                                        pcieDeviceID = devID["DeviceID"];
+
+                                    if (devID.contains("ClassCode"))
+                                        pcieClassCode = devID["ClassCode"];
+
+                                    if (devID.contains("FunctionNumber"))
+                                        pcieFunctionNumber = devID["FunctionNumber"];
+
+                                    if (devID.contains("DeviceNumber"))
+                                        pcieDeviceNumber = devID["DeviceNumber"];
+
+                                    if (devID.contains("SegmentNumber"))
+                                        pcieSegmentNumber = devID["SegmentNumber"];
+
+                                    if (devID.contains("DeviceBusNumber"))
+                                        pcieDeviceBusNumber = devID["DeviceBusNumber"];
+
+                                    if (devID.contains("SecondaryBusNumber"))
+                                        pcieSecondaryBusNumber = devID["SecondaryBusNumber"];
+
+                                    if (devID.contains("SlotNumber"))
+                                        pcieSlotNumber = devID["SlotNumber"].dump();
                                 }
                             }
                         }
