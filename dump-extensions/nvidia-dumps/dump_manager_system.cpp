@@ -334,6 +334,31 @@ uint32_t fwAttrsDump(const std::string& dumpId, const std::string& dumpPath)
     elog<InternalFailure>();
 }
 
+uint32_t hwCheckoutDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    // Construct hardware checkout dump arguments
+    std::vector<char*> arg_v;
+    std::string fPath = HWCHECKOUT_DUMP_BIN_PATH;
+    arg_v.push_back(&fPath[0]);
+    std::string pOption = "-p";
+    arg_v.push_back(&pOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    std::string dOption = "-v";
+    arg_v.push_back(&dOption[0]);
+
+    arg_v.push_back(nullptr);
+    execv(arg_v[0], &arg_v[0]);
+
+    // hardware checkout dump execution is failed.
+    auto error = errno;
+    log<level::ERR>("System dump: Error occurred during hardware checkout dump execution",
+                    entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     // check if minimum required space is available on destination partition
@@ -391,6 +416,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     const std::string typeLTSSM = "RetLTSSM";
     const std::string typeRetimerRegister = "RetRegister";
     const std::string typeFwAtts = "FirmwareAttributes";
+    const std::string typeHwCheckout = "HardwareCheckout";
     auto diagnosticType = std::get<std::string>(params["DiagnosticType"]);
     params.erase("DiagnosticType");
     if (!diagnosticType.empty())
@@ -398,7 +424,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
             diagnosticType != typeEROT && diagnosticType != typeLTSSM &&
             diagnosticType != typeRetimerRegister &&
-            diagnosticType != typeFwAtts)
+            diagnosticType != typeFwAtts &&
+            diagnosticType != typeHwCheckout)
         {
             log<level::ERR>("Unrecognized DiagnosticType option",
                             entry("DIAG_TYPE=%s", diagnosticType.c_str()));
@@ -498,6 +525,10 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         else if (diagnosticType == typeFwAtts)
         {
             fwAttrsDump(id, dumpPath);
+        }
+        else if (diagnosticType == typeHwCheckout)
+        {
+            hwCheckoutDump(id, dumpPath);
         }
         else
         {
