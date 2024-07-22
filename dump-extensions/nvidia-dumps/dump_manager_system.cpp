@@ -413,6 +413,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     const std::string typeSelftest = "SelfTest";
     const std::string typeFPGA = "FPGA";
     const std::string typeEROT = "EROT";
+    const std::string typeROT = "ROT";
     const std::string typeLTSSM = "RetLTSSM";
     const std::string typeRetimerRegister = "RetRegister";
     const std::string typeFwAtts = "FirmwareAttributes";
@@ -422,8 +423,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     if (!diagnosticType.empty())
     {
         if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
-            diagnosticType != typeEROT && diagnosticType != typeLTSSM &&
-            diagnosticType != typeRetimerRegister &&
+            diagnosticType != typeEROT && diagnosticType != typeROT && 
+            diagnosticType != typeLTSSM && diagnosticType != typeRetimerRegister && 
             diagnosticType != typeFwAtts &&
             diagnosticType != typeHwCheckout)
         {
@@ -509,7 +510,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         {
             fpgaRegDump(id, dumpPath);
         }
-        else if (diagnosticType == typeEROT)
+        else if (diagnosticType == typeEROT || diagnosticType == typeROT)
         {
             erotDump(id, dumpPath);
         }
