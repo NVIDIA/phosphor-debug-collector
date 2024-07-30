@@ -8,6 +8,13 @@
 
 desc="Journal pretty log"
 file_name="journal-pretty.log"
-command="journalctl -o json-pretty -r"
+command="journalctl -o json-pretty"
 
 add_cmd_output "$command" "$file_name" "$desc"
+
+if [ $? -eq 2 ]; then
+    desc="Journal log"
+    file_name="journal.log"
+    command_compact="journalctl"
+    add_cmd_output "$command_compact" "$file_name" "$desc"
+fi

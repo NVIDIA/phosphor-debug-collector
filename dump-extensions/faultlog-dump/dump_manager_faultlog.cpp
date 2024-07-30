@@ -117,6 +117,7 @@ sdbusplus::message::object_path Manager::createDump(phosphor::dump::DumpCreatePa
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
+    std::string notifType = "NA";
     std::string sectionType = "NA";
     std::string fruID = "NA";
     std::string severity = "NA";
@@ -147,7 +148,7 @@ sdbusplus::message::object_path Manager::createDump(phosphor::dump::DumpCreatePa
             std::make_unique<faultLog::Entry>(
                 bus, objPath.c_str(), id, timeStamp, type, additionalTypeName,
                 primayLogId, 0, std::string(),
-                phosphor::dump::OperationStatus::InProgress, sectionType, fruID,
+                phosphor::dump::OperationStatus::InProgress, notifType, sectionType, fruID,
                 severity, nvipSignature, nvSeverity, nvSocketNumber, pcieVendorID,
                 pcieDeviceID, pcieClassCode, pcieFunctionNumber, pcieDeviceNumber,
                 pcieSegmentNumber, pcieDeviceBusNumber, pcieSecondaryBusNumber,
@@ -272,12 +273,12 @@ void Manager::createEntry(const fs::path& file)
         return;
     }
 
+    std::string notifType = "NA";
     std::string sectionType = "NA";
     std::string fruid = "NA";
     std::string severity = "NA";
     std::string nvipSignature = "NA";
     std::string nvSeverity = "NA";
-    int nvSockNumber;
     std::string nvSocketNumber = "NA";
     std::string pcieVendorID = "NA";
     std::string pcieDeviceID = "NA";
@@ -287,7 +288,6 @@ void Manager::createEntry(const fs::path& file)
     std::string pcieSegmentNumber = "NA";
     std::string pcieDeviceBusNumber = "NA";
     std::string pcieSecondaryBusNumber = "NA";
-    int pcieSlotNum;
     std::string pcieSlotNumber = "NA";
 
     auto idString = match[ID_POS];
@@ -313,73 +313,84 @@ void Manager::createEntry(const fs::path& file)
 
     if (cperFile.is_open())
     {
-        json jsonData;
-        jsonData = json::parse(cperFile, nullptr, false);
+        json jsonData = json::parse(cperFile, nullptr, false);
         if (!jsonData.is_discarded())
         {
-            if (jsonData.contains("Header") && jsonData["Header"].contains("Section Count"))
+            if (jsonData.contains("Header"))
             {
-                int secCount = jsonData["Header"]["Section Count"];
+                const json& hdr = jsonData["Header"];
 
-                for (int i = 0; i < secCount; i++)
+                if (hdr.contains("NotificationType"))
+                    notifType = hdr["NotificationType"];
+
+                if (hdr.contains("SectionCount"))
                 {
+                    // int secCount = hdr["SectionCount"];  // unused
                     if (jsonData.contains("Sections") && jsonData["Sections"].is_array() &&
-                        !jsonData["Sections"].empty())
+                        jsonData["Sections"].size() > 0)
                     {
-                        if (jsonData["Sections"][i].contains("Section Descriptor"))
+                        // TODO: Log multiple-sections
+
+                        // Log only the 1st section (most CPERs have only 1)
+                        const json& toLog = jsonData["Sections"][0];
+
+                        if (toLog.contains("SectionDescriptor"))
                         {
+                            const json& descToLog = toLog["SectionDescriptor"];
+
                             // Extracting existing fields
-                            if (jsonData["Sections"][i]["Section Descriptor"].contains("Section Type")){
-                                sectionType = jsonData["Sections"][i]["Section Descriptor"]["Section Type"];}
+                            if (descToLog.contains("SectionType"))
+                                sectionType = descToLog["SectionType"];
 
-                            if (jsonData["Sections"][i]["Section Descriptor"].contains("FRU Id")){
-                                fruid = jsonData["Sections"][i]["Section Descriptor"]["FRU Id"];}
+                            if (descToLog.contains("FRUId"))
+                                fruid = descToLog["FRUId"];
 
-                            if (jsonData["Sections"][i]["Section Descriptor"].contains("Section Severity")){
-                                severity = jsonData["Sections"][i]["Section Descriptor"]["Section Severity"];}
+                            if (descToLog.contains("SectionSeverity"))
+                                severity = descToLog["SectionSeverity"];
 
-                            if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("IPSignature")){
-                                nvipSignature = jsonData["Sections"][i]["Section"]["IPSignature"];}
-
-                            if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("Severity")){
-                                nvSeverity = jsonData["Sections"][i]["Section"]["Severity"];}
-
-                            if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("Socket Number"))
+                            if (toLog.contains("Section"))
                             {
-                                nvSockNumber = jsonData["Sections"][i]["Section"]["Socket Number"];
-                                nvSocketNumber = std::to_string(nvSockNumber);
-                            }
+                                const json& sectionToLog = toLog["Section"];
 
-                            if (jsonData["Sections"][i].contains("Section") && jsonData["Sections"][i]["Section"].contains("Device ID"))
-                            {
-                                if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Vendor ID")){
-                                    pcieVendorID = jsonData["Sections"][i]["Section"]["Device ID"]["Vendor ID"];}
+                                if (sectionToLog.contains("IPSignature"))
+                                    nvipSignature = sectionToLog["IPSignature"];
 
-                                if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Device ID")){
-                                    pcieDeviceID = jsonData["Sections"][i]["Section"]["Device ID"]["Device ID"];}
+                                if (sectionToLog.contains("Severity"))
+                                    nvSeverity = sectionToLog["Severity"];
 
-                                if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Class Code")){
-                                    pcieClassCode = jsonData["Sections"][i]["Section"]["Device ID"]["Class Code"];}
+                                if (sectionToLog.contains("SocketNumber"))
+                                    nvSocketNumber = sectionToLog["SocketNumber"].dump();
 
-                                if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Function Number")){
-                                    pcieFunctionNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Function Number"];}
-
-                                if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Device Number")){
-                                    pcieDeviceNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Device Number"];}
-
-                                if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Segment Number")){
-                                    pcieSegmentNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Segment Number"];}
-
-                                if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Device Bus Number")){
-                                    pcieDeviceBusNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Device Bus Number"];}
-
-                                if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Secondary Bus Number")){
-                                    pcieSecondaryBusNumber = jsonData["Sections"][i]["Section"]["Device ID"]["Secondary Bus Number"];}
-
-                                if (jsonData["Sections"][i]["Section"]["Device ID"].contains("Slot Number"))
+                                if (sectionToLog.contains("DeviceID"))
                                 {
-                                    pcieSlotNum = jsonData["Sections"][i]["Section"]["Device ID"]["Slot Number"];
-                                    pcieSlotNumber = std::to_string(pcieSlotNum);
+                                    const json& devID = sectionToLog["DeviceID"];
+
+                                    if (devID.contains("VendorID"))
+                                        pcieVendorID = devID["VendorID"];
+
+                                    if (devID.contains("DeviceID"))
+                                        pcieDeviceID = devID["DeviceID"];
+
+                                    if (devID.contains("ClassCode"))
+                                        pcieClassCode = devID["ClassCode"];
+
+                                    if (devID.contains("FunctionNumber"))
+                                        pcieFunctionNumber = devID["FunctionNumber"];
+
+                                    if (devID.contains("DeviceNumber"))
+                                        pcieDeviceNumber = devID["DeviceNumber"];
+
+                                    if (devID.contains("SegmentNumber"))
+                                        pcieSegmentNumber = devID["SegmentNumber"];
+
+                                    if (devID.contains("DeviceBusNumber"))
+                                        pcieDeviceBusNumber = devID["DeviceBusNumber"];
+
+                                    if (devID.contains("SecondaryBusNumber"))
+                                        pcieSecondaryBusNumber = devID["SecondaryBusNumber"];
+
+                                    if (devID.contains("SlotNumber"))
+                                        pcieSlotNumber = devID["SlotNumber"].dump();
                                 }
                             }
                         }
@@ -404,7 +415,7 @@ void Manager::createEntry(const fs::path& file)
                     bus, objPath.c_str(), id, stoull(msString),
                     FaultDataType::CPER, "CPER", "0", fs::file_size(file), file,
                     phosphor::dump::OperationStatus::Completed,
-                    sectionType, fruid, severity, nvipSignature, nvSeverity,
+                    notifType, sectionType, fruid, severity, nvipSignature, nvSeverity,
                     nvSocketNumber, pcieVendorID, pcieDeviceID, pcieClassCode,
                     pcieFunctionNumber, pcieDeviceNumber, pcieSegmentNumber,
                     pcieDeviceBusNumber, pcieSecondaryBusNumber, pcieSlotNumber,originatorId, originatorType, *this)));

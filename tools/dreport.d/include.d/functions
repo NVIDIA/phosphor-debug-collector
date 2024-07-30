@@ -22,6 +22,7 @@ function add_cmd_output()
         log_info "Collected $desc"
     else
         log_warning "Skipping $desc"
+        return 2
     fi
 }
 
