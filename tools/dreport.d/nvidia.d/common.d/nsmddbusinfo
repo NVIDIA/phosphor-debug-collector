@@ -61,3 +61,12 @@ __dump() {
 file_name="nsmdbusinfo.log"
 service="xyz.openbmc_project.NSM"
 add_cmd_output "__dump $service" $file_name "nsmd dbus objects"
+
+
+desc="dump timeout logs to journal"
+command="echo -e \"\n\nTimeout logs to journal\" ; \
+            busctl call xyz.openbmc_project.NSM \
+            /xyz/openbmc_project/NSM com.nvidia.Common.LogDump \
+            logDump"
+
+add_cmd_output "$command" "$file_name" "$desc"
