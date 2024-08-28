@@ -80,8 +80,7 @@ class Manager : virtual public CreateIface,
             std::bind(
                 std::mem_fn(&phosphor::dump::system::Manager::watchCallback),
                 this, std::placeholders::_1)),
-        dumpDir(filePath),
-        retimerState(bus, RETIMER_DEBUG_MODE_OBJPATH)
+        dumpDir(filePath), retimerState(bus, RETIMER_DEBUG_MODE_OBJPATH)
     {
     }
 

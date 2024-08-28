@@ -617,16 +617,20 @@ void Manager::createEntry(const fs::path& file)
     auto dumpEntry = entries.find(id);
     if (dumpEntry != entries.end())
     {
-        dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())
-            ->update(stoull(msString), fs::file_size(file), file);
-        auto dumpType = dynamic_cast<phosphor::dump::system::Entry*>(dumpEntry->second.get())->getDumpType();
-        if (dumpType == "RetLTSSM")
+        auto entryPtr = dynamic_cast<phosphor::dump::system::Entry*>(
+            dumpEntry->second.get());
+        if (entryPtr)
         {
-            retimerState.debugMode(false);
+            entryPtr->update(stoull(msString), fs::file_size(file), file);
+            auto dumpType = entryPtr->getDumpType();
+            if (dumpType == "RetLTSSM")
+            {
+                retimerState.debugMode(false);
+            }
+            Manager::dumpInProgress.erase(dumpType);
+
+            return;
         }
-        Manager::dumpInProgress.erase(dumpType);
-        
-        return;
     }
 
     // Entry Object path.

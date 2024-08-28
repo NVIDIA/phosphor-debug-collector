@@ -187,9 +187,13 @@ void Manager::createEntry(const std::filesystem::path& file)
     // If there is an existing entry update it and return.
     auto dumpEntry = entries.find(id);
     if (dumpEntry != entries.end())
-    {          
-        dynamic_cast<phosphor::dump::bmc::Entry*>(dumpEntry->second.get())
-            ->update(timestamp, std::filesystem::file_size(file), file);
+    {
+        auto entryPtr =
+            dynamic_cast<phosphor::dump::bmc::Entry*>(dumpEntry->second.get());
+        if (entryPtr != nullptr)
+        {
+            entryPtr->update(timestamp, std::filesystem::file_size(file), file);
+        }
         return;
     }
 

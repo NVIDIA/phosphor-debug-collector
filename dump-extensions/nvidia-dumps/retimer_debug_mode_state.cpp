@@ -67,7 +67,15 @@ bool State::debugMode() const
     struct i2c_msg messages[2];
 
     int file = open(i2cBus, O_RDONLY);
-    
+
+    if (file < 0)
+    {
+        auto error = errno;
+        log<level::ERR>("System dump: Failed to open the I2C bus",
+                        entry("ERRNO=%d", error));
+        return DebugModeIface::debugMode();
+    }
+
     messages[0].addr  = saddr;
     messages[0].flags = 0x00;
     messages[0].len   = 1;
@@ -123,7 +131,14 @@ bool State::debugMode(bool value)
     struct i2c_msg messages[1];
 
     int file = open(i2cBus, O_RDONLY);
-    
+    if (file < 0)
+    {
+        auto error = errno;
+        log<level::ERR>("System dump: Failed to open the I2C bus",
+                        entry("ERRNO=%d", error));
+        return debugMode();
+    }
+
     messages[0].addr  = saddr;
     messages[0].flags = 0x00;
     messages[0].len   = 3;
