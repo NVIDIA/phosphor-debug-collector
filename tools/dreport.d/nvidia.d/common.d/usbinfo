@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#
+# config: 2 20
+# @brief: USB debug data
+#
+
+. $DREPORT_INCLUDE/functions
+
+out_file_name="usb-debug-data.log"
+desc="USB Device List"
+file_name="/sys/kernel/debug/usb/devices"
+command="echo 'Device List:'; cat $file_name; echo '';"
+
+if [ -f "$file_name" ]; then
+    add_cmd_output "$command" "$out_file_name" "$desc"
+else
+    log_info "No $desc data"
+fi
+
+uhci_files=$(find /sys/kernel/debug/usb/uhci -type f)
+
+for uhci_file in $uhci_files; do
+    desc="$uhci_file data"
+    command="echo 'File $uhci_file:'; cat $uhci_file; echo '';"
+    add_cmd_output "$command" "$out_file_name" "$desc"
+done
+
+ehci_files=$(find /sys/kernel/debug/usb/ehci -type f)
+
+for ehci_file in $ehci_files; do
+    desc="$ehci_file data"
+    command="echo 'File $ehci_file:'; cat $ehci_file; echo '';"
+    add_cmd_output "$command" "$out_file_name" "$desc"
+done
+
