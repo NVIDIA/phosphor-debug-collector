@@ -623,7 +623,7 @@ void Manager::createEntry(const fs::path& file)
     }
 
     auto idString = match[ID_POS];
-    auto msString = match[EPOCHTIME_POS];
+    uint64_t timestamp = stoull(match[EPOCHTIME_POS]) * 1000 * 1000;
 
     auto id = stoul(idString);
 
@@ -635,7 +635,7 @@ void Manager::createEntry(const fs::path& file)
             dumpEntry->second.get());
         if (entryPtr)
         {
-            entryPtr->update(stoull(msString), fs::file_size(file), file);
+            entryPtr->update(timestamp, fs::file_size(file), file);
             auto dumpType = entryPtr->getDumpType();
             if (dumpType == "RetLTSSM")
             {
@@ -658,7 +658,7 @@ void Manager::createEntry(const fs::path& file)
 
         entries.insert(
             std::make_pair(id, std::make_unique<system::Entry>(
-                                   bus, objPath.c_str(), id, stoull(msString),
+                                   bus, objPath.c_str(), id, timestamp,
                                    fs::file_size(file), file,
                                    phosphor::dump::OperationStatus::Completed,
                                    originatorId, originatorType, *this)));
@@ -669,7 +669,7 @@ void Manager::createEntry(const fs::path& file)
         log<level::ERR>("Error in creating system dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
                         entry("ID=%d", id),
-                        entry("TIMESTAMP=%ull", stoull(msString)),
+                        entry("TIMESTAMP=%ull", timestamp),
                         entry("SIZE=%d", fs::file_size(file)),
                         entry("FILENAME=%s", file.c_str()));
         return;
