@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,9 +62,7 @@ constexpr std::string_view DEFAULT_DUMP_TYPE = "BMC";
 class CreateDumpDbusException : std::exception
 {
   public:
-    CreateDumpDbusException(std::string error) : errorMsg(error)
-    {
-    }
+    CreateDumpDbusException(std::string error) : errorMsg(error) {}
 
     /**
      * @brief

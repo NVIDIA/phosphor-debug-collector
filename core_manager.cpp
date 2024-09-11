@@ -4,11 +4,9 @@
 
 #include <fmt/core.h>
 
-#include <phosphor-logging/log.hpp>
-#include <phosphor-logging/lg2.hpp>
-#include <sdbusplus/exception.hpp>
-
 #include <filesystem>
+#include <phosphor-logging/lg2.hpp>
+#include <phosphor-logging/log.hpp>
 #include <regex>
 #include <sdbusplus/exception.hpp>
 

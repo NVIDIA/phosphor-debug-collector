@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 #include "config.h"
 
 #include "dump_manager_system.hpp"
-#include "dump_utils.hpp"
 
+#include "dump_utils.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
@@ -28,13 +28,12 @@
 
 #include <array>
 #include <chrono>
+#include <iostream>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <regex>
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
-#include <chrono>
-#include <iostream>
 
 namespace phosphor
 {
@@ -54,7 +53,7 @@ void Manager::limitDumpEntries()
 #if SYSTEM_DUMP_MAX_LIMIT == 0
     // Do nothing - system dump max limit is not configured
     return;
-#else // #if SYSTEM_DUMP_MAX_LIMIT == 0
+#else  // #if SYSTEM_DUMP_MAX_LIMIT == 0
     // Delete dumps on reaching allowed entries
     auto totalDumps = entries.size();
     if (totalDumps < SYSTEM_DUMP_MAX_LIMIT)
@@ -84,9 +83,14 @@ sdbusplus::message::object_path
     // Check whether there is same dump already running
     // Also ensure RetLTSSM and RetRegister will not run at the same time
     auto dumpType = std::get<std::string>(params["DiagnosticType"]);
-    if ((Manager::dumpInProgress.find(dumpType) != Manager::dumpInProgress.end()) ||
-        (Manager::dumpInProgress.find("RetLTSSM") != Manager::dumpInProgress.end() && dumpType == "RetRegister") ||
-        (Manager::dumpInProgress.find("RetRegister") != Manager::dumpInProgress.end() && dumpType == "RetLTSSM"))
+    if ((Manager::dumpInProgress.find(dumpType) !=
+         Manager::dumpInProgress.end()) ||
+        (Manager::dumpInProgress.find("RetLTSSM") !=
+             Manager::dumpInProgress.end() &&
+         dumpType == "RetRegister") ||
+        (Manager::dumpInProgress.find("RetRegister") !=
+             Manager::dumpInProgress.end() &&
+         dumpType == "RetLTSSM"))
     {
         elog<Unavailable>();
     }
@@ -109,7 +113,8 @@ sdbusplus::message::object_path
             id, std::make_unique<system::Entry>(
                     bus, objPath.c_str(), id, timeStamp, 0, std::string(),
                     phosphor::dump::OperationStatus::InProgress, originatorId,
-                    originatorType,*this, std::get<std::string>(params["DiagnosticType"]))));
+                    originatorType, *this,
+                    std::get<std::string>(params["DiagnosticType"]))));
     }
     catch (const std::invalid_argument& e)
     {
@@ -241,7 +246,9 @@ uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
     elog<InternalFailure>();
 }
 
-uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath, const std::string& vendorId)
+uint32_t retimerLtssmDump(const std::string& dumpId,
+                          const std::string& dumpPath,
+                          const std::string& vendorId)
 {
     // Construct Ltssm dump arguments
     std::vector<char*> arg_v;
@@ -272,7 +279,10 @@ uint32_t retimerLtssmDump(const std::string& dumpId, const std::string& dumpPath
     elog<InternalFailure>();
 }
 
-uint32_t retimerRegisterDump(const std::string& dumpId, const std::string& dumpPath, const std::string& retimer_address, const std::string& vendorId)
+uint32_t retimerRegisterDump(const std::string& dumpId,
+                             const std::string& dumpPath,
+                             const std::string& retimer_address,
+                             const std::string& vendorId)
 {
     // Construct Register dump arguments
     std::vector<char*> arg_v;
@@ -329,8 +339,9 @@ uint32_t fwAttrsDump(const std::string& dumpId, const std::string& dumpPath)
 
     // firmware attributes dump execution is failed.
     auto error = errno;
-    log<level::ERR>("System dump: Error occurred during firmware attributes dump execution",
-                    entry("ERRNO=%d", error));
+    log<level::ERR>(
+        "System dump: Error occurred during firmware attributes dump execution",
+        entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
 
@@ -354,8 +365,9 @@ uint32_t hwCheckoutDump(const std::string& dumpId, const std::string& dumpPath)
 
     // hardware checkout dump execution is failed.
     auto error = errno;
-    log<level::ERR>("System dump: Error occurred during hardware checkout dump execution",
-                    entry("ERRNO=%d", error));
+    log<level::ERR>(
+        "System dump: Error occurred during hardware checkout dump execution",
+        entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
 
@@ -423,10 +435,10 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     if (!diagnosticType.empty())
     {
         if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
-            diagnosticType != typeEROT && diagnosticType != typeROT && 
-            diagnosticType != typeLTSSM && diagnosticType != typeRetimerRegister && 
-            diagnosticType != typeFwAtts &&
-            diagnosticType != typeHwCheckout)
+            diagnosticType != typeEROT && diagnosticType != typeROT &&
+            diagnosticType != typeLTSSM &&
+            diagnosticType != typeRetimerRegister &&
+            diagnosticType != typeFwAtts && diagnosticType != typeHwCheckout)
         {
             log<level::ERR>("Unrecognized DiagnosticType option",
                             entry("DIAG_TYPE=%s", diagnosticType.c_str()));
@@ -460,7 +472,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     {
         retimerState.debugMode(true);
     }
-    
+
     Manager::dumpInProgress.insert(diagnosticType);
 
     pid_t pid = fork();
@@ -497,7 +509,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                 log<level::ERR>("System dump: Unknown additional arguments");
             }
         }
-        
+
         if (diagnosticType.empty())
         {
             executeDreport(dumpType, id, dumpPath, size, addArgs);
@@ -520,8 +532,10 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         }
         else if (diagnosticType == typeRetimerRegister)
         {
-            std::string retimer_address = std::get<std::string>(params["Address"]);
-            retimerRegisterDump(id, dumpPath, retimer_address, retimerState.getVendorId());
+            std::string retimer_address =
+                std::get<std::string>(params["Address"]);
+            retimerRegisterDump(id, dumpPath, retimer_address,
+                                retimerState.getVendorId());
         }
         else if (diagnosticType == typeFwAtts)
         {
@@ -540,8 +554,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     else if (pid > 0)
     {
         auto entryId = lastEntryId + 1;
-        Child::Callback callback = [this, pid, entryId, diagnosticType](Child&,
-                                                        const siginfo_t* si) {
+        Child::Callback callback =
+            [this, pid, entryId, diagnosticType](Child&, const siginfo_t* si) {
             if (si->si_status != 0)
             {
                 std::string msg = "Dump process failed: (signo)" +
@@ -642,11 +656,12 @@ void Manager::createEntry(const fs::path& file)
         std::string originatorId;
         originatorTypes originatorType;
 
-        entries.insert(std::make_pair(
-            id,
-            std::make_unique<system::Entry>(
-                bus, objPath.c_str(), id, stoull(msString), fs::file_size(file),
-                file, phosphor::dump::OperationStatus::Completed, originatorId, originatorType, *this)));
+        entries.insert(
+            std::make_pair(id, std::make_unique<system::Entry>(
+                                   bus, objPath.c_str(), id, stoull(msString),
+                                   fs::file_size(file), file,
+                                   phosphor::dump::OperationStatus::Completed,
+                                   originatorId, originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {
@@ -720,8 +735,8 @@ void Manager::restore()
         if ((fs::is_directory(p.path())) &&
             std::all_of(idStr.begin(), idStr.end(), ::isdigit))
         {
-            lastEntryId =
-                std::max(lastEntryId, static_cast<uint32_t>(std::stoul(idStr)));
+            lastEntryId = std::max(lastEntryId,
+                                   static_cast<uint32_t>(std::stoul(idStr)));
             auto fileIt = fs::directory_iterator(p.path());
             // Create dump entry d-bus object.
             if (fileIt != fs::end(fileIt))

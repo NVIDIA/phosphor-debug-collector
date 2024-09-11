@@ -7,16 +7,16 @@
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
+#include <fmt/format.h>
 #include <sys/inotify.h>
 #include <unistd.h>
-#include <fmt/format.h>
+
+#include <cmath>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/lg2.hpp>
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
-
-#include <cmath>
 
 namespace phosphor
 {
@@ -110,10 +110,9 @@ uint32_t Manager::captureDump(DumpTypes type, const std::string& path)
     // Get Dump size.
     auto size = getAllowedSize();
 
-    log<level::INFO>(
-        fmt::format("Capturing BMC dump of type ({})",
-            dumpTypeToString(type).value())
-                .c_str());
+    log<level::INFO>(fmt::format("Capturing BMC dump of type ({})",
+                                 dumpTypeToString(type).value())
+                         .c_str());
 
     pid_t pid = fork();
 
@@ -126,7 +125,8 @@ uint32_t Manager::captureDump(DumpTypes type, const std::string& path)
         auto strType = dumpTypeToString(type).value();
         execl("/usr/bin/dreport", "dreport", "-d", dumpPath.c_str(), "-i",
               id.c_str(), "-s", std::to_string(size).c_str(), "-q", "-v", "-p",
-              path.empty() ? "" : path.c_str(), "-t", strType.c_str(), "-c", CompressionType,  nullptr);
+              path.empty() ? "" : path.c_str(), "-t", strType.c_str(), "-c",
+              CompressionType, nullptr);
 
         // dreport script execution is failed.
         auto error = errno;

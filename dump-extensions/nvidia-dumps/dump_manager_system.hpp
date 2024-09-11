@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@
 #include "dump_manager.hpp"
 #include "dump_utils.hpp"
 #include "nvidia_dumps_config.hpp"
-#include "system_dump_entry.hpp"
 #include "retimer_debug_mode_state.hpp"
+#include "system_dump_entry.hpp"
 #include "watch.hpp"
 #include "xyz/openbmc_project/Dump/NewDump/server.hpp"
 
@@ -51,8 +51,9 @@ using ::sdeventplus::source::Child;
  *  @details A concrete implementation for the
  *  xyz.openbmc_project.Dump.Create DBus API
  */
-class Manager : virtual public CreateIface,
-                virtual public phosphor::dump::Manager
+class Manager :
+    virtual public CreateIface,
+    virtual public phosphor::dump::Manager
 {
   public:
     Manager() = delete;
@@ -81,8 +82,7 @@ class Manager : virtual public CreateIface,
                 std::mem_fn(&phosphor::dump::system::Manager::watchCallback),
                 this, std::placeholders::_1)),
         dumpDir(filePath), retimerState(bus, RETIMER_DEBUG_MODE_OBJPATH)
-    {
-    }
+    {}
 
     /** @brief Implementation of dump watch call back
      *  @param [in] fileInfo - map of file info  path:event

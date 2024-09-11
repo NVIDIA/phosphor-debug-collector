@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@
 #include "dump_utils.hpp"
 #include "faultlog_dump_entry.hpp"
 #include "watch.hpp"
-#include "xyz/openbmc_project/Dump/NewDump/server.hpp"
 #include "xyz/openbmc_project/Dump/Entry/CPERDecode/server.hpp"
+#include "xyz/openbmc_project/Dump/NewDump/server.hpp"
 
 #include <experimental/filesystem>
 #include <sdbusplus/bus.hpp>
@@ -55,8 +55,9 @@ using FaultLogEntryInfo =
  *  @details A concrete implementation for the
  *  xyz.openbmc_project.Dump.Create DBus API
  */
-class Manager : virtual public CreateIface,
-                virtual public phosphor::dump::Manager
+class Manager :
+    virtual public CreateIface,
+    virtual public phosphor::dump::Manager
 {
   public:
     Manager() = delete;
@@ -85,8 +86,7 @@ class Manager : virtual public CreateIface,
                 std::mem_fn(&phosphor::dump::faultLog::Manager::watchCallback),
                 this, std::placeholders::_1)),
         dumpDir(filePath), lastCperId(0)
-    {
-    }
+    {}
 
     /** @brief Implementation of dump watch call back
      *  @param [in] fileInfo - map of file info  path:event

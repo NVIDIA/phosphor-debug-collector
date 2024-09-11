@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "../config.h"
 #include "create_dump_dbus.hpp"
+
+#include "../config.h"
 
 #define FMT_HEADER_ONLY
 
@@ -35,7 +36,6 @@
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/exception.hpp>
 #include <vector>
-
 
 namespace phosphor
 {
@@ -100,9 +100,9 @@ void CreateDumpDbus::waitForDumpCreation(const std::string& entryPath)
         try
         {
             auto b = bus::new_default();
-            auto m =
-                b.new_method_call(MAPPER_BUSNAME, entryPath.c_str(),
-                                  "org.freedesktop.DBus.Properties", "Get");
+            auto m = b.new_method_call(MAPPER_BUSNAME, entryPath.c_str(),
+                                       "org.freedesktop.DBus.Properties",
+                                       "Get");
             m.append(MAPPER_INTERFACE, PROPERTY_NAME);
             auto reply = b.call(m);
 
@@ -309,8 +309,8 @@ void CreateDumpDbus::processDumpRequest(int fd, const std::string& type)
                         }
                         catch (const std::exception&)
                         {
-                            std::string err =
-                                "Failed to delete dump file: " + filename;
+                            std::string err = "Failed to delete dump file: " +
+                                              filename;
                             sendMsg(fd, err);
                             log<level::ERR>(err.c_str());
                         }
@@ -343,11 +343,11 @@ void CreateDumpDbus::launchServer()
 
     std::unique_ptr<sd_event, std::function<void(sd_event*)>> eventPtr(
         event, [](sd_event* event) {
-            if (!event)
-            {
-                event = sd_event_unref(event);
-            }
-        });
+        if (!event)
+        {
+            event = sd_event_unref(event);
+        }
+    });
 
     int r = -1;
     sigset_t ss;
@@ -424,73 +424,72 @@ void CreateDumpDbus::launchServer()
     r = sd_event_add_io(
         eventPtr.get(), nullptr, fd, EPOLLIN,
         [](sd_event_source*, int fd, uint32_t, void*) -> int {
-            fd = accept(fd, NULL, NULL);
+        fd = accept(fd, NULL, NULL);
 
-            if (fd < 0)
-            {
-                return 0;
-            }
+        if (fd < 0)
+        {
+            return 0;
+        }
 
-            std::vector<unsigned char> buffer(BUFFER_SIZE);
-            int ret = read(fd, &buffer[0], BUFFER_SIZE);
-            if (ret < 0)
-            {
-                log<level::ERR>(fmt::format("read error: {}", ret).c_str());
-                close(fd);
-
-                return 0;
-            }
-
-            std::string command(buffer.begin(), buffer.end());
-            std::istringstream iss(command);
-            std::vector<std::string> tokens{
-                std::istream_iterator<std::string>{iss},
-                std::istream_iterator<std::string>{}};
-            if (tokens.size() != 0 && tokens[0] == std::string(CREATE_DUMP_CMD))
-            {
-                std::string type;
-                if (tokens.size() > 1)
-                {
-                    tokens[1].erase(std::remove_if(tokens[1].begin(),
-                                                   tokens[1].end(),
-                                                   [](auto const& c) -> bool {
-                                                       return !std::isalnum(c);
-                                                   }),
-                                    tokens[1].end());
-                    for (const auto& d : SUPPORTED_DUMP_TYPES)
-                    {
-                        if (d == tokens[1])
-                        {
-                            type = d;
-                            break;
-                        }
-                    }
-                    if (type.empty())
-                    {
-                        sendMsg(fd, "Invalid dump type requested");
-                        log<level::ERR>(
-                            fmt::format("Invalid dump type requested: {}",
-                                        tokens[1])
-                                .c_str());
-                    }
-                }
-                else
-                {
-                    type = DEFAULT_DUMP_TYPE;
-                }
-                if (!type.empty())
-                {
-                    log<level::INFO>(
-                        fmt::format("Processing dump request, type: {}", type)
-                            .c_str());
-                    CreateDumpDbus::processDumpRequest(fd, type);
-                }
-            }
-            sendMsg(fd, std::string(END_CMD));
+        std::vector<unsigned char> buffer(BUFFER_SIZE);
+        int ret = read(fd, &buffer[0], BUFFER_SIZE);
+        if (ret < 0)
+        {
+            log<level::ERR>(fmt::format("read error: {}", ret).c_str());
             close(fd);
 
             return 0;
-        },
+        }
+
+        std::string command(buffer.begin(), buffer.end());
+        std::istringstream iss(command);
+        std::vector<std::string> tokens{std::istream_iterator<std::string>{iss},
+                                        std::istream_iterator<std::string>{}};
+        if (tokens.size() != 0 && tokens[0] == std::string(CREATE_DUMP_CMD))
+        {
+            std::string type;
+            if (tokens.size() > 1)
+            {
+                tokens[1].erase(std::remove_if(tokens[1].begin(),
+                                               tokens[1].end(),
+                                               [](auto const& c) -> bool {
+                    return !std::isalnum(c);
+                }),
+                                tokens[1].end());
+                for (const auto& d : SUPPORTED_DUMP_TYPES)
+                {
+                    if (d == tokens[1])
+                    {
+                        type = d;
+                        break;
+                    }
+                }
+                if (type.empty())
+                {
+                    sendMsg(fd, "Invalid dump type requested");
+                    log<level::ERR>(
+                        fmt::format("Invalid dump type requested: {}",
+                                    tokens[1])
+                            .c_str());
+                }
+            }
+            else
+            {
+                type = DEFAULT_DUMP_TYPE;
+            }
+            if (!type.empty())
+            {
+                log<level::INFO>(
+                    fmt::format("Processing dump request, type: {}", type)
+                        .c_str());
+                CreateDumpDbus::processDumpRequest(fd, type);
+            }
+        }
+        sendMsg(fd, std::string(END_CMD));
+        close(fd);
+
+        return 0;
+    },
         nullptr);
 
     if (r < 0)

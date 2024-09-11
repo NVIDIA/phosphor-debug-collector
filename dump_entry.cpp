@@ -4,6 +4,7 @@
 
 #include <fcntl.h>
 
+#include <cstring>
 #include <nlohmann/json.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
@@ -12,8 +13,6 @@
 #include <sdeventplus/source/event.hpp>
 #include <xyz/openbmc_project/Common/File/error.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
-
-#include <cstring>
 
 namespace phosphor
 {

@@ -7,8 +7,6 @@
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
 
-#include <chrono>
-
 namespace openpower
 {
 namespace dump

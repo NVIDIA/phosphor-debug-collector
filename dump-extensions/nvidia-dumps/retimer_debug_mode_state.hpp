@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,14 @@
  */
 #pragma once
 
-#include <sdbusplus/bus.hpp>
 #include "xyz/openbmc_project/Dump/DebugMode/server.hpp"
 #include "xyz/openbmc_project/State/ServiceReady/server.hpp"
 
+#include <sdbusplus/bus.hpp>
+
 constexpr auto SWITCH_INTERFACE = "xyz.openbmc_project.Inventory.Item.Switch";
-constexpr auto RETIMER_SWITCHES_BASE_PATH = "/xyz/openbmc_project/inventory/system/fabrics";
+constexpr auto RETIMER_SWITCHES_BASE_PATH =
+    "/xyz/openbmc_project/inventory/system/fabrics";
 
 namespace phosphor
 {
@@ -30,16 +32,17 @@ namespace dump
 namespace retimer
 {
 
-using DebugModeIface =
-    sdbusplus::server::object_t<sdbusplus::xyz::openbmc_project::Dump::server::DebugMode>;
-using ServiceReadyIface =
-    sdbusplus::server::object_t<sdbusplus::xyz::openbmc_project::State::server::ServiceReady>;
+using DebugModeIface = sdbusplus::server::object_t<
+    sdbusplus::xyz::openbmc_project::Dump::server::DebugMode>;
+using ServiceReadyIface = sdbusplus::server::object_t<
+    sdbusplus::xyz::openbmc_project::State::server::ServiceReady>;
 
 /** @class State
  *  @brief Object for implying the state of retimer.
- *  @details DebugMode interface indicates the state of debug mode being true or false.
- *  ServiceReady interface indicates the service state which will be read by CSM.
- *  Switch interface maintains Vendor ID information for retimer, the property will be set by nvidia-retimer-app.
+ *  @details DebugMode interface indicates the state of debug mode being true or
+ * false. ServiceReady interface indicates the service state which will be read
+ * by CSM. Switch interface maintains Vendor ID information for retimer, the
+ * property will be set by nvidia-retimer-app.
  */
 class State : virtual public DebugModeIface, virtual public ServiceReadyIface
 {
@@ -56,34 +59,37 @@ class State : virtual public DebugModeIface, virtual public ServiceReadyIface
      *  @param[in] path - Path to attach at.
      */
     State(sdbusplus::bus::bus& bus, const char* path) :
-        DebugModeIface(bus, path),
-        ServiceReadyIface(bus, path)
+        DebugModeIface(bus, path), ServiceReadyIface(bus, path)
     {
-      DebugModeIface::debugMode(false);
-      ServiceReadyIface::state(States::Disabled);
+        DebugModeIface::debugMode(false);
+        ServiceReadyIface::state(States::Disabled);
 
-      // fetch retimer vendor id from gpuMgr or NSM during start up
-      std::string vendorId;
-      try
-      {
-        std::string objectPath = getDBusObject(bus, RETIMER_SWITCHES_BASE_PATH);
-        std::string service = getService(bus, objectPath.c_str(), SWITCH_INTERFACE);
-        auto method = bus.new_method_call(service.c_str(), objectPath.c_str(), "org.freedesktop.DBus.Properties", "Get");
-        method.append(SWITCH_INTERFACE, "VendorId");
-        auto reply = bus.call(method);
-        std::variant<std::string> propertyValue;
-        reply.read(propertyValue);
-        vendorId = std::get<std::string>(propertyValue);
-      }
-      catch (const std::exception& e)
-      {
-        // ignore the error when the resource service is also starting
-      }
-      if (!vendorId.empty())
-      {
-        retimerVendorId = vendorId;
-      }
-      listenRetimerVendorIdEvents(bus);
+        // fetch retimer vendor id from gpuMgr or NSM during start up
+        std::string vendorId;
+        try
+        {
+            std::string objectPath = getDBusObject(bus,
+                                                   RETIMER_SWITCHES_BASE_PATH);
+            std::string service = getService(bus, objectPath.c_str(),
+                                             SWITCH_INTERFACE);
+            auto method =
+                bus.new_method_call(service.c_str(), objectPath.c_str(),
+                                    "org.freedesktop.DBus.Properties", "Get");
+            method.append(SWITCH_INTERFACE, "VendorId");
+            auto reply = bus.call(method);
+            std::variant<std::string> propertyValue;
+            reply.read(propertyValue);
+            vendorId = std::get<std::string>(propertyValue);
+        }
+        catch (const std::exception& e)
+        {
+            // ignore the error when the resource service is also starting
+        }
+        if (!vendorId.empty())
+        {
+            retimerVendorId = vendorId;
+        }
+        listenRetimerVendorIdEvents(bus);
     }
 
     bool debugMode() const override;
@@ -103,18 +109,21 @@ class State : virtual public DebugModeIface, virtual public ServiceReadyIface
 
     /** @brief Get the resource dbus object that populates retimer vendor id.
      *  @param[in] bus - Bus to attach to.
-     *  @param[in] rootPath - Prefix of the resource dbus object path that has the retimer info.
+     *  @param[in] rootPath - Prefix of the resource dbus object path that has
+     * the retimer info.
      *  @return service name - The target resouce service name.
      */
-    std::string getDBusObject(sdbusplus::bus::bus& bus, const std::string& rootPath);
-    
+    std::string getDBusObject(sdbusplus::bus::bus& bus,
+                              const std::string& rootPath);
+
     /** @brief Get the resource service that populates retimer vendor id.
      *  @param[in] bus - Bus to attach to.
      *  @param[in] path - Dbus object path that has the retimer info.
      *  @param[in] interface - interface that has the retimer info.
      *  @return service name - The target resouce service name.
      */
-    std::string getService(sdbusplus::bus::bus& bus, const char* path, const char* interface) const;
+    std::string getService(sdbusplus::bus::bus& bus, const char* path,
+                           const char* interface) const;
 
     /** @brief Starts listener for retimer property changing events.
      *  @param[in] bus - Bus to attach to.

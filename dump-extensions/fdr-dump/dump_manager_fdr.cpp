@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 #include "config.h"
 
 #include "dump_manager_fdr.hpp"
-#include "dump_utils.hpp"
 
+#include "dump_utils.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
@@ -97,8 +97,8 @@ sdbusplus::message::object_path
         entries.insert(std::make_pair(
             id, std::make_unique<FDR::Entry>(
                     bus, objPath.c_str(), id, timeStamp, 0, std::string(),
-                    phosphor::dump::OperationStatus::InProgress,
-                    originatorId, originatorType, *this)));
+                    phosphor::dump::OperationStatus::InProgress, originatorId,
+                    originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {
@@ -119,45 +119,48 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
     std::string fPath = FDR_DUMP_BIN_PATH;
     std::string time_start, time_end, max_dump_size, extended_source;
 
-
     arg_v.push_back(&fPath[0]);
 
     arg_v.push_back(const_cast<char*>("-p"));
     auto dump_path = std::get<std::string>(params["DumpPath"]);
     arg_v.push_back(const_cast<char*>(dump_path.c_str()));
-    
+
     arg_v.push_back(const_cast<char*>("-i"));
     auto dump_id = std::get<std::string>(params["DumpID"]);
     arg_v.push_back(const_cast<char*>(dump_id.c_str()));
-    
+
     arg_v.push_back(const_cast<char*>("-a"));
     if (auto search = params.find("Action"); search == params.end())
         params["Action"] = "Collect";
     auto dump_action = std::get<std::string>(params["Action"]);
-    std::transform(dump_action.begin(), dump_action.end(), dump_action.begin(), ::tolower);
+    std::transform(dump_action.begin(), dump_action.end(), dump_action.begin(),
+                   ::tolower);
     arg_v.push_back(const_cast<char*>(dump_action.c_str()));
 
     if (auto search = params.find("TimeRangeStart"); search != params.end())
     {
-        if (std::holds_alternative<std::string>(search->second)){
+        if (std::holds_alternative<std::string>(search->second))
+        {
             arg_v.push_back(const_cast<char*>("-s"));
             time_start = std::get<std::string>(params["TimeRangeStart"]);
             arg_v.push_back(const_cast<char*>(time_start.c_str()));
         }
     }
-    
+
     if (auto search = params.find("TimeRangeEnd"); search != params.end())
     {
-        if (std::holds_alternative<std::string>(search->second)){
+        if (std::holds_alternative<std::string>(search->second))
+        {
             arg_v.push_back(const_cast<char*>("-e"));
             time_end = std::get<std::string>(params["TimeRangeEnd"]);
             arg_v.push_back(const_cast<char*>(time_end.c_str()));
         }
     }
-    
+
     if (auto search = params.find("MaxDumpSize"); search != params.end())
     {
-        if (std::holds_alternative<std::string>(search->second)){
+        if (std::holds_alternative<std::string>(search->second))
+        {
             arg_v.push_back(const_cast<char*>("-m"));
             max_dump_size = std::get<std::string>(params["MaxDumpSize"]);
             arg_v.push_back(const_cast<char*>(max_dump_size.c_str()));
@@ -166,7 +169,8 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
 
     if (auto search = params.find("ExtendedSource"); search != params.end())
     {
-        if (std::holds_alternative<std::string>(search->second)){
+        if (std::holds_alternative<std::string>(search->second))
+        {
             arg_v.push_back(const_cast<char*>("-S"));
             extended_source = std::get<std::string>(params["ExtendedSource"]);
             arg_v.push_back(const_cast<char*>(extended_source.c_str()));
@@ -174,7 +178,7 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
     }
 
     arg_v.push_back(nullptr);
-    
+
     execv(arg_v[0], &arg_v[0]);
 
     // FDR Dump execution is failed.
@@ -184,7 +188,6 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
         entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
-
 
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
@@ -264,8 +267,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     }
 
     log<level::INFO>(
-        fmt::format("Capturing FDR dump of type ({})", diagnosticType)
-            .c_str());
+        fmt::format("Capturing FDR dump of type ({})", diagnosticType).c_str());
 
     pid_t pid = fork();
 
@@ -376,12 +378,12 @@ void Manager::createEntry(const fs::path& file)
         // Get the originator id and type from params
         std::string originatorId;
         originatorTypes originatorType;
-        entries.insert(std::make_pair(
-            id,
-            std::make_unique<FDR::Entry>(
-                bus, objPath.c_str(), id, stoull(msString), fs::file_size(file),
-                file, phosphor::dump::OperationStatus::Completed,
-                originatorId, originatorType, *this)));
+        entries.insert(
+            std::make_pair(id, std::make_unique<FDR::Entry>(
+                                   bus, objPath.c_str(), id, stoull(msString),
+                                   fs::file_size(file), file,
+                                   phosphor::dump::OperationStatus::Completed,
+                                   originatorId, originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {
@@ -455,8 +457,8 @@ void Manager::restore()
         if ((fs::is_directory(p.path())) &&
             std::all_of(idStr.begin(), idStr.end(), ::isdigit))
         {
-            lastEntryId =
-                std::max(lastEntryId, static_cast<uint32_t>(std::stoul(idStr)));
+            lastEntryId = std::max(lastEntryId,
+                                   static_cast<uint32_t>(std::stoul(idStr)));
             auto fileIt = fs::directory_iterator(p.path());
             // Create dump entry d-bus object.
             if (fileIt != fs::end(fileIt))

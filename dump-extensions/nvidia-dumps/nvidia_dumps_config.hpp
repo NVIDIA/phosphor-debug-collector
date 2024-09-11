@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ constexpr auto FPGA_DUMP_BIN_PATH = "/usr/bin/fpga_dump.sh";
 constexpr auto CPER_DUMP_BIN_PATH = "/usr/bin/cper_dump.sh";
 constexpr auto EROT_DUMP_BIN_PATH = "/usr/bin/erot_dump.sh";
 constexpr auto RETIMER_LTSSM_DUMP_BIN_PATH = "/usr/bin/retimerLtssmDump.sh";
-constexpr auto RETIMER_REGISTER_DUMP_BIN_PATH = "/usr/bin/retimerRegisterDump.sh";
+constexpr auto RETIMER_REGISTER_DUMP_BIN_PATH =
+    "/usr/bin/retimerRegisterDump.sh";
 constexpr auto FWATTRS_DUMP_BIN_PATH = "/usr/bin/fw_atts_dump.sh";
 constexpr auto HWCHECKOUT_DUMP_BIN_PATH = "/usr/bin/hw_checkout_dump.sh";

@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 #include "config.h"
 
 #include "dump_manager_faultlog.hpp"
-#include "dump_utils.hpp"
 
+#include "dump_utils.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
@@ -26,15 +26,14 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <fstream>
+#include <nlohmann/json.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <regex>
+#include <string>
 
 #include "dump-extensions/faultlog-dump/faultlog_dump_config.h"
-
-#include <fstream>
-#include <string>
-#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
@@ -106,14 +105,16 @@ void Manager::limitTotalDumpSize()
 #endif
 }
 
-sdbusplus::message::object_path Manager::createDump(phosphor::dump::DumpCreateParams params)
+sdbusplus::message::object_path
+    Manager::createDump(phosphor::dump::DumpCreateParams params)
 {
     // Limit dumps to max allowed entries
     limitDumpEntries();
     // Limit dumps to max allowed size
     limitTotalDumpSize();
 
-    const auto& [id, type, additionalTypeName, primayLogId] = captureDump(params);
+    const auto& [id, type, additionalTypeName,
+                 primayLogId] = captureDump(params);
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
@@ -144,27 +145,27 @@ sdbusplus::message::object_path Manager::createDump(phosphor::dump::DumpCreatePa
                                                     originatorType);
         std::time_t timeStamp = std::time(nullptr);
         entries.insert(std::make_pair(
-            id,
-            std::make_unique<faultLog::Entry>(
-                bus, objPath.c_str(), id, timeStamp, type, additionalTypeName,
-                primayLogId, 0, std::string(),
-                phosphor::dump::OperationStatus::InProgress, notifType, sectionType, fruID,
-                severity, nvipSignature, nvSeverity, nvSocketNumber, pcieVendorID,
-                pcieDeviceID, pcieClassCode, pcieFunctionNumber, pcieDeviceNumber,
-                pcieSegmentNumber, pcieDeviceBusNumber, pcieSecondaryBusNumber,
-                pcieSlotNumber, originatorId, originatorType, *this)));
+            id, std::make_unique<faultLog::Entry>(
+                    bus, objPath.c_str(), id, timeStamp, type,
+                    additionalTypeName, primayLogId, 0, std::string(),
+                    phosphor::dump::OperationStatus::InProgress, notifType,
+                    sectionType, fruID, severity, nvipSignature, nvSeverity,
+                    nvSocketNumber, pcieVendorID, pcieDeviceID, pcieClassCode,
+                    pcieFunctionNumber, pcieDeviceNumber, pcieSegmentNumber,
+                    pcieDeviceBusNumber, pcieSecondaryBusNumber, pcieSlotNumber,
+                    originatorId, originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {
         log<level::ERR>(e.what());
-        log<level::ERR>(
-            "Error in creating system dump entry", entry("OBJECTPATH=%s", objPath.c_str()), entry("ID=%d", id));
+        log<level::ERR>("Error in creating system dump entry",
+                        entry("OBJECTPATH=%s", objPath.c_str()),
+                        entry("ID=%d", id));
         elog<InternalFailure>();
     }
 
     return objPath.string();
 }
-
 
 uint32_t cperDump(const std::string& dumpId, const std::string& dumpPath,
                   const std::string& cperPath)
@@ -193,8 +194,7 @@ uint32_t cperDump(const std::string& dumpId, const std::string& dumpPath,
     elog<InternalFailure>();
 }
 
-FaultLogEntryInfo
-    Manager::captureDump(phosphor::dump::DumpCreateParams params)
+FaultLogEntryInfo Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     FaultDataType type{};
     std::string additionalTypeName{};
@@ -254,8 +254,6 @@ FaultLogEntryInfo
                            primaryLogId);
 }
 
-
-
 void Manager::createEntry(const fs::path& file)
 {
     // Dump File Name format obmcdump_ID_EPOCHTIME.EXT
@@ -265,7 +263,7 @@ void Manager::createEntry(const fs::path& file)
 
     std::smatch match;
     std::string name = file.filename();
- 
+
     if (!((std::regex_search(name, match, file_regex)) && (match.size() > 0)))
     {
         log<level::ERR>("System dump: Invalid Dump file name",
@@ -299,16 +297,18 @@ void Manager::createEntry(const fs::path& file)
     auto dumpEntry = entries.find(id);
     if (dumpEntry != entries.end())
     {
-          dynamic_cast<phosphor::dump::faultLog::Entry*>(dumpEntry->second.get())
-            ->update(stoull(msString), fs::file_size(file), file, std::to_string(id));
-        
+        dynamic_cast<phosphor::dump::faultLog::Entry*>(dumpEntry->second.get())
+            ->update(stoull(msString), fs::file_size(file), file,
+                     std::to_string(id));
+
         return;
     }
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
 
-    std::string cperDecodePath = "/var/lib/logging/dumps/faultlog/" + std::to_string(id) + "/Decoded/decoded.json";
+    std::string cperDecodePath = "/var/lib/logging/dumps/faultlog/" +
+                                 std::to_string(id) + "/Decoded/decoded.json";
     std::ifstream cperFile(cperDecodePath.c_str());
 
     if (cperFile.is_open())
@@ -326,7 +326,8 @@ void Manager::createEntry(const fs::path& file)
                 if (hdr.contains("SectionCount"))
                 {
                     // int secCount = hdr["SectionCount"];  // unused
-                    if (jsonData.contains("Sections") && jsonData["Sections"].is_array() &&
+                    if (jsonData.contains("Sections") &&
+                        jsonData["Sections"].is_array() &&
                         jsonData["Sections"].size() > 0)
                     {
                         // TODO: Log multiple-sections
@@ -359,11 +360,13 @@ void Manager::createEntry(const fs::path& file)
                                     nvSeverity = sectionToLog["Severity"];
 
                                 if (sectionToLog.contains("SocketNumber"))
-                                    nvSocketNumber = sectionToLog["SocketNumber"].dump();
+                                    nvSocketNumber =
+                                        sectionToLog["SocketNumber"].dump();
 
                                 if (sectionToLog.contains("DeviceID"))
                                 {
-                                    const json& devID = sectionToLog["DeviceID"];
+                                    const json& devID =
+                                        sectionToLog["DeviceID"];
 
                                     if (devID.contains("VendorID"))
                                         pcieVendorID = devID["VendorID"];
@@ -375,22 +378,28 @@ void Manager::createEntry(const fs::path& file)
                                         pcieClassCode = devID["ClassCode"];
 
                                     if (devID.contains("FunctionNumber"))
-                                        pcieFunctionNumber = devID["FunctionNumber"];
+                                        pcieFunctionNumber =
+                                            devID["FunctionNumber"];
 
                                     if (devID.contains("DeviceNumber"))
-                                        pcieDeviceNumber = devID["DeviceNumber"];
+                                        pcieDeviceNumber =
+                                            devID["DeviceNumber"];
 
                                     if (devID.contains("SegmentNumber"))
-                                        pcieSegmentNumber = devID["SegmentNumber"];
+                                        pcieSegmentNumber =
+                                            devID["SegmentNumber"];
 
                                     if (devID.contains("DeviceBusNumber"))
-                                        pcieDeviceBusNumber = devID["DeviceBusNumber"];
+                                        pcieDeviceBusNumber =
+                                            devID["DeviceBusNumber"];
 
                                     if (devID.contains("SecondaryBusNumber"))
-                                        pcieSecondaryBusNumber = devID["SecondaryBusNumber"];
+                                        pcieSecondaryBusNumber =
+                                            devID["SecondaryBusNumber"];
 
                                     if (devID.contains("SlotNumber"))
-                                        pcieSlotNumber = devID["SlotNumber"].dump();
+                                        pcieSlotNumber =
+                                            devID["SlotNumber"].dump();
                                 }
                             }
                         }
@@ -414,14 +423,15 @@ void Manager::createEntry(const fs::path& file)
             id, std::make_unique<faultLog::Entry>(
                     bus, objPath.c_str(), id, stoull(msString),
                     FaultDataType::CPER, "CPER", "0", fs::file_size(file), file,
-                    phosphor::dump::OperationStatus::Completed,
-                    notifType, sectionType, fruid, severity, nvipSignature, nvSeverity,
+                    phosphor::dump::OperationStatus::Completed, notifType,
+                    sectionType, fruid, severity, nvipSignature, nvSeverity,
                     nvSocketNumber, pcieVendorID, pcieDeviceID, pcieClassCode,
                     pcieFunctionNumber, pcieDeviceNumber, pcieSegmentNumber,
-                    pcieDeviceBusNumber, pcieSecondaryBusNumber, pcieSlotNumber,originatorId, originatorType, *this)));
+                    pcieDeviceBusNumber, pcieSecondaryBusNumber, pcieSlotNumber,
+                    originatorId, originatorType, *this)));
     }
 
-    catch (const std::invalid_argument &e)
+    catch (const std::invalid_argument& e)
     {
         log<level::ERR>(e.what());
         log<level::ERR>("Error in creating FaultLog dump entry",
@@ -485,8 +495,8 @@ void Manager::restore()
         if ((fs::is_directory(p.path())) &&
             std::all_of(idStr.begin(), idStr.end(), ::isdigit))
         {
-            lastEntryId =
-                std::max(lastEntryId, static_cast<uint32_t>(std::stoul(idStr)));
+            lastEntryId = std::max(lastEntryId,
+                                   static_cast<uint32_t>(std::stoul(idStr)));
             auto fileIt = fs::directory_iterator(p.path());
             // Create dump entry d-bus object.
             if (fileIt != fs::end(fileIt))
@@ -516,8 +526,8 @@ size_t Manager::getAllowedSize()
     // Set the Dump size to Maximum  if the free space is greater than
     // Dump max size otherwise return the available size.
 
-    size =
-        (size > FAULTLOG_DUMP_TOTAL_SIZE ? 0 : FAULTLOG_DUMP_TOTAL_SIZE - size);
+    size = (size > FAULTLOG_DUMP_TOTAL_SIZE ? 0
+                                            : FAULTLOG_DUMP_TOTAL_SIZE - size);
 
     if (size > FAULTLOG_DUMP_MAX_SIZE)
     {

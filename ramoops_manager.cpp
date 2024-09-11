@@ -4,15 +4,14 @@
 
 #include "dump_manager.hpp"
 
+#include <filesystem>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/exception.hpp>
+#include <set>
 #include <xyz/openbmc_project/Dump/Create/common.hpp>
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
-
-#include <filesystem>
-#include <set>
 
 namespace phosphor
 {

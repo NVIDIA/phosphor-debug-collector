@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,13 @@
 #include "config.h"
 
 #include "dump-extensions.hpp"
-#include "nvidia_dumps_config.hpp"
+
 #include "dump_manager_system.hpp"
+#include "nvidia_dumps_config.hpp"
+#include "xyz/openbmc_project/Common/error.hpp"
 
 #include <phosphor-logging/elog-errors.hpp>
 #include <sdbusplus/bus.hpp>
-#include "xyz/openbmc_project/Common/error.hpp"
 
 namespace phosphor
 {
@@ -39,8 +40,9 @@ void loadExtensions(sdbusplus::bus::bus& bus, DumpManagerList& dumpList)
     auto rc = sd_event_default(&event);
     if (rc < 0)
     {
-        log<level::ERR>("System dump: Error occurred during the sd_event_default",
-                        entry("RC=%d", rc));
+        log<level::ERR>(
+            "System dump: Error occurred during the sd_event_default",
+            entry("RC=%d", rc));
         report<InternalFailure>();
         return;
     }
@@ -50,7 +52,8 @@ void loadExtensions(sdbusplus::bus::bus& bus, DumpManagerList& dumpList)
     std::filesystem::create_directories(SYSTEM_DUMP_PATH);
 
     dumpList.push_back(std::make_unique<phosphor::dump::system::Manager>(
-        bus, eventP, SYSTEM_DUMP_OBJPATH, SYSTEM_DUMP_OBJ_ENTRY, SYSTEM_DUMP_PATH));
+        bus, eventP, SYSTEM_DUMP_OBJPATH, SYSTEM_DUMP_OBJ_ENTRY,
+        SYSTEM_DUMP_PATH));
 }
 } // namespace dump
 } // namespace phosphor

@@ -1,18 +1,18 @@
 #pragma once
 
-#include "dump_entry.hpp"
 #include "bmc_dump_entry.hpp"
+#include "dump_entry.hpp"
 #include "xyz/openbmc_project/Dump/Entry/BMC/server.hpp"
 #include "xyz/openbmc_project/Dump/Entry/server.hpp"
 #include "xyz/openbmc_project/Object/Delete/server.hpp"
 #include "xyz/openbmc_project/Time/EpochTime/server.hpp"
-#include <sdbusplus/timer.hpp>
 
-#include <phosphor-logging/log.hpp>
 #include <chrono>
 #include <filesystem>
+#include <phosphor-logging/log.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
+#include <sdbusplus/timer.hpp>
 
 namespace phosphor
 {
@@ -85,10 +85,12 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         {
             progressTimer = std::make_unique<sdbusplus::Timer>([this]() {
                 uint64_t now = std::time(nullptr);
-                uint64_t limit = phosphor::dump::Entry::startTime() + bmcDumpMaxTimeLimitInSec;
+                uint64_t limit = phosphor::dump::Entry::startTime() +
+                                 bmcDumpMaxTimeLimitInSec;
                 float timeProgress = now <= limit
                                          ? (((float)(limit - now) /
-                                             (float)bmcDumpMaxTimeLimitInSec) * 100.0)
+                                             (float)bmcDumpMaxTimeLimitInSec) *
+                                            100.0)
                                          : 100.0;
                 progress(100 - timeProgress);
 
@@ -143,7 +145,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
      *  @param[in] file - Name of dump file.
      */
     void update(uint64_t timeStamp, uint64_t fileSize, const fs::path& filePath)
-    {        
+    {
         elapsed(timeStamp);
         size(fileSize);
         // TODO: Handled dump failed case with #ibm-openbmc/2808
@@ -153,7 +155,8 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         // #ibm-openbmc/2597
         completedTime(timeStamp);
         progress(100);
-        if (progressTimer != nullptr) {
+        if (progressTimer != nullptr)
+        {
             progressTimer->stop();
         }
         serialize();
@@ -222,13 +225,13 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         this->phosphor::dump::bmc::EntryIfaces::emit_object_added();
     }
 
-    /** @brief To get the dump file name path 
-     *  @return path - file path 
+    /** @brief To get the dump file name path
+     *  @return path - file path
      */
 
     fs::path getFileName()
     {
-      return file;
+        return file;
     }
 
     void clearProcessGroupId(void)
@@ -237,7 +240,6 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     }
 
   private:
-
     /**
      * @brief timer to update progress percent
      *

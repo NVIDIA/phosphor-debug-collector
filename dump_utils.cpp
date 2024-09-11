@@ -4,11 +4,10 @@
 
 #include "dump_types.hpp"
 
-#include <phosphor-logging/lg2.hpp>
-
 #include <ctime>
 #include <filesystem>
 #include <optional>
+#include <phosphor-logging/lg2.hpp>
 #include <regex>
 #include <tuple>
 
