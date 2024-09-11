@@ -1,5 +1,5 @@
-##This file is a template.The comment below is emitted##into the rendered file;
-feel free to edit this file.
+## This file is a template.  The comment below is emitted
+## into the rendered file; feel free to edit this file.
 // !!! WARNING: This is a GENERATED Code..Please do NOT Edit !!!
 #pragma once
 
@@ -9,28 +9,26 @@ feel free to edit this file.
 #include <unordered_map>
 #include <vector>
 
-    namespace phosphor
+namespace phosphor
 {
-    namespace dump
-    {
-    // Overall dump category for example BMC dump
-    using DUMP_CATEGORY = std::string;
+namespace dump
+{
+// Overall dump category for example BMC dump
+using DUMP_CATEGORY = std::string;
 
-    // Dump type
-    using DUMP_TYPE = std::string;
+// Dump type
+using DUMP_TYPE = std::string;
 
-    // Dump collection indicator
-    using DUMP_COLLECTION_TYPE = std::string;
+// Dump collection indicator
+using DUMP_COLLECTION_TYPE = std::string;
 
-    using ErrorType = std::string;
-    using Error = std::string;
-    using ErrorList = std::vector<Error>;
-    using ErrorMap = std::unordered_map<ErrorType, ErrorList>;
+using ErrorType = std::string;
+using Error = std::string;
+using ErrorList = std::vector<Error>;
+using ErrorMap = std::unordered_map<ErrorType, ErrorList>;
 
-    // Dump types
-    <%
-        enum_values = set()
-    %>
+// Dump types
+<% enum_values = set() %>
 enum class DumpTypes {
 % for item in DUMP_TYPE_TABLE:
   % for key, values in item.items():
