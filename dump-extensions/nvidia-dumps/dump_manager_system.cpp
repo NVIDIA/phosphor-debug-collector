@@ -656,20 +656,18 @@ void Manager::createEntry(const fs::path& file)
         std::string originatorId;
         originatorTypes originatorType;
 
-        entries.insert(
-            std::make_pair(id, std::make_unique<system::Entry>(
-                                   bus, objPath.c_str(), id, timestamp,
-                                   fs::file_size(file), file,
-                                   phosphor::dump::OperationStatus::Completed,
-                                   originatorId, originatorType, *this)));
+        entries.insert(std::make_pair(
+            id, std::make_unique<system::Entry>(
+                    bus, objPath.c_str(), id, timestamp, fs::file_size(file),
+                    file, phosphor::dump::OperationStatus::Completed,
+                    originatorId, originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {
         log<level::ERR>(e.what());
         log<level::ERR>("Error in creating system dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
-                        entry("ID=%d", id),
-                        entry("TIMESTAMP=%ull", timestamp),
+                        entry("ID=%d", id), entry("TIMESTAMP=%ull", timestamp),
                         entry("SIZE=%d", fs::file_size(file)),
                         entry("FILENAME=%s", file.c_str()));
         return;
