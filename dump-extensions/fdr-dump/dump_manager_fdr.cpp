@@ -77,9 +77,21 @@ void Manager::limitDumpEntries()
 sdbusplus::message::object_path
     Manager::createDump(phosphor::dump::DumpCreateParams params)
 {
+    // Default action is to collect the dump
+    if (auto search = params.find("Action"); search == params.end())
+        params["Action"] = "Collect";
+
+    // Handle other actions like clear log and generate certificates
+    auto dumpAction = std::get<std::string>(params["Action"]);
+    if (dumpAction != "Collect")
+    {
+        triggerFDRDumpScript(params);
+        return fs::path(baseEntryPath).string();
+    }
+
     // Limit dumps to max allowed entries
     limitDumpEntries();
-    auto id = captureDump(params);
+    auto id = triggerFDRDumpScript(params);
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
@@ -130,8 +142,6 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
     arg_v.push_back(const_cast<char*>(dump_id.c_str()));
 
     arg_v.push_back(const_cast<char*>("-a"));
-    if (auto search = params.find("Action"); search == params.end())
-        params["Action"] = "Collect";
     auto dump_action = std::get<std::string>(params["Action"]);
     std::transform(dump_action.begin(), dump_action.end(), dump_action.begin(),
                    ::tolower);
@@ -189,51 +199,57 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
     elog<InternalFailure>();
 }
 
-uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
+uint32_t Manager::triggerFDRDumpScript(phosphor::dump::DumpCreateParams params)
 {
     // check if minimum required space is available on destination partition
     std::error_code ec{};
     fs::path partitionPath(dumpDir);
 
+    auto dumpAction = std::get<std::string>(params["Action"]);
+    if (dumpAction == "Collect")
+    {
 #if (JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT > 0)
-    /* jffs2 space available problem is worked around by substracting 2%
-       of capacity from currently available space, eg. 200M - 4M = 196M
-       it solves problem of failed dump when user request it close to space
-       limit so instead if silently failing the task user receives appropriate
-       message. Test it yourself - fill up the partition until 'no space left'
-       message appears, check `df -T` for available space, if there seems to be
-       at least 1% space available then you just reproduced the issue*/
-    uintmax_t offset = (fs::space(partitionPath, ec).capacity *
-                        JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT) /
-                       100;
-    uintmax_t spaceAvailable = fs::space(partitionPath, ec).available;
-    uintmax_t sizeLeftKb = 0;
-    if (spaceAvailable >= offset)
-    {
-        sizeLeftKb = (spaceAvailable - offset) / 1024;
-    }
+        /* jffs2 space available problem is worked around by substracting 2%
+           of capacity from currently available space, eg. 200M - 4M = 196M
+           it solves problem of failed dump when user request it close to space
+           limit so instead if silently failing the task user receives
+           appropriate message. Test it yourself - fill up the partition until
+           'no space left' message appears, check `df -T` for available space,
+           if there seems to be at least 1% space available then you just
+           reproduced the issue*/
+        uintmax_t offset =
+            (fs::space(partitionPath, ec).capacity *
+             JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT) /
+            100;
+        uintmax_t spaceAvailable = fs::space(partitionPath, ec).available;
+        uintmax_t sizeLeftKb = 0;
+        if (spaceAvailable >= offset)
+        {
+            sizeLeftKb = (spaceAvailable - offset) / 1024;
+        }
 #else
-    uintmax_t sizeLeftKb = fs::space(partitionPath, ec).available / 1024;
+        uintmax_t sizeLeftKb = fs::space(partitionPath, ec).available / 1024;
 #endif
-    uintmax_t reqSizeKb = FDR_DUMP_MIN_SPACE_REQD;
+        uintmax_t reqSizeKb = FDR_DUMP_MIN_SPACE_REQD;
 
-    if (ec.value() != 0)
-    {
-        log<level::ERR>("Failed to check available space");
-        elog<InternalFailure>();
-    }
+        if (ec.value() != 0)
+        {
+            log<level::ERR>("Failed to check available space");
+            elog<InternalFailure>();
+        }
 
-    if (sizeLeftKb < reqSizeKb)
-    {
-        log<level::ERR>(
-            "Not enough space available to create FDR dump",
-            entry("REQ_KB=%d", static_cast<unsigned int>(reqSizeKb)),
-            entry("LEFT_KB=%d", static_cast<unsigned int>(sizeLeftKb)));
-        using QuotaExceeded =
-            sdbusplus::xyz::openbmc_project::Dump::Create::Error::QuotaExceeded;
-        using Reason =
-            xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
-        elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
+        if (sizeLeftKb < reqSizeKb)
+        {
+            log<level::ERR>(
+                "Not enough space available to create FDR dump",
+                entry("REQ_KB=%d", static_cast<unsigned int>(reqSizeKb)),
+                entry("LEFT_KB=%d", static_cast<unsigned int>(sizeLeftKb)));
+            using QuotaExceeded = sdbusplus::xyz::openbmc_project::Dump::
+                Create::Error::QuotaExceeded;
+            using Reason =
+                xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
+            elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
+        }
     }
 
     // Validate request argument

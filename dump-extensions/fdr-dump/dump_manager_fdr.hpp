@@ -124,7 +124,7 @@ class Manager :
      *  @param[in] parama - Additional arguments for FDR dump.
      *  @return id - The Dump entry id number.
      */
-    uint32_t captureDump(phosphor::dump::DumpCreateParams params);
+    uint32_t triggerFDRDumpScript(phosphor::dump::DumpCreateParams params);
 
     /** @brief Remove specified watch object pointer from the
      *        watch map and associated entry from the map.
