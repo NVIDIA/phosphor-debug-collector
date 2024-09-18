@@ -8,6 +8,6 @@
 
 desc="VAR file list"
 file_name="varfilelist.log"
-command="output=\$(ls -lRL /var ); echo \"\$output\""
+command="ls -lRL /var 2> /dev/null || true"
 
 add_cmd_output "$command" "$file_name" "$desc"
