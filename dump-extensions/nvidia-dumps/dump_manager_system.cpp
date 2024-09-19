@@ -260,9 +260,9 @@ uint32_t retimerLtssmDump(const std::string& dumpId,
     std::string iOption = "-i";
     arg_v.push_back(&iOption[0]);
     arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    std::string vOption = "-v";
     if (!vendorId.empty())
     {
-        std::string vOption = "-v";
         arg_v.push_back(&vOption[0]);
         arg_v.push_back(const_cast<char*>(vendorId.c_str()));
     }
@@ -294,15 +294,15 @@ uint32_t retimerRegisterDump(const std::string& dumpId,
     std::string iOption = "-i";
     arg_v.push_back(&iOption[0]);
     arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    std::string aOption = "-a";
+    std::string vOption = "-v";
     if (!retimer_address.empty())
     {
-        std::string aOption = "-a";
         arg_v.push_back(&aOption[0]);
         arg_v.push_back(const_cast<char*>(retimer_address.c_str()));
     }
     if (!vendorId.empty())
     {
-        std::string vOption = "-v";
         arg_v.push_back(&vOption[0]);
         arg_v.push_back(const_cast<char*>(vendorId.c_str()));
     }
