@@ -27,6 +27,7 @@
 
 #include <chrono>
 #include <fstream>
+#include <iostream>
 #include <nlohmann/json.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
@@ -289,7 +290,7 @@ void Manager::createEntry(const fs::path& file)
     std::string pcieSlotNumber = "NA";
 
     auto idString = match[ID_POS];
-    auto msString = match[EPOCHTIME_POS];
+    uint64_t timestamp = stoull(match[EPOCHTIME_POS]) * 1000 * 1000;
 
     auto id = stoul(idString);
 
@@ -298,8 +299,7 @@ void Manager::createEntry(const fs::path& file)
     if (dumpEntry != entries.end())
     {
         dynamic_cast<phosphor::dump::faultLog::Entry*>(dumpEntry->second.get())
-            ->update(stoull(msString), fs::file_size(file), file,
-                     std::to_string(id));
+            ->update(timestamp, fs::file_size(file), file, std::to_string(id));
 
         return;
     }
@@ -421,8 +421,8 @@ void Manager::createEntry(const fs::path& file)
 
         entries.insert(std::make_pair(
             id, std::make_unique<faultLog::Entry>(
-                    bus, objPath.c_str(), id, stoull(msString),
-                    FaultDataType::CPER, "CPER", "0", fs::file_size(file), file,
+                    bus, objPath.c_str(), id, timestamp, FaultDataType::CPER,
+                    "CPER", "0", fs::file_size(file), file,
                     phosphor::dump::OperationStatus::Completed, notifType,
                     sectionType, fruid, severity, nvipSignature, nvSeverity,
                     nvSocketNumber, pcieVendorID, pcieDeviceID, pcieClassCode,
@@ -436,8 +436,7 @@ void Manager::createEntry(const fs::path& file)
         log<level::ERR>(e.what());
         log<level::ERR>("Error in creating FaultLog dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
-                        entry("ID=%d", id),
-                        entry("TIMESTAMP=%ull", stoull(msString)),
+                        entry("ID=%d", id), entry("TIMESTAMP=%ull", timestamp),
                         entry("SIZE=%d", fs::file_size(file)),
                         entry("FILENAME=%s", file.c_str()));
         return;

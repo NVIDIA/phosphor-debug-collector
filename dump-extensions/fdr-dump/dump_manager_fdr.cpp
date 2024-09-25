@@ -373,7 +373,7 @@ void Manager::createEntry(const fs::path& file)
     }
 
     auto idString = match[ID_POS];
-    auto msString = match[EPOCHTIME_POS];
+    uint64_t timestamp = stoull(match[EPOCHTIME_POS]) * 1000 * 1000;
 
     auto id = stoul(idString);
 
@@ -382,7 +382,7 @@ void Manager::createEntry(const fs::path& file)
     if (dumpEntry != entries.end())
     {
         dynamic_cast<phosphor::dump::FDR::Entry*>(dumpEntry->second.get())
-            ->update(stoull(msString), fs::file_size(file), file);
+            ->update(timestamp, fs::file_size(file), file);
         return;
     }
 
@@ -394,20 +394,18 @@ void Manager::createEntry(const fs::path& file)
         // Get the originator id and type from params
         std::string originatorId;
         originatorTypes originatorType;
-        entries.insert(
-            std::make_pair(id, std::make_unique<FDR::Entry>(
-                                   bus, objPath.c_str(), id, stoull(msString),
-                                   fs::file_size(file), file,
-                                   phosphor::dump::OperationStatus::Completed,
-                                   originatorId, originatorType, *this)));
+        entries.insert(std::make_pair(
+            id, std::make_unique<FDR::Entry>(
+                    bus, objPath.c_str(), id, timestamp, fs::file_size(file),
+                    file, phosphor::dump::OperationStatus::Completed,
+                    originatorId, originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {
         log<level::ERR>(e.what());
         log<level::ERR>("Error in creating FDR dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
-                        entry("ID=%d", id),
-                        entry("TIMESTAMP=%ull", stoull(msString)),
+                        entry("ID=%d", id), entry("TIMESTAMP=%ull", timestamp),
                         entry("SIZE=%d", fs::file_size(file)),
                         entry("FILENAME=%s", file.c_str()));
         return;
