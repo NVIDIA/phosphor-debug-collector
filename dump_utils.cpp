@@ -58,7 +58,7 @@ std::optional<std::tuple<uint32_t, uint64_t, uint64_t>>
 {
     static constexpr auto ID_POS = 1;
     static constexpr auto EPOCHTIME_POS = 2;
-    std::regex file_regex("obmcdump_([0-9]+)_([0-9]+).([a-zA-Z0-9]+)");
+    std::regex file_regex("obmcdump_([0-9]+)_([0-9]+)\\.([a-zA-Z0-9]+)");
 
     std::smatch match;
     std::string name = file.filename().string();
