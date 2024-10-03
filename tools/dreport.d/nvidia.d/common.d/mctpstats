@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#
+# config: 2 20
+# @brief: MCTP statistics data collection
+#
+
+. $DREPORT_INCLUDE/functions
+
+out_file_name="mctp-statistics.log"
+desc="MCTP Statistics"
+stats_base_dir="/sys/bus/platform/drivers/aspeed-mctp"
+command="echo 'MCTP Statistics:'; echo '';"
+
+add_cmd_output "$command" "$out_file_name" "$desc"
+
+for stats_dir in $(find "$stats_base_dir" -name '*.mctp'); do
+
+    if [ -d "$stats_dir" ]; then
+        log_info "Processing for $stats_dir"
+    else
+        continue
+    fi
+
+    stats_sub_dir="$stats_dir/statistics"
+    if [ ! -d "$stats_sub_dir" ]; then
+        log_info "No statistics directory found in $stats_sub_dir"
+        continue
+    fi
+
+    stats_files=$(find "$stats_sub_dir" -type f)
+
+    for file in $stats_files; do
+        if [ -f "$file" ]; then
+            add_cmd_output "echo \"$file: \$(cat $file)\"" "$out_file_name" "$file: "
+        else
+            log_info "No data for file: $file"
+        fi
+    done
+done
