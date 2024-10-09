@@ -337,6 +337,10 @@ endforeach
 
 subdir('create-dump-dbus')
 
+if get_option('nsm-net-dump-tool').allowed()
+  subdir('nsm-net-dump-tool')
+endif
+
 unit_subs = configuration_data()
 unit_subs.set('bindir', join_paths(get_option('prefix'), get_option('bindir')))
 systemd_system_unit_dir = dependency('systemd').get_variable(

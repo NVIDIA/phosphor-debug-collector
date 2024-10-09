@@ -6,6 +6,10 @@ option('create-dump-dbus', type: 'feature', description:
         'Tool allows the service user create a dump via dbus', value: 'enabled'
       )
 
+option('nsm-net-dump-tool', type: 'feature', description:
+        'Wrapper tool around the NSM APIs for debug logs collection', value: 'disabled'
+      )
+
 option('jffs-workaround', type: 'feature',
         description : 'Turn on jffs workaround for core file'
       )
