@@ -1,0 +1,16 @@
+#!/bin/bash
+#
+# config: 24 60
+# @brief: Previous Boot host's logs
+#
+
+# shellcheck source=/dev/null # library comes from phosphor-debug-collector repo.
+. "${DREPORT_INCLUDE}/functions"
+
+DESCRIPTION="Previous Boot Logs"
+LOGS_PATH="/var/emmc/user-logs/journal-logs/previous-boot-logs/previous_boot.log"
+
+if [[ -f ${LOGS_PATH} ]]; then
+    # Copy log directory
+    add_copy_file "${LOGS_PATH}" "${DESCRIPTION}"
+fi
