@@ -29,7 +29,9 @@ using EntryIfaces = sdbusplus::server::object_t<
     sdbusplus::xyz::openbmc_project::Dump::Entry::server::BMC>;
 
 // Timeout is kept similar to bmcweb dump creation task timeout
-// Max time taken for BMC dump creation is around 30 minutes + 50% threshold
+// Max time taken for the bmcweb task timeout is 45 min and dump
+// creation is around 17 minutes in emmc and 45 minutes in spi
+// flash but keeping the bmcweb task timeout as the timeout.
 constexpr auto bmcDumpMaxTimeLimitInSec = 2700;
 
 namespace fs = std::filesystem;
@@ -85,7 +87,8 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         {
             progressTimer = std::make_unique<sdbusplus::Timer>([this]() {
                 uint64_t now = std::time(nullptr);
-                uint64_t limit = phosphor::dump::Entry::startTime() +
+                uint64_t limit = (phosphor::dump::Entry::startTime()) /
+                                     1000000 +
                                  bmcDumpMaxTimeLimitInSec;
                 float timeProgress = now <= limit
                                          ? (((float)(limit - now) /
