@@ -34,6 +34,8 @@ int main()
     phosphor::dump::EventPtr eventP{event};
     event = nullptr;
 
+    std::filesystem::create_directories(BMC_DUMP_PATH);
+
     // Blocking SIGCHLD is needed for calling sd_event_add_child
     sigset_t mask;
     if (sigemptyset(&mask) < 0)
