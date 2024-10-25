@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# config: 123 60
+# config: 13 60
 # @brief: List the open file descriptors
 #
 
