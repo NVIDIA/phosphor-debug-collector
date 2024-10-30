@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# config: 12 10
+# @brief: Collect list of all systemd services.
+#
+
+. $DREPORT_INCLUDE/functions
+
+desc="service list"
+file_name="service-list.log"
+command="systemctl -l"
+
+add_cmd_output "$command" "$file_name" "$desc"
