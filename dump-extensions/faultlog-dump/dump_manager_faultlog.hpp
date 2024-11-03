@@ -26,6 +26,7 @@
 #include <experimental/filesystem>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
+#include <sdeventplus/source/child.hpp>
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
 
 namespace phosphor
@@ -43,6 +44,7 @@ using UserMap = phosphor::dump::inotify::UserMap;
 namespace fs = std::filesystem;
 
 using Watch = phosphor::dump::inotify::Watch;
+using ::sdeventplus::source::Child;
 
 using DumpId = uint32_t;
 using AdditionalTypeName = std::string;
@@ -106,6 +108,19 @@ class Manager :
     sdbusplus::message::object_path
         createDump(phosphor::dump::DumpCreateParams params) override;
 
+    /** @brief Used to serve case where create dump failed
+     *  @param [in] id - entry id which failed
+     */
+    void createDumpFailed(int id)
+    {
+        auto entry = entries[id].get();
+        if (entry != nullptr)
+        {
+            dynamic_cast<phosphor::dump::faultLog::Entry*>(entries[id].get())
+                ->setFailedStatus();
+        }
+    }
+
   private:
     /** @brief Create Dump entry d-bus object
      *  @param[in] fullPath - Full path of the Dump file name
@@ -118,20 +133,6 @@ class Manager :
      */
     FaultLogEntryInfo captureDump(phosphor::dump::DumpCreateParams params);
 
-    /** @brief sd_event_add_child callback
-     *
-     *  @param[in] s - event source
-     *  @param[in] si - signal info
-     *  @param[in] userdata - pointer to Watch object
-     *
-     *  @returns 0 on success, -1 on fail
-     */
-    static int callback(sd_event_source*, const siginfo_t*, void*)
-    {
-        // No specific action required in
-        // the sd_event_add_child callback.
-        return 0;
-    }
     /** @brief Remove specified watch object pointer from the
      *        watch map and associated entry from the map.
      *        @param[in] path - unique identifier of the map
@@ -172,6 +173,9 @@ class Manager :
 
     /** @brief Id of the last CPER entry */
     uint32_t lastCperId;
+
+    /** @brief map of SDEventPlus child pointer added to event loop */
+    std::map<pid_t, std::unique_ptr<Child>> childPtrMap;
 };
 
 } // namespace faultLog

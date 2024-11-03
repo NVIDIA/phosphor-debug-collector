@@ -260,6 +260,13 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         }
     }
 
+    /** @brief Minimal interface to allow setting status as failed
+     */
+    void setFailedStatus(void)
+    {
+        status(phosphor::dump::OperationStatus::Failed);
+    }
+
   private:
     /** @Dump file name */
     fs::path file;

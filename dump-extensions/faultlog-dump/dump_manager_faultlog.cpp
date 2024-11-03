@@ -22,6 +22,7 @@
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
+#include <fmt/core.h>
 #include <sys/inotify.h>
 #include <unistd.h>
 
@@ -32,6 +33,8 @@
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <regex>
+#include <sdeventplus/exception.hpp>
+#include <sdeventplus/source/base.hpp>
 #include <string>
 
 #include "dump-extensions/faultlog-dump/faultlog_dump_config.h"
@@ -94,10 +97,18 @@ void Manager::limitTotalDumpSize()
         auto& entry = d->second;
         entry->delete_();
         size = getAllowedSize();
-        if (size < FAULTLOG_DUMP_MIN_SPACE_REQD)
+        if (size >= FAULTLOG_DUMP_MIN_SPACE_REQD)
         {
             break;
         }
+    }
+
+    if (!entries.size() && !getAllowedSize())
+    {
+        using namespace sdbusplus::xyz::openbmc_project::Dump::Create::Error;
+        using Reason =
+            xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
+        elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
     }
 #else
     using namespace sdbusplus::xyz::openbmc_project::Dump::Create::Error;
@@ -232,14 +243,40 @@ FaultLogEntryInfo Manager::captureDump(phosphor::dump::DumpCreateParams params)
     }
     else if (pid > 0)
     {
-        auto rc = sd_event_add_child(eventLoop.get(), nullptr, pid,
-                                     WEXITED | WSTOPPED, callback, nullptr);
-        if (0 > rc)
+        auto entryId = lastEntryId + 1;
+        Child::Callback callback = [this, pid, entryId](Child&,
+                                                        const siginfo_t* si) {
+            if (si->si_status != 0)
+            {
+                std::string msg = "Dump process failed: (signo)" +
+                                  std::to_string(si->si_signo) + "; (code)" +
+                                  std::to_string(si->si_code) + "; (errno)" +
+                                  std::to_string(si->si_errno) + "; (pid)" +
+                                  std::to_string(si->si_pid) + "; (status)" +
+                                  std::to_string(si->si_status);
+                log<level::ERR>(msg.c_str());
+                this->createDumpFailed(entryId);
+            }
+
+            this->childPtrMap.erase(pid);
+        };
+
+        try
+        {
+            childPtrMap.emplace(pid,
+                                std::make_unique<Child>(eventLoop.get(), pid,
+                                                        WEXITED | WSTOPPED,
+                                                        std::move(callback)));
+        }
+        catch (const sdeventplus::SdEventError& ex)
         {
             // Failed to add to event loop
-            log<level::ERR>("FaultLog dump: Error occurred during the "
-                            "sd_event_add_child call",
-                            entry("RC=%d", rc));
+            log<level::ERR>(
+                fmt::format(
+                    "Error occurred during the sdeventplus::source::Child "
+                    "creation ex({})",
+                    ex.what())
+                    .c_str());
             elog<InternalFailure>();
         }
     }
@@ -505,11 +542,13 @@ void Manager::restore()
         {
             lastEntryId = std::max(lastEntryId,
                                    static_cast<uint32_t>(std::stoul(idStr)));
-            auto fileIt = fs::directory_iterator(p.path());
-            // Create dump entry d-bus object.
-            if (fileIt != fs::end(fileIt))
+            for (const auto& fileIt : fs::directory_iterator(p.path()))
             {
-                createEntry(fileIt->path());
+                // Create dump entry d-bus object.
+                if (fs::is_regular_file(fileIt))
+                {
+                    createEntry(fileIt.path());
+                }
             }
         }
     }
