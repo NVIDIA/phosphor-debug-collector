@@ -26,3 +26,5 @@ constexpr auto RETIMER_REGISTER_DUMP_BIN_PATH =
     "/usr/bin/retimerRegisterDump.sh";
 constexpr auto FWATTRS_DUMP_BIN_PATH = "/usr/bin/fw_atts_dump.sh";
 constexpr auto HWCHECKOUT_DUMP_BIN_PATH = "/usr/bin/hw_checkout_dump.sh";
+constexpr auto NET_DUMP_BIN_PATH = "/usr/bin/net_dump.sh";
+constexpr auto NET_DUMP_TEMP_PATH = "/var/emmc/user-logs";

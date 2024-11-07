@@ -221,6 +221,38 @@ uint32_t fpgaRegDump(const std::string& dumpId, const std::string& dumpPath)
     elog<InternalFailure>();
 }
 
+uint32_t netDump(const std::string& dumpId, const std::string& dumpPath,
+                 const std::string& tempPath, const std::string& targetDevice)
+{
+    // Construct net dump arguments
+    std::vector<char*> arg_v;
+    std::string fPath = NET_DUMP_BIN_PATH;
+    arg_v.push_back(&fPath[0]);
+    std::string pOption = "-p";
+    arg_v.push_back(&pOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    std::string tOption = "-t";
+    arg_v.push_back(&tOption[0]);
+    arg_v.push_back(const_cast<char*>(tempPath.c_str()));
+    std::string dOption = "-d";
+    arg_v.push_back(&dOption[0]);
+    arg_v.push_back(const_cast<char*>(targetDevice.c_str()));
+
+    arg_v.push_back(nullptr);
+
+    execv(arg_v[0], &arg_v[0]);
+
+    // dreport script execution is failed.
+    auto error = errno;
+    log<level::ERR>(
+        "System dump: Error occurred during netDump function execution",
+        entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
 uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
 {
     // Construct erot dump arguments
@@ -426,19 +458,25 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     const std::string typeFPGA = "FPGA";
     const std::string typeEROT = "EROT";
     const std::string typeROT = "ROT";
+    const std::string typeNVSwitch = "Net_NVSwitch";
+    const std::string typeNet_NVLinkManagementNIC = "Net_NVLinkManagementNIC";
     const std::string typeLTSSM = "RetLTSSM";
     const std::string typeRetimerRegister = "RetRegister";
     const std::string typeFwAtts = "FirmwareAttributes";
     const std::string typeHwCheckout = "HardwareCheckout";
     auto diagnosticType = std::get<std::string>(params["DiagnosticType"]);
+    auto deviceID = std::get<std::string>(params["DeviceID"]);
     params.erase("DiagnosticType");
+    params.erase("DeviceID");
     if (!diagnosticType.empty())
     {
         if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
             diagnosticType != typeEROT && diagnosticType != typeROT &&
             diagnosticType != typeLTSSM &&
             diagnosticType != typeRetimerRegister &&
-            diagnosticType != typeFwAtts && diagnosticType != typeHwCheckout)
+            diagnosticType != typeFwAtts && diagnosticType != typeHwCheckout &&
+            diagnosticType != typeNet_NVLinkManagementNIC &&
+            diagnosticType != typeNVSwitch)
         {
             log<level::ERR>("Unrecognized DiagnosticType option",
                             entry("DIAG_TYPE=%s", diagnosticType.c_str()));
@@ -525,6 +563,17 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         else if (diagnosticType == typeEROT || diagnosticType == typeROT)
         {
             erotDump(id, dumpPath);
+        }
+        else if (diagnosticType == typeNVSwitch ||
+                 diagnosticType == typeNet_NVLinkManagementNIC)
+        {
+            if (deviceID.empty())
+            {
+                deviceID = "0";
+            }
+            diagnosticType = diagnosticType + "_" + deviceID;
+            std::string tempPath = NET_DUMP_TEMP_PATH;
+            netDump(id, dumpPath, tempPath, diagnosticType);
         }
         else if (diagnosticType == typeLTSSM)
         {
