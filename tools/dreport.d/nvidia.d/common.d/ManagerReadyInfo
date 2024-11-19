@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# config: 2 20
+# @brief: Get the HMC Manager ready information.
+#
+
+. "$DREPORT_INCLUDE/functions"
+
+desc="Info about HMC manager ready status"
+file_name="managerreadyinfo.log"
+
+declare -a arr=(
+# Format: "Dbus Service" "Dbus Object"
+    "xyz.openbmc_project.GpioStatusHandler" "/xyz/openbmc_project/GpioStatusHandler"
+    "xyz.openbmc_project.NSM" "/xyz/openbmc_project/NSM"
+    "xyz.openbmc_project.PLDM" "/xyz/openbmc_project/pldm"
+    "xyz.openbmc_project.MCTP.Control.PCIe" "/xyz/openbmc_project/mctp/PCIe"
+    "xyz.openbmc_project.MCTP.Control.SPI" "/xyz/openbmc_project/mctp/SPI"
+    "xyz.openbmc_project.State.ConfigurableStateManager" "/xyz/openbmc_project/state/configurableStateManager/Manager"
+    "xyz.openbmc_project.State.ConfigurableStateManager" "/xyz/openbmc_project/state/configurableStateManager/ChassisPower"
+)
+
+managerReadyInfo_introspect() {
+    __service_name=$1
+    __object_path=$2
+    BUSCTL_ARGS="--full --no-pager"
+
+    printf '\nSERVICE_NAME: %s OBJECT_PATH: %s\n\n' $__service_name $__object_path
+    busctl introspect $__service_name $__object_path $BUSCTL_ARGS
+    if [ $? -ne 0 ]; then
+        echo "Failed to introspect $__service_name $__object_path "
+    fi
+    printf '\n\n'
+}
+
+getManagerReadyInfo() {
+    for ((i=0;i<${#arr[@]};i+=2)); do
+        managerReadyInfo_introspect ${arr[i]} ${arr[i+1]}
+    done
+}
+
+add_cmd_output "getManagerReadyInfo" "$file_name" "$desc"
