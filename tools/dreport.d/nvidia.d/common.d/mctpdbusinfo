@@ -6,21 +6,27 @@
 
 . $DREPORT_INCLUDE/functions
 
-desc="mctp spi dbus objects"
 file_name="mctpdbusinfo.log"
 
-command="busctl call --verbose --no-pager \
-                xyz.openbmc_project.MCTP.Control.SPI \
-                /xyz/openbmc_project/mctp \
-                org.freedesktop.DBus.ObjectManager \
-                GetManagedObjects"
-add_cmd_output "$command" "$file_name" "$desc"
+# Get the current MCTP Control D-Bus services
+array=(`busctl | grep MCTP.Control | awk '{print $1}' | tr "\n" " "`)
 
-desc="mctp pcie dbus objects"
-command="busctl call --verbose --no-pager \
-                xyz.openbmc_project.MCTP.Control.PCIe \
-                /xyz/openbmc_project/mctp \
-                org.freedesktop.DBus.ObjectManager \
-                GetManagedObjects"
+if [ ${#array[@]} -eq 0 ]; then
+    log_error "Failed to collect any mctp dbus information"
+    exit 1
+fi
 
-add_cmd_output "$command" "$file_name" "$desc"
+for i in "${array[@]}"; do
+    name=$(echo $i | cut -d "." -f 5)
+
+    desc="mctp $name dbus tree"
+    command="busctl tree $i"
+    add_cmd_output "$command" "$file_name" "$desc"
+
+    desc="mctp $name dbus objects"
+    command="busctl call --verbose --no-pager $i \
+                    /xyz/openbmc_project/mctp \
+                    org.freedesktop.DBus.ObjectManager \
+                    GetManagedObjects"
+    add_cmd_output "$command" "$file_name" "$desc"
+done
