@@ -68,9 +68,11 @@ void Manager::limitDumpEntries()
     // Get the oldest dumps
     int excessDumps = totalDumps - (FAULTLOG_DUMP_MAX_LIMIT - 1);
     // Delete the oldest dumps
-    for (auto d = entries.begin(); d != entries.end() && excessDumps; d++)
+    auto d = entries.begin();
+    while (d != entries.end() && excessDumps)
     {
         auto& entry = d->second;
+        d++;
         entry->delete_();
         --excessDumps;
     }
@@ -92,9 +94,11 @@ void Manager::limitTotalDumpSize()
     log<level::ERR>("Not enough space: Deleting oldest dumps");
 
     // Delete the oldest dumps till free size is enough
-    for (auto d = entries.begin(); d != entries.end(); d++)
+    auto d = entries.begin();
+    while (d != entries.end())
     {
         auto& entry = d->second;
+        d++;
         entry->delete_();
         size = getAllowedSize();
         if (size >= FAULTLOG_DUMP_MIN_SPACE_REQD)
