@@ -558,17 +558,40 @@ void Manager::restore()
     }
 }
 
+size_t calculate_directory_size(const fs::path& directory)
+{
+    size_t size = 0;
+
+    for (const auto& entry : fs::directory_iterator(directory))
+    {
+        if (fs::is_directory(entry))
+        {
+            size += calculate_directory_size(entry.path());
+        }
+        else if (fs::is_regular_file(entry))
+        {
+            size += fs::file_size(entry);
+        }
+    }
+    return size;
+}
+
 size_t Manager::getAllowedSize()
 {
-    auto size = 0;
+    size_t size = 0;
 
-    // Get current size of the dump directory.
-    for (const auto& p : fs::recursive_directory_iterator(dumpDir))
+    try
     {
-        if (!fs::is_directory(p))
-        {
-            size += fs::file_size(p);
-        }
+        size = calculate_directory_size(dumpDir);
+    }
+    catch (const fs::filesystem_error& e)
+    {
+        log<level::ERR>(
+            fmt::format(
+                "An error occurred during the calculation e({}), and the size 0 is returned.",
+                e.what())
+                .c_str());
+        return 0;
     }
 
     // Convert size into KB
