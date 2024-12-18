@@ -33,7 +33,7 @@ add_cmd_output "$command" "$file_name" "$desc"
 
 desc="GPU mngr inventory capabilities"
 file_name="gpumngrinvcap.log"
-op="invcapop.log"
+op="/tmp/invcapop.log"
 for i in {0..7} 
 do 
     busctl call xyz.openbmc_project.GpuMgr \
