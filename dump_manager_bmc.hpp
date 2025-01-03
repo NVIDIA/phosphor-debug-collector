@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bmc_dump_entry.hpp"
 #include "dump_entry.hpp"
 #include "dump_manager.hpp"
 #include "dump_utils.hpp"
@@ -79,6 +80,18 @@ class Manager :
      */
     sdbusplus::message::object_path
         createDump(phosphor::dump::DumpCreateParams params) override;
+
+    /** @brief Used to serve case where create dump failed
+     *  @param [in] id - entry id which failed
+     */
+    void createDumpFailed(int id)
+    {
+        auto entry = entries[id].get();
+        if (entry != nullptr)
+        {
+            dynamic_cast<phosphor::dump::bmc::Entry*>(entry)->setFailedStatus();
+        }
+    }
 
   private:
     /** @brief Create Dump entry d-bus object

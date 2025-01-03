@@ -203,6 +203,13 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         }
     }
 
+    /** @brief Minimal interface to allow setting status as failed
+     */
+    void setFailedStatus(void)
+    {
+        status(OperationStatus::Failed);
+    }
+
   private:
     /**
      *  @brief A minimal private constructor for the Dump Entry Object

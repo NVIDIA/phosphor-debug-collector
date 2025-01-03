@@ -137,7 +137,20 @@ uint32_t Manager::captureDump(DumpTypes type, const std::string& path)
     }
     else if (pid > 0)
     {
-        Child::Callback callback = [this, type, pid](Child&, const siginfo_t*) {
+        auto entryId = lastEntryId + 1;
+        Child::Callback callback = [this, type, pid,
+                                    entryId](Child&, const siginfo_t* si) {
+            if (si->si_status != 0)
+            {
+                std::string msg = "Dump process failed: (signo)" +
+                                  std::to_string(si->si_signo) + "; (code)" +
+                                  std::to_string(si->si_code) + "; (errno)" +
+                                  std::to_string(si->si_errno) + "; (pid)" +
+                                  std::to_string(si->si_pid) + "; (status)" +
+                                  std::to_string(si->si_status);
+                lg2::error(msg.c_str());
+                this->createDumpFailed(entryId);
+            }
             if (type == DumpTypes::USER)
             {
                 lg2::info("User initiated dump completed, resetting flag");
