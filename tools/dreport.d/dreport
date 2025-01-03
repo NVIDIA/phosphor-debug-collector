@@ -351,6 +351,7 @@ function main()
     result=$?
     if [[ ${result} -ne $SUCCESS ]]; then
         echo $($TIME_STAMP) "Error: Failed to package, Exiting"
+        return 1
     else
         echo $($TIME_STAMP) "Successfully completed"
         exit;
