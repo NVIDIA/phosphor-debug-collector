@@ -24,6 +24,15 @@ int main()
         report<InternalFailure>();
         return -1;
     }
+
+    rc = sd_event_set_watchdog(event, 1);
+    if (rc < 0)
+    {
+        lg2::error("Failed to enable watchdog, rc: {RC}", "RC", rc);
+        report<InternalFailure>();
+        return rc;
+    }
+
     phosphor::dump::EventPtr eventP{event};
     event = nullptr;
 
