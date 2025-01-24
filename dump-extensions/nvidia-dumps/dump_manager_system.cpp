@@ -462,6 +462,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     const std::string typeROT = "ROT";
     const std::string typeNVSwitch = "Net_NVSwitch";
     const std::string typeNet_NVLinkManagementNIC = "Net_NVLinkManagementNIC";
+    const std::string typeNet_GPU_SXM = "Net_GPU_SXM";
     const std::string typeLTSSM = "RetLTSSM";
     const std::string typeRetimerRegister = "RetRegister";
     const std::string typeFwAtts = "FirmwareAttributes";
@@ -478,7 +479,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
             diagnosticType != typeRetimerRegister &&
             diagnosticType != typeFwAtts && diagnosticType != typeHwCheckout &&
             diagnosticType != typeNet_NVLinkManagementNIC &&
-            diagnosticType != typeNVSwitch)
+            diagnosticType != typeNVSwitch && diagnosticType != typeNet_GPU_SXM)
         {
             log<level::ERR>("Unrecognized DiagnosticType option",
                             entry("DIAG_TYPE=%s", diagnosticType.c_str()));
@@ -567,7 +568,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
             erotDump(id, dumpPath);
         }
         else if (diagnosticType == typeNVSwitch ||
-                 diagnosticType == typeNet_NVLinkManagementNIC)
+                 diagnosticType == typeNet_NVLinkManagementNIC ||
+                 diagnosticType == typeNet_GPU_SXM)
         {
             if (deviceID.empty())
             {

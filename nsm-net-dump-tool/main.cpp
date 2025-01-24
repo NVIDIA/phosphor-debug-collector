@@ -41,6 +41,7 @@ enum class DeviceTypeData
     NVSwitch,
     NVLinkMgmtNIC_Dump,
     NVLinkMgmtNIC_Log,
+    GPU_SXM,
 };
 
 void log_msg(std::string msg)
@@ -54,7 +55,7 @@ void log_msg(std::string msg)
     log_file.close();
 }
 
-uint8_t sendRequestRecordCommand(uint8_t switchIndex, uint64_t nextRecord,
+uint8_t sendRequestRecordCommand(uint8_t index, uint64_t nextRecord,
                                  DeviceTypeData dataType)
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
@@ -65,7 +66,7 @@ uint8_t sendRequestRecordCommand(uint8_t switchIndex, uint64_t nextRecord,
         case DeviceTypeData::NVSwitch:
             objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
                          "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                         std::to_string(switchIndex);
+                         std::to_string(index);
             interf = "com.nvidia.Dump.DebugInfo";
             method = "GetDebugInfo";
             break;
@@ -82,6 +83,13 @@ uint8_t sendRequestRecordCommand(uint8_t switchIndex, uint64_t nextRecord,
                          "NVLinkManagementNIC_0";
             interf = "com.nvidia.Dump.LogInfo";
             method = "GetLogInfo";
+            break;
+        case DeviceTypeData::GPU_SXM:
+            objectPath = "/xyz/openbmc_project/inventory/system/"
+                         "processors/GPU_SXM_" +
+                         std::to_string(index);
+            interf = "com.nvidia.Dump.DebugInfo";
+            method = "GetDebugInfo";
             break;
         default:
             std::string errorStr(
@@ -110,6 +118,11 @@ uint8_t sendRequestRecordCommand(uint8_t switchIndex, uint64_t nextRecord,
         case DeviceTypeData::NVLinkMgmtNIC_Log:
             sendCommandMethod.append(nextRecord);
             break;
+        case DeviceTypeData::GPU_SXM:
+            sendCommandMethod.append("com.nvidia.Dump.DebugInfo."
+                                     "DebugInformationType.DeviceInformation",
+                                     nextRecord);
+            break;
         default:
             std::string errorStr(
                 "Invalid data type in sendRequestRecordCommand");
@@ -135,8 +148,7 @@ uint8_t sendRequestRecordCommand(uint8_t switchIndex, uint64_t nextRecord,
     return Success;
 }
 
-uint8_t getRequestRecordCommandStatus(uint8_t switchIndex,
-                                      DeviceTypeData dataType)
+uint8_t getRequestRecordCommandStatus(uint8_t index, DeviceTypeData dataType)
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
     std::string objectPath, interf, method;
@@ -145,7 +157,7 @@ uint8_t getRequestRecordCommandStatus(uint8_t switchIndex,
         case DeviceTypeData::NVSwitch:
             objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
                          "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                         std::to_string(switchIndex);
+                         std::to_string(index);
             interf = "org.freedesktop.DBus.Properties";
             method = "Get";
             break;
@@ -160,6 +172,13 @@ uint8_t getRequestRecordCommandStatus(uint8_t switchIndex,
             objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
                          "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
                          "NVLinkManagementNIC_0";
+            interf = "org.freedesktop.DBus.Properties";
+            method = "Get";
+            break;
+        case DeviceTypeData::GPU_SXM:
+            objectPath = "/xyz/openbmc_project/inventory/system/"
+                         "processors/GPU_SXM_" +
+                         std::to_string(index);
             interf = "org.freedesktop.DBus.Properties";
             method = "Get";
             break;
@@ -185,6 +204,9 @@ uint8_t getRequestRecordCommandStatus(uint8_t switchIndex,
             break;
         case DeviceTypeData::NVLinkMgmtNIC_Log:
             commandStatusMethod.append("com.nvidia.Dump.LogInfo", "Status");
+            break;
+        case DeviceTypeData::GPU_SXM:
+            commandStatusMethod.append("com.nvidia.Dump.DebugInfo", "Status");
             break;
         default:
             std::string errorStr(
@@ -246,7 +268,7 @@ uint8_t getRequestRecordCommandStatus(uint8_t switchIndex,
     return Error;
 }
 
-uint64_t getNextRecord(uint8_t switchIndex, DeviceTypeData dataType)
+uint64_t getNextRecord(uint8_t index, DeviceTypeData dataType)
 {
     uint64_t nextRecord = 0;
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
@@ -256,7 +278,7 @@ uint64_t getNextRecord(uint8_t switchIndex, DeviceTypeData dataType)
         case DeviceTypeData::NVSwitch:
             objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
                          "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                         std::to_string(switchIndex);
+                         std::to_string(index);
             interf = "org.freedesktop.DBus.Properties";
             method = "Get";
             break;
@@ -271,6 +293,13 @@ uint64_t getNextRecord(uint8_t switchIndex, DeviceTypeData dataType)
             objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
                          "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
                          "NVLinkManagementNIC_0";
+            interf = "org.freedesktop.DBus.Properties";
+            method = "Get";
+            break;
+        case DeviceTypeData::GPU_SXM:
+            objectPath = "/xyz/openbmc_project/inventory/system/"
+                         "processors/GPU_SXM_" +
+                         std::to_string(index);
             interf = "org.freedesktop.DBus.Properties";
             method = "Get";
             break;
@@ -298,6 +327,10 @@ uint64_t getNextRecord(uint8_t switchIndex, DeviceTypeData dataType)
         case DeviceTypeData::NVLinkMgmtNIC_Log:
             getNextRecord.append("com.nvidia.Dump.LogInfo", "NextRecordHandle");
             break;
+        case DeviceTypeData::GPU_SXM:
+            getNextRecord.append("com.nvidia.Dump.DebugInfo",
+                                 "NextRecordHandle");
+            break;
         default:
             std::string errorStr("Invalid data type in getNextRecord");
             log<level::ERR>(errorStr.c_str());
@@ -324,7 +357,7 @@ uint64_t getNextRecord(uint8_t switchIndex, DeviceTypeData dataType)
     return nextRecord;
 }
 
-uint8_t saveRecord(uint8_t switchIndex, DeviceTypeData dataType)
+uint8_t saveRecord(uint8_t index, DeviceTypeData dataType)
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
     std::string objectPath, interf, method;
@@ -333,7 +366,7 @@ uint8_t saveRecord(uint8_t switchIndex, DeviceTypeData dataType)
         case DeviceTypeData::NVSwitch:
             objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
                          "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                         std::to_string(switchIndex);
+                         std::to_string(index);
             interf = "org.freedesktop.DBus.Properties";
             method = "Get";
             break;
@@ -348,6 +381,13 @@ uint8_t saveRecord(uint8_t switchIndex, DeviceTypeData dataType)
             objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
                          "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
                          "NVLinkManagementNIC_0";
+            interf = "org.freedesktop.DBus.Properties";
+            method = "Get";
+            break;
+        case DeviceTypeData::GPU_SXM:
+            objectPath = "/xyz/openbmc_project/inventory/system/"
+                         "processors/GPU_SXM_" +
+                         std::to_string(index);
             interf = "org.freedesktop.DBus.Properties";
             method = "Get";
             break;
@@ -372,6 +412,9 @@ uint8_t saveRecord(uint8_t switchIndex, DeviceTypeData dataType)
             break;
         case DeviceTypeData::NVLinkMgmtNIC_Log:
             getFdHandleMethod.append("com.nvidia.Dump.LogInfo", "Fd");
+            break;
+        case DeviceTypeData::GPU_SXM:
+            getFdHandleMethod.append("com.nvidia.Dump.DebugInfo", "Fd");
             break;
         default:
             std::string errorStr("Invalid data type in saveRecord");
@@ -806,6 +849,93 @@ uint8_t getLinkMgmtNICLog()
     return res;
 }
 
+uint8_t getGPUDump(uint8_t GPUIndex)
+{
+    uint64_t currentRecord = 0;
+    uint64_t segmentsCounter = 0;
+    uint8_t errorCounter = 0;
+    uint16_t busyCounter = 0;
+    uint8_t res;
+    outputFileSize = 0;
+    outputFileName = dumpPath + "/GPU_SXM_" + std::to_string(GPUIndex) +
+                     "_dump.bin";
+    std::string statusStr = "Started to get the Net_GPU_SXM_" +
+                            std::to_string(GPUIndex) + " dump";
+    log_msg(statusStr);
+
+    do
+    {
+        res = InProgress;
+        errorCounter = 0;
+        while (errorCounter < MAX_ERROR_COUNT && res != Success)
+        {
+            res = sendRequestRecordCommand(GPUIndex, currentRecord,
+                                           DeviceTypeData::GPU_SXM);
+            if (res != Success)
+            {
+                sleep(SLEEP_DURING_WAIT);
+                errorCounter++;
+            }
+        }
+        if (res != Success)
+        {
+            break;
+        }
+        res = InProgress;
+        errorCounter = 0;
+        busyCounter = 0;
+        while (errorCounter < MAX_ERROR_COUNT &&
+               busyCounter < MAX_IN_PROGRESS_COUNT && res != Success)
+        {
+            res = getRequestRecordCommandStatus(GPUIndex,
+                                                DeviceTypeData::GPU_SXM);
+            errorCounter += (res == Error);
+            busyCounter += (res == InProgress);
+        }
+        res = InProgress;
+        statusStr = "Getting the Net_GPU_SXM_" + std::to_string(GPUIndex);
+        if (MAX_ERROR_COUNT == errorCounter)
+        {
+            statusStr += " dump reported errors";
+            log_msg(statusStr);
+            break;
+        }
+        if (MAX_IN_PROGRESS_COUNT == busyCounter)
+        {
+            statusStr += " dump timeout";
+            log_msg(statusStr);
+            break;
+        }
+        if (saveRecord(GPUIndex, DeviceTypeData::GPU_SXM))
+        {
+            statusStr = "Saving the Net_GPU_SXM_" + std::to_string(GPUIndex) +
+                        " dump reported errors";
+            log_msg(statusStr);
+            break;
+        }
+        res = Success;
+        segmentsCounter++;
+        currentRecord = getNextRecord(GPUIndex, DeviceTypeData::GPU_SXM);
+    } while (currentRecord != 0);
+    statusStr = "Total number of segments: " + std::to_string(segmentsCounter);
+    log_msg(statusStr);
+    statusStr = "Output file size: " + std::to_string(outputFileSize);
+    log_msg(statusStr);
+    if (res != Success)
+    {
+        statusStr = "Getting the Net_GPU_SXM_" + std::to_string(GPUIndex) +
+                    " dump completed with errors";
+        log_msg(statusStr);
+    }
+    else
+    {
+        statusStr = "Getting the Net_GPU_SXM_" + std::to_string(GPUIndex) +
+                    " dump completed successfully";
+        log_msg(statusStr);
+    }
+    return res;
+}
+
 int main(int argc, char** argv)
 {
     uint8_t res_dump = Error;
@@ -836,6 +966,17 @@ int main(int argc, char** argv)
         {
             res_dump = getLinkMgmtNICDump();
             getLinkMgmtNICLog();
+        }
+        else
+        {
+            switchStr = "Net_GPU_SXM_";
+            if (targetDevice.find(switchStr) != std::string::npos)
+            {
+                uint16_t GPUIndex = atoi(
+                    targetDevice.substr(switchStr.length(), std::string::npos)
+                        .c_str());
+                res_dump = getGPUDump(GPUIndex);
+            }
         }
 
         auto t2 = high_resolution_clock::now();
