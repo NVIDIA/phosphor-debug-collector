@@ -223,6 +223,30 @@ uint32_t fpgaRegDump(const std::string& dumpId, const std::string& dumpPath)
     elog<InternalFailure>();
 }
 
+uint32_t mcuRegDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    // Construct mcu dump arguments
+    std::vector<char*> arg_v;
+    std::string fPath = MCU_DUMP_BIN_PATH;
+    arg_v.push_back(&fPath[0]);
+    std::string pOption = "-p";
+    arg_v.push_back(&pOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    std::string iOption = "-i";
+    arg_v.push_back(&iOption[0]);
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+
+    arg_v.push_back(nullptr);
+    execv(arg_v[0], &arg_v[0]);
+
+    // MCU register dump execution is failed.
+    auto error = errno;
+    log<level::ERR>(
+        "System dump: Error occurred during MCU register dump execution",
+        entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
 uint32_t netDump(const std::string& dumpId, const std::string& dumpPath,
                  const std::string& tempPath, const std::string& targetDevice)
 {
@@ -460,6 +484,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     const std::string typeFPGA = "FPGA";
     const std::string typeEROT = "EROT";
     const std::string typeROT = "ROT";
+    const std::string typeMCU = "MCU";
     const std::string typeNVSwitch = "Net_NVSwitch";
     const std::string typeNet_NVLinkManagementNIC = "Net_NVLinkManagementNIC";
     const std::string typeNet_GPU_SXM = "Net_GPU_SXM";
@@ -475,7 +500,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     {
         if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
             diagnosticType != typeEROT && diagnosticType != typeROT &&
-            diagnosticType != typeLTSSM &&
+            diagnosticType != typeLTSSM && diagnosticType != typeMCU &&
             diagnosticType != typeRetimerRegister &&
             diagnosticType != typeFwAtts && diagnosticType != typeHwCheckout &&
             diagnosticType != typeNet_NVLinkManagementNIC &&
@@ -562,6 +587,10 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         else if (diagnosticType == typeFPGA)
         {
             fpgaRegDump(id, dumpPath);
+        }
+        else if (diagnosticType == typeMCU)
+        {
+            mcuRegDump(id, dumpPath);
         }
         else if (diagnosticType == typeEROT || diagnosticType == typeROT)
         {
