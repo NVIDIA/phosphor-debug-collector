@@ -56,6 +56,9 @@ __dump() {
     wait #for the workers
 
     cat /tmp/$DUMP_LOG_PREFIX* # Join the worker logs.
+    
+    # Clean up the temporary worker log files
+    rm -f /tmp/$DUMP_LOG_PREFIX*
 }
 
 file_name="nsmdbusinfo.log"
