@@ -49,6 +49,7 @@ function add_copy_file()
         return $RESOURCE_UNAVAILABLE
     fi
 }
+
 # @brief Copy the symbolic link file to the dreport packaging,
 #        if it is in the user allowed dump size limit.
 # @param $1 symbolic link file name
@@ -105,9 +106,19 @@ function check_size()
         if [ "$compression_type" = "xz" ]; then
             tar -Jcf "$name_dir.tar.xz" -C \
                 $(dirname "$name_dir") $(basename "$name_dir")
+            if [ $? -ne 0 ]; then
+                log_error "Compression failed for the xz"
+                rm -f "$source"
+                return 2  # Return special code for space issues
+            fi
             size=$(stat -c%s "$name_dir.tar.xz")
         else
             tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
+            if [ $? -ne 0 ]; then
+                log_error "Compression failed for the zstd"
+                rm -f "$source"
+                return 2  # Return special code for space issues
+            fi
             size=$(stat -c%s "$name_dir.zst")
         fi
         if [ $size -gt $dump_size ]; then
