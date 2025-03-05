@@ -34,6 +34,7 @@
 #include <regex>
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
+#include <unordered_map>
 
 namespace phosphor
 {
@@ -44,6 +45,48 @@ namespace system
 
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using namespace phosphor::logging;
+
+// Diagnostic type enumeration
+enum class DiagnosticType
+{
+    SelfTest,
+    FPGA,
+    EROT,
+    ROT,
+    MCU,
+    NVSwitch,
+    NVLinkManagementNIC,
+    GPU_SXM,
+    NetIR,
+    RetLTSSM,
+    RetRegister,
+    FirmwareAttributes,
+    HardwareCheckout,
+    Unknown
+};
+
+// String to enum mapping
+const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
+    {"SelfTest", DiagnosticType::SelfTest},
+    {"FPGA", DiagnosticType::FPGA},
+    {"EROT", DiagnosticType::EROT},
+    {"ROT", DiagnosticType::ROT},
+    {"MCU", DiagnosticType::MCU},
+    {"Net_NVSwitch", DiagnosticType::NVSwitch},
+    {"Net_NVLinkManagementNIC", DiagnosticType::NVLinkManagementNIC},
+    {"Net_GPU_SXM", DiagnosticType::GPU_SXM},
+    {"NetIR", DiagnosticType::NetIR},
+    {"RetLTSSM", DiagnosticType::RetLTSSM},
+    {"RetRegister", DiagnosticType::RetRegister},
+    {"FirmwareAttributes", DiagnosticType::FirmwareAttributes},
+    {"HardwareCheckout", DiagnosticType::HardwareCheckout}};
+
+// Helper function to get DiagnosticType from string
+DiagnosticType getDiagnosticType(const std::string& typeStr)
+{
+    auto it = diagnosticTypeMap.find(typeStr);
+    return it != diagnosticTypeMap.end() ? it->second : DiagnosticType::Unknown;
+}
 
 // TODO: Merge system dump with bmc dump to avoid code duplication.
 
@@ -82,17 +125,20 @@ sdbusplus::message::object_path
 {
     // Limit dumps to max allowed entries
     limitDumpEntries();
+
+    auto diagnosticTypeStr = std::get<std::string>(params["DiagnosticType"]);
+    auto diagnosticType = getDiagnosticType(diagnosticTypeStr);
+
     // Check whether there is same dump already running
     // Also ensure RetLTSSM and RetRegister will not run at the same time
-    auto dumpType = std::get<std::string>(params["DiagnosticType"]);
-    if ((Manager::dumpInProgress.find(dumpType) !=
+    if ((Manager::dumpInProgress.find(diagnosticTypeStr) !=
          Manager::dumpInProgress.end()) ||
         (Manager::dumpInProgress.find("RetLTSSM") !=
              Manager::dumpInProgress.end() &&
-         dumpType == "RetRegister") ||
+         diagnosticType == DiagnosticType::RetRegister) ||
         (Manager::dumpInProgress.find("RetRegister") !=
              Manager::dumpInProgress.end() &&
-         dumpType == "RetLTSSM"))
+         diagnosticType == DiagnosticType::RetLTSSM))
     {
         elog<Unavailable>();
     }
@@ -115,8 +161,7 @@ sdbusplus::message::object_path
             id, std::make_unique<system::Entry>(
                     bus, objPath.c_str(), id, timeStamp, 0, std::string(),
                     phosphor::dump::OperationStatus::InProgress, originatorId,
-                    originatorType, *this,
-                    std::get<std::string>(params["DiagnosticType"]))));
+                    originatorType, *this, diagnosticTypeStr)));
     }
     catch (const std::invalid_argument& e)
     {
@@ -130,187 +175,112 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
-// captureDump helper functions
+// Helper function to build and execute dump command
+uint32_t executeDumpCommand(
+    const std::string& binPath, const std::string& dumpId,
+    const std::string& dumpPath,
+    const std::vector<std::pair<std::string, std::string>>& options,
+    const std::string& errorMsg)
+{
+    std::vector<char*> arg_v;
+
+    // Add binary path
+    arg_v.push_back(const_cast<char*>(binPath.c_str()));
+
+    // Add path and id options which are common to all dumps
+    arg_v.push_back(const_cast<char*>("-p"));
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    arg_v.push_back(const_cast<char*>("-i"));
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+
+    // Add additional options
+    for (const auto& opt : options)
+    {
+        if (!opt.second.empty())
+        {
+            arg_v.push_back(const_cast<char*>(opt.first.c_str()));
+            arg_v.push_back(const_cast<char*>(opt.second.c_str()));
+        }
+    }
+
+    arg_v.push_back(nullptr);
+    execv(arg_v[0], &arg_v[0]);
+
+    // If we get here, execution failed
+    auto error = errno;
+    log<level::ERR>(errorMsg.c_str(), entry("ERRNO=%d", error));
+    elog<InternalFailure>();
+}
+
 uint32_t executeDreport(const std::string& dumpType, const std::string& dumpId,
                         const std::string& dumpPath, const size_t size,
                         const std::array<std::string, 3>& addArgs)
 {
-    // Construct dreport arguments
-    std::vector<char*> arg_v;
-    std::string fPath = "/usr/bin/dreport";
-    arg_v.push_back(&fPath[0]);
-    std::string dOption = "-d";
-    arg_v.push_back(&dOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string sOption = "-s";
-    arg_v.push_back(&sOption[0]);
-    arg_v.push_back(const_cast<char*>(std::to_string(size).c_str()));
-    std::string qOption = "-q";
-    arg_v.push_back(&qOption[0]);
-    std::string vOption = "-v";
-    arg_v.push_back(&vOption[0]);
-    std::string tOption = "-t";
-    arg_v.push_back(&tOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpType.c_str()));
+    std::vector<std::pair<std::string, std::string>> options = {
+        {"-d", dumpPath},
+        {"-s", std::to_string(size)},
+        {"-q", ""},
+        {"-v", ""},
+        {"-t", dumpType}};
+
     // Add additional arguments
-    std::string aOption = "-a";
-    for (int i = 0; i < (int)addArgs.size(); i++)
+    for (const auto& arg : addArgs)
     {
-        arg_v.push_back(&aOption[0]);
-        arg_v.push_back(const_cast<char*>((addArgs[i]).c_str()));
+        if (!arg.empty())
+        {
+            options.push_back({"-a", arg});
+        }
     }
-    arg_v.push_back(nullptr);
 
-    execv(arg_v[0], &arg_v[0]);
-
-    // dreport script execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during dreport function execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+    return executeDumpCommand(
+        "/usr/bin/dreport", dumpId, dumpPath, options,
+        "System dump: Error occurred during dreport function execution");
 }
 
 uint32_t selfTest(const std::string& dumpId, const std::string& dumpPath)
 {
-    // Construct selftest dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = SELFTEST_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string dOption = "-v";
-    arg_v.push_back(&dOption[0]);
-
-    arg_v.push_back(nullptr);
-    execv(arg_v[0], &arg_v[0]);
-
-    // self test execution is failed.
-    auto error = errno;
-    log<level::ERR>("System dump: Error occurred during self test execution",
-                    entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+    return executeDumpCommand(
+        SELFTEST_BIN_PATH, dumpId, dumpPath, {{"-v", ""}},
+        "System dump: Error occurred during self test execution");
 }
 
 uint32_t fpgaRegDump(const std::string& dumpId, const std::string& dumpPath)
 {
-    // Construct fpga dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = FPGA_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    return executeDumpCommand(
+        FPGA_DUMP_BIN_PATH, dumpId, dumpPath, {},
+        "System dump: Error occurred during FPGA register dump execution");
+}
 
-    arg_v.push_back(nullptr);
-    execv(arg_v[0], &arg_v[0]);
-
-    // FPGA register dump execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during FPGA register dump execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+uint32_t mcuRegDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    return executeDumpCommand(
+        MCU_DUMP_BIN_PATH, dumpId, dumpPath, {},
+        "System dump: Error occurred during MCU register dump execution");
 }
 
 uint32_t netDump(const std::string& dumpId, const std::string& dumpPath,
                  const std::string& tempPath, const std::string& targetDevice)
 {
-    // Construct net dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = NET_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string tOption = "-t";
-    arg_v.push_back(&tOption[0]);
-    arg_v.push_back(const_cast<char*>(tempPath.c_str()));
-    std::string dOption = "-d";
-    arg_v.push_back(&dOption[0]);
-    arg_v.push_back(const_cast<char*>(targetDevice.c_str()));
-
-    arg_v.push_back(nullptr);
-
-    execv(arg_v[0], &arg_v[0]);
-
-    // dreport script execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during netDump function execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+    return executeDumpCommand(
+        NET_DUMP_BIN_PATH, dumpId, dumpPath,
+        {{"-t", tempPath}, {"-d", targetDevice}},
+        "System dump: Error occurred during netDump function execution");
 }
 
 uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
 {
-    // Construct erot dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = EROT_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-
-    arg_v.push_back(nullptr);
-
-    execv(arg_v[0], &arg_v[0]);
-
-    // dreport script execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during dreport function execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+    return executeDumpCommand(
+        EROT_DUMP_BIN_PATH, dumpId, dumpPath, {},
+        "System dump: Error occurred during dreport function execution");
 }
 
 uint32_t retimerLtssmDump(const std::string& dumpId,
                           const std::string& dumpPath,
                           const std::string& vendorId)
 {
-    // Construct Ltssm dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = RETIMER_LTSSM_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string vOption = "-v";
-    if (!vendorId.empty())
-    {
-        arg_v.push_back(&vOption[0]);
-        arg_v.push_back(const_cast<char*>(vendorId.c_str()));
-    }
-
-    arg_v.push_back(nullptr);
-
-    execv(arg_v[0], &arg_v[0]);
-
-    // Retimer LTSSM Dump execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during retimerLtssmDump function execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+    return executeDumpCommand(
+        RETIMER_LTSSM_DUMP_BIN_PATH, dumpId, dumpPath, {{"-v", vendorId}},
+        "System dump: Error occurred during retimerLtssmDump function execution");
 }
 
 uint32_t retimerRegisterDump(const std::string& dumpId,
@@ -318,91 +288,24 @@ uint32_t retimerRegisterDump(const std::string& dumpId,
                              const std::string& retimer_address,
                              const std::string& vendorId)
 {
-    // Construct Register dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = RETIMER_REGISTER_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string aOption = "-a";
-    std::string vOption = "-v";
-    if (!retimer_address.empty())
-    {
-        arg_v.push_back(&aOption[0]);
-        arg_v.push_back(const_cast<char*>(retimer_address.c_str()));
-    }
-    if (!vendorId.empty())
-    {
-        arg_v.push_back(&vOption[0]);
-        arg_v.push_back(const_cast<char*>(vendorId.c_str()));
-    }
-
-    arg_v.push_back(nullptr);
-
-    execv(arg_v[0], &arg_v[0]);
-
-    // Retimer Register Dump execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during retimerRegisterDump function execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+    return executeDumpCommand(
+        RETIMER_REGISTER_DUMP_BIN_PATH, dumpId, dumpPath,
+        {{"-a", retimer_address}, {"-v", vendorId}},
+        "System dump: Error occurred during retimerRegisterDump function execution");
 }
 
 uint32_t fwAttrsDump(const std::string& dumpId, const std::string& dumpPath)
 {
-    // Construct firmware attributes dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = FWATTRS_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string dOption = "-v";
-    arg_v.push_back(&dOption[0]);
-
-    arg_v.push_back(nullptr);
-    execv(arg_v[0], &arg_v[0]);
-
-    // firmware attributes dump execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during firmware attributes dump execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+    return executeDumpCommand(
+        FWATTRS_DUMP_BIN_PATH, dumpId, dumpPath, {{"-v", ""}},
+        "System dump: Error occurred during firmware attributes dump execution");
 }
 
 uint32_t hwCheckoutDump(const std::string& dumpId, const std::string& dumpPath)
 {
-    // Construct hardware checkout dump arguments
-    std::vector<char*> arg_v;
-    std::string fPath = HWCHECKOUT_DUMP_BIN_PATH;
-    arg_v.push_back(&fPath[0]);
-    std::string pOption = "-p";
-    arg_v.push_back(&pOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    std::string iOption = "-i";
-    arg_v.push_back(&iOption[0]);
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    std::string dOption = "-v";
-    arg_v.push_back(&dOption[0]);
-
-    arg_v.push_back(nullptr);
-    execv(arg_v[0], &arg_v[0]);
-
-    // hardware checkout dump execution is failed.
-    auto error = errno;
-    log<level::ERR>(
-        "System dump: Error occurred during hardware checkout dump execution",
-        entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+    return executeDumpCommand(
+        HWCHECKOUT_DUMP_BIN_PATH, dumpId, dumpPath, {{"-v", ""}},
+        "System dump: Error occurred during hardware checkout dump execution");
 }
 
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
@@ -455,66 +358,51 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     // Get Dump size.
     auto size = getAllowedSize();
 
-    // Validate request argument
-    const std::string typeSelftest = "SelfTest";
-    const std::string typeFPGA = "FPGA";
-    const std::string typeEROT = "EROT";
-    const std::string typeROT = "ROT";
-    const std::string typeNVSwitch = "Net_NVSwitch";
-    const std::string typeNet_NVLinkManagementNIC = "Net_NVLinkManagementNIC";
-    const std::string typeNet_GPU_SXM = "Net_GPU_SXM";
-    const std::string typeLTSSM = "RetLTSSM";
-    const std::string typeRetimerRegister = "RetRegister";
-    const std::string typeFwAtts = "FirmwareAttributes";
-    const std::string typeHwCheckout = "HardwareCheckout";
-    auto diagnosticType = std::get<std::string>(params["DiagnosticType"]);
+    auto diagnosticTypeStr = std::get<std::string>(params["DiagnosticType"]);
     auto deviceID = std::get<std::string>(params["DeviceID"]);
+    auto deviceType = std::get<std::string>(params["DeviceType"]);
     params.erase("DiagnosticType");
     params.erase("DeviceID");
-    if (!diagnosticType.empty())
+    params.erase("DeviceType");
+
+    auto diagnosticType = getDiagnosticType(diagnosticTypeStr);
+
+    if (!diagnosticTypeStr.empty() && diagnosticType == DiagnosticType::Unknown)
     {
-        if (diagnosticType != typeSelftest && diagnosticType != typeFPGA &&
-            diagnosticType != typeEROT && diagnosticType != typeROT &&
-            diagnosticType != typeLTSSM &&
-            diagnosticType != typeRetimerRegister &&
-            diagnosticType != typeFwAtts && diagnosticType != typeHwCheckout &&
-            diagnosticType != typeNet_NVLinkManagementNIC &&
-            diagnosticType != typeNVSwitch && diagnosticType != typeNet_GPU_SXM)
-        {
-            log<level::ERR>("Unrecognized DiagnosticType option",
-                            entry("DIAG_TYPE=%s", diagnosticType.c_str()));
-            using INV_ARG =
-                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
-            using INV_VAL =
-                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
-            elog<InvalidArgument>(INV_ARG("DiagnosticType"),
-                                  INV_VAL(diagnosticType.c_str()));
-        }
-#ifdef FAULTLOG_DUMP_EXTENSION
-        if (diagnosticType == typeSelftest)
-        {
-            log<level::ERR>("Unsupported DiagnosticType option",
-                            entry("DIAG_TYPE=%s", diagnosticType.c_str()));
-            using INV_ARG =
-                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
-            using INV_VAL =
-                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
-            elog<InvalidArgument>(INV_ARG("DiagnosticType"),
-                                  INV_VAL(diagnosticType.c_str()));
-        }
-#endif
+        log<level::ERR>("Unrecognized DiagnosticType option",
+                        entry("DIAG_TYPE=%s", diagnosticTypeStr.c_str()));
+        using INV_ARG =
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
+        using INV_VAL =
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
+        elog<InvalidArgument>(INV_ARG("DiagnosticType"),
+                              INV_VAL(diagnosticTypeStr.c_str()));
     }
 
+#ifdef FAULTLOG_DUMP_EXTENSION
+    if (diagnosticType == DiagnosticType::SelfTest)
+    {
+        log<level::ERR>("Unsupported DiagnosticType option",
+                        entry("DIAG_TYPE=%s", diagnosticTypeStr.c_str()));
+        using INV_ARG =
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
+        using INV_VAL =
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
+        elog<InvalidArgument>(INV_ARG("DiagnosticType"),
+                              INV_VAL(diagnosticTypeStr.c_str()));
+    }
+#endif
+
     log<level::INFO>(
-        fmt::format("Capturing system dump of type ({})", diagnosticType)
+        fmt::format("Capturing system dump of type ({})", diagnosticTypeStr)
             .c_str());
 
-    if (diagnosticType == typeLTSSM)
+    if (diagnosticType == DiagnosticType::RetLTSSM)
     {
         retimerState.debugMode(true);
     }
 
-    Manager::dumpInProgress.insert(diagnosticType);
+    Manager::dumpInProgress.insert(diagnosticTypeStr);
 
     pid_t pid = fork();
 
@@ -523,8 +411,6 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         fs::path dumpPath(dumpDir);
         auto id = std::to_string(lastEntryId + 1);
         dumpPath /= id;
-
-        std::string dumpType = "system";
 
         // Construct additional arguments from params
         std::array<std::string, 3> addArgs;
@@ -551,64 +437,68 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
             }
         }
 
-        if (diagnosticType.empty())
+        switch (diagnosticType)
         {
-            executeDreport(dumpType, id, dumpPath, size, addArgs);
-        }
-        else if (diagnosticType == typeSelftest)
-        {
-            selfTest(id, dumpPath);
-        }
-        else if (diagnosticType == typeFPGA)
-        {
-            fpgaRegDump(id, dumpPath);
-        }
-        else if (diagnosticType == typeEROT || diagnosticType == typeROT)
-        {
-            erotDump(id, dumpPath);
-        }
-        else if (diagnosticType == typeNVSwitch ||
-                 diagnosticType == typeNet_NVLinkManagementNIC ||
-                 diagnosticType == typeNet_GPU_SXM)
-        {
-            if (deviceID.empty())
-            {
-                deviceID = "0";
+            case DiagnosticType::Unknown:
+                executeDreport("system", id, dumpPath, size, addArgs);
+                break;
+            case DiagnosticType::SelfTest:
+                selfTest(id, dumpPath);
+                break;
+            case DiagnosticType::FPGA:
+                fpgaRegDump(id, dumpPath);
+                break;
+            case DiagnosticType::MCU:
+                mcuRegDump(id, dumpPath);
+                break;
+            case DiagnosticType::EROT:
+            case DiagnosticType::ROT:
+                erotDump(id, dumpPath);
+                break;
+            case DiagnosticType::NVSwitch:
+            case DiagnosticType::NVLinkManagementNIC:
+            case DiagnosticType::GPU_SXM:
+                if (deviceID.empty())
+                {
+                    deviceID = "0";
+                }
+                diagnosticTypeStr = diagnosticTypeStr.erase(0, 4) + "_" +
+                                    deviceID;
+                netDump(id, dumpPath, NET_DUMP_TEMP_PATH, diagnosticTypeStr);
+                break;
+            case DiagnosticType::NetIR:
+                if (deviceType.empty())
+                {
+                    deviceType = "NVSwitch_0";
+                }
+                netDump(id, dumpPath, NET_DUMP_TEMP_PATH, deviceType);
+                break;
+            case DiagnosticType::RetLTSSM:
+                retimerLtssmDump(id, dumpPath, retimerState.getVendorId());
+                break;
+            case DiagnosticType::RetRegister: {
+                std::string retimer_address =
+                    std::get<std::string>(params["Address"]);
+                retimerRegisterDump(id, dumpPath, retimer_address,
+                                    retimerState.getVendorId());
+                break;
             }
-            diagnosticType = diagnosticType + "_" + deviceID;
-            std::string tempPath = NET_DUMP_TEMP_PATH;
-            netDump(id, dumpPath, tempPath, diagnosticType);
-        }
-        else if (diagnosticType == typeLTSSM)
-        {
-            retimerLtssmDump(id, dumpPath, retimerState.getVendorId());
-        }
-        else if (diagnosticType == typeRetimerRegister)
-        {
-            std::string retimer_address =
-                std::get<std::string>(params["Address"]);
-            retimerRegisterDump(id, dumpPath, retimer_address,
-                                retimerState.getVendorId());
-        }
-        else if (diagnosticType == typeFwAtts)
-        {
-            fwAttrsDump(id, dumpPath);
-        }
-        else if (diagnosticType == typeHwCheckout)
-        {
-            hwCheckoutDump(id, dumpPath);
-        }
-        else
-        {
-            log<level::ERR>("System dump: Invalid DiagnosticType");
-            elog<InternalFailure>();
+            case DiagnosticType::FirmwareAttributes:
+                fwAttrsDump(id, dumpPath);
+                break;
+            case DiagnosticType::HardwareCheckout:
+                hwCheckoutDump(id, dumpPath);
+                break;
+            default:
+                log<level::ERR>("System dump: Invalid DiagnosticType");
+                elog<InternalFailure>();
         }
     }
     else if (pid > 0)
     {
         auto entryId = lastEntryId + 1;
-        Child::Callback callback =
-            [this, pid, entryId, diagnosticType](Child&, const siginfo_t* si) {
+        Child::Callback callback = [this, pid, entryId, diagnosticTypeStr](
+                                       Child&, const siginfo_t* si) {
             if (si->si_status != 0)
             {
                 std::string msg = "Dump process failed: (signo)" +
@@ -623,7 +513,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 
             this->childPtrMap.erase(pid);
             // Remove dumpType from dumpInProgress when dump ends
-            Manager::dumpInProgress.erase(diagnosticType);
+            Manager::dumpInProgress.erase(diagnosticTypeStr);
         };
 
         try
@@ -643,7 +533,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                     ex.what())
                     .c_str());
             // Remove dumpType from dumpInProgress
-            Manager::dumpInProgress.erase(diagnosticType);
+            Manager::dumpInProgress.erase(diagnosticTypeStr);
             elog<InternalFailure>();
         }
     }
@@ -723,41 +613,39 @@ void Manager::createEntry(const fs::path& file)
                         entry("ID=%d", id), entry("TIMESTAMP=%ull", timestamp),
                         entry("SIZE=%d", fs::file_size(file)),
                         entry("FILENAME=%s", file.c_str()));
-        return;
     }
 }
 
 void Manager::watchCallback(const UserMap& fileInfo)
 {
-    for (const auto& i : fileInfo)
+    for (const auto& [path, event] : fileInfo)
     {
         // For any new dump file create dump entry object
         // and associated inotify watch.
-        if (IN_CLOSE_WRITE == i.second)
+        if (event == IN_CLOSE_WRITE)
         {
-            if (!std::filesystem::is_directory(i.first))
+            if (!std::filesystem::is_directory(path))
             {
                 // Don't require filename to be passed, as the path
                 // of dump directory is stored in the childWatchMap
-                removeWatch(i.first.parent_path());
+                removeWatch(path.parent_path());
                 // dump file is written now create D-Bus entry
-                createEntry(i.first);
+                createEntry(path);
             }
             else
             {
-                removeWatch(i.first);
+                removeWatch(path);
             }
         }
         // Start inotify watch on newly created directory.
-        else if ((IN_CREATE == i.second) && fs::is_directory(i.first))
+        else if (event == IN_CREATE && fs::is_directory(path))
         {
             auto watchObj = std::make_unique<Watch>(
-                eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE, EPOLLIN, i.first,
-                std::bind(std::mem_fn(
-                              &phosphor::dump::system::Manager::watchCallback),
-                          this, std::placeholders::_1));
+                eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE, EPOLLIN, path,
+                std::bind(std::mem_fn(&Manager::watchCallback), this,
+                          std::placeholders::_1));
 
-            childWatchMap.emplace(i.first, std::move(watchObj));
+            childWatchMap.emplace(path, std::move(watchObj));
         }
     }
 }
@@ -783,7 +671,7 @@ void Manager::restore()
 
         // Consider only directory's with dump id as name.
         // Note: As per design one file per directory.
-        if ((fs::is_directory(p.path())) &&
+        if (fs::is_directory(p.path()) &&
             std::all_of(idStr.begin(), idStr.end(), ::isdigit))
         {
             lastEntryId = std::max(lastEntryId,
@@ -803,7 +691,7 @@ size_t Manager::getAllowedSize()
     using namespace sdbusplus::xyz::openbmc_project::Dump::Create::Error;
     using Reason = xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
 
-    auto size = 0;
+    size_t size = 0;
 
     // Get current size of the dump directory.
     for (const auto& p : fs::recursive_directory_iterator(dumpDir))
@@ -827,12 +715,8 @@ size_t Manager::getAllowedSize()
         // Reached to maximum limit
         elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
     }
-    if (size > SYSTEM_DUMP_MAX_SIZE)
-    {
-        size = SYSTEM_DUMP_MAX_SIZE;
-    }
 
-    return size;
+    return std::min(size, static_cast<size_t>(SYSTEM_DUMP_MAX_SIZE));
 }
 
 } // namespace system

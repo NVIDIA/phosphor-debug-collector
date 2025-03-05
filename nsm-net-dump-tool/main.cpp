@@ -16,7 +16,7 @@
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 
-#define VERSION "1.0"
+#define VERSION "2.0"
 #define MAX_IN_PROGRESS_COUNT 1000
 #define MAX_ERROR_COUNT 3
 #define SLEEP_DURING_WAIT 20
@@ -24,7 +24,8 @@
 using namespace std;
 using namespace phosphor::logging;
 
-std::string dumpPath;
+std::string tempPath;
+std::string objectPath;
 std::string targetDevice;
 std::string outputFileName;
 uint32_t outputFileSize;
@@ -36,18 +37,16 @@ enum OperationStatus
     Error,
 };
 
-enum class DeviceTypeData
+enum class DataType
 {
-    NVSwitch,
-    NVLinkMgmtNIC_Dump,
-    NVLinkMgmtNIC_Log,
-    GPU_SXM,
+    Dump,
+    Log,
 };
 
 void log_msg(std::string msg)
 {
     fstream log_file;
-    log_file.open(dumpPath + "/Execution_Report.txt", ios::app);
+    log_file.open(tempPath + "/Execution_Report.txt", ios::app);
     if (log_file)
     {
         log_file << msg << std::endl;
@@ -55,47 +54,24 @@ void log_msg(std::string msg)
     log_file.close();
 }
 
-uint8_t sendRequestRecordCommand(uint8_t index, uint64_t nextRecord,
-                                 DeviceTypeData dataType)
+uint8_t sendRequestRecordCommand(uint64_t nextRecord, DataType dataType)
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
-    std::string objectPath, interf, method;
+    std::string interf, method;
 
     switch (dataType)
     {
-        case DeviceTypeData::NVSwitch:
-            objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
-                         "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                         std::to_string(index);
+        case DataType::Dump:
             interf = "com.nvidia.Dump.DebugInfo";
             method = "GetDebugInfo";
             break;
-        case DeviceTypeData::NVLinkMgmtNIC_Dump:
-            objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
-                         "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
-                         "NVLinkManagementNIC_0";
-            interf = "com.nvidia.Dump.DebugInfo";
-            method = "GetDebugInfo";
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Log:
-            objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
-                         "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
-                         "NVLinkManagementNIC_0";
+        case DataType::Log:
             interf = "com.nvidia.Dump.LogInfo";
             method = "GetLogInfo";
             break;
-        case DeviceTypeData::GPU_SXM:
-            objectPath = "/xyz/openbmc_project/inventory/system/"
-                         "processors/GPU_SXM_" +
-                         std::to_string(index);
+        default:
             interf = "com.nvidia.Dump.DebugInfo";
             method = "GetDebugInfo";
-            break;
-        default:
-            std::string errorStr(
-                "Invalid data type in sendRequestRecordCommand");
-            log<level::ERR>(errorStr.c_str());
-            return Error;
             break;
     }
 
@@ -105,29 +81,18 @@ uint8_t sendRequestRecordCommand(uint8_t index, uint64_t nextRecord,
 
     switch (dataType)
     {
-        case DeviceTypeData::NVSwitch:
+        case DataType::Dump:
             sendCommandMethod.append("com.nvidia.Dump.DebugInfo."
                                      "DebugInformationType.DeviceInformation",
                                      nextRecord);
             break;
-        case DeviceTypeData::NVLinkMgmtNIC_Dump:
-            sendCommandMethod.append("com.nvidia.Dump.DebugInfo."
-                                     "DebugInformationType.DeviceInformation",
-                                     nextRecord);
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Log:
+        case DataType::Log:
             sendCommandMethod.append(nextRecord);
             break;
-        case DeviceTypeData::GPU_SXM:
+        default:
             sendCommandMethod.append("com.nvidia.Dump.DebugInfo."
                                      "DebugInformationType.DeviceInformation",
                                      nextRecord);
-            break;
-        default:
-            std::string errorStr(
-                "Invalid data type in sendRequestRecordCommand");
-            log<level::ERR>(errorStr.c_str());
-            return Error;
             break;
     }
 
@@ -148,47 +113,12 @@ uint8_t sendRequestRecordCommand(uint8_t index, uint64_t nextRecord,
     return Success;
 }
 
-uint8_t getRequestRecordCommandStatus(uint8_t index, DeviceTypeData dataType)
+uint8_t getRequestRecordCommandStatus(DataType dataType)
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
-    std::string objectPath, interf, method;
-    switch (dataType)
-    {
-        case DeviceTypeData::NVSwitch:
-            objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
-                         "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                         std::to_string(index);
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Dump:
-            objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
-                         "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
-                         "NVLinkManagementNIC_0";
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Log:
-            objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
-                         "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
-                         "NVLinkManagementNIC_0";
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        case DeviceTypeData::GPU_SXM:
-            objectPath = "/xyz/openbmc_project/inventory/system/"
-                         "processors/GPU_SXM_" +
-                         std::to_string(index);
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        default:
-            std::string errorStr(
-                "Invalid data type in getRequestRecordCommandStatus");
-            log<level::ERR>(errorStr.c_str());
-            return Error;
-            break;
-    }
+    std::string interf, method;
+    interf = "org.freedesktop.DBus.Properties";
+    method = "Get";
 
     auto commandStatusMethod =
         bus.new_method_call("xyz.openbmc_project.NSM", objectPath.c_str(),
@@ -196,23 +126,14 @@ uint8_t getRequestRecordCommandStatus(uint8_t index, DeviceTypeData dataType)
 
     switch (dataType)
     {
-        case DeviceTypeData::NVSwitch:
+        case DataType::Dump:
             commandStatusMethod.append("com.nvidia.Dump.DebugInfo", "Status");
             break;
-        case DeviceTypeData::NVLinkMgmtNIC_Dump:
-            commandStatusMethod.append("com.nvidia.Dump.DebugInfo", "Status");
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Log:
+        case DataType::Log:
             commandStatusMethod.append("com.nvidia.Dump.LogInfo", "Status");
             break;
-        case DeviceTypeData::GPU_SXM:
-            commandStatusMethod.append("com.nvidia.Dump.DebugInfo", "Status");
-            break;
         default:
-            std::string errorStr(
-                "Invalid data type in getRequestRecordCommandStatus");
-            log<level::ERR>(errorStr.c_str());
-            return Error;
+            commandStatusMethod.append("com.nvidia.Dump.DebugInfo", "Status");
             break;
     }
 
@@ -222,7 +143,7 @@ uint8_t getRequestRecordCommandStatus(uint8_t index, DeviceTypeData dataType)
         std::variant<std::string> status;
         statusReply.read(status);
         std::string response(std::get<std::string>(status));
-        if (DeviceTypeData::NVLinkMgmtNIC_Log == dataType)
+        if (DataType::Log == dataType)
         {
             if (response == "com.nvidia.Dump.LogInfo.OperationStatus.Success")
             {
@@ -268,47 +189,13 @@ uint8_t getRequestRecordCommandStatus(uint8_t index, DeviceTypeData dataType)
     return Error;
 }
 
-uint64_t getNextRecord(uint8_t index, DeviceTypeData dataType)
+uint64_t getNextRecord(DataType dataType)
 {
     uint64_t nextRecord = 0;
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
-    std::string objectPath, interf, method;
-    switch (dataType)
-    {
-        case DeviceTypeData::NVSwitch:
-            objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
-                         "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                         std::to_string(index);
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Dump:
-            objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
-                         "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
-                         "NVLinkManagementNIC_0";
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Log:
-            objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
-                         "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
-                         "NVLinkManagementNIC_0";
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        case DeviceTypeData::GPU_SXM:
-            objectPath = "/xyz/openbmc_project/inventory/system/"
-                         "processors/GPU_SXM_" +
-                         std::to_string(index);
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        default:
-            std::string errorStr("Invalid data type in getNextRecord");
-            log<level::ERR>(errorStr.c_str());
-            return Error;
-            break;
-    }
+    std::string interf, method;
+    interf = "org.freedesktop.DBus.Properties";
+    method = "Get";
 
     auto getNextRecord = bus.new_method_call("xyz.openbmc_project.NSM",
                                              objectPath.c_str(), interf.c_str(),
@@ -316,25 +203,16 @@ uint64_t getNextRecord(uint8_t index, DeviceTypeData dataType)
 
     switch (dataType)
     {
-        case DeviceTypeData::NVSwitch:
+        case DataType::Dump:
             getNextRecord.append("com.nvidia.Dump.DebugInfo",
                                  "NextRecordHandle");
             break;
-        case DeviceTypeData::NVLinkMgmtNIC_Dump:
-            getNextRecord.append("com.nvidia.Dump.DebugInfo",
-                                 "NextRecordHandle");
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Log:
+        case DataType::Log:
             getNextRecord.append("com.nvidia.Dump.LogInfo", "NextRecordHandle");
             break;
-        case DeviceTypeData::GPU_SXM:
+        default:
             getNextRecord.append("com.nvidia.Dump.DebugInfo",
                                  "NextRecordHandle");
-            break;
-        default:
-            std::string errorStr("Invalid data type in getNextRecord");
-            log<level::ERR>(errorStr.c_str());
-            return Error;
             break;
     }
 
@@ -357,46 +235,13 @@ uint64_t getNextRecord(uint8_t index, DeviceTypeData dataType)
     return nextRecord;
 }
 
-uint8_t saveRecord(uint8_t index, DeviceTypeData dataType)
+uint8_t saveRecord(DataType dataType)
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
-    std::string objectPath, interf, method;
-    switch (dataType)
-    {
-        case DeviceTypeData::NVSwitch:
-            objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
-                         "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                         std::to_string(index);
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Dump:
-            objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
-                         "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
-                         "NVLinkManagementNIC_0";
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Log:
-            objectPath = "/xyz/openbmc_project/inventory/system/chassis/"
-                         "HGX_NVLinkManagementNIC_0/NetworkAdapters/"
-                         "NVLinkManagementNIC_0";
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        case DeviceTypeData::GPU_SXM:
-            objectPath = "/xyz/openbmc_project/inventory/system/"
-                         "processors/GPU_SXM_" +
-                         std::to_string(index);
-            interf = "org.freedesktop.DBus.Properties";
-            method = "Get";
-            break;
-        default:
-            std::string errorStr("Invalid data type in saveRecord");
-            log<level::ERR>(errorStr.c_str());
-            return Error;
-            break;
-    }
+    std::string interf, method;
+
+    interf = "org.freedesktop.DBus.Properties";
+    method = "Get";
 
     auto getFdHandleMethod =
         bus.new_method_call("xyz.openbmc_project.NSM", objectPath.c_str(),
@@ -404,22 +249,14 @@ uint8_t saveRecord(uint8_t index, DeviceTypeData dataType)
 
     switch (dataType)
     {
-        case DeviceTypeData::NVSwitch:
+        case DataType::Dump:
             getFdHandleMethod.append("com.nvidia.Dump.DebugInfo", "Fd");
             break;
-        case DeviceTypeData::NVLinkMgmtNIC_Dump:
-            getFdHandleMethod.append("com.nvidia.Dump.DebugInfo", "Fd");
-            break;
-        case DeviceTypeData::NVLinkMgmtNIC_Log:
+        case DataType::Log:
             getFdHandleMethod.append("com.nvidia.Dump.LogInfo", "Fd");
             break;
-        case DeviceTypeData::GPU_SXM:
-            getFdHandleMethod.append("com.nvidia.Dump.DebugInfo", "Fd");
-            break;
         default:
-            std::string errorStr("Invalid data type in saveRecord");
-            log<level::ERR>(errorStr.c_str());
-            return Error;
+            getFdHandleMethod.append("com.nvidia.Dump.DebugInfo", "Fd");
             break;
     }
 
@@ -457,36 +294,9 @@ uint8_t saveRecord(uint8_t index, DeviceTypeData dataType)
     return Success;
 }
 
-uint8_t sendSwitchResetCommand(uint8_t switchIndex)
+uint8_t sendEraseCommand()
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
-    auto objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
-                      "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                      std::to_string(switchIndex);
-    auto sendCommandMethod =
-        bus.new_method_call("xyz.openbmc_project.NSM", objectPath.c_str(),
-                            "xyz.openbmc_project.Control.ResetAsync", "Reset");
-    try
-    {
-        auto reply = bus.call(sendCommandMethod);
-        reply.read();
-    }
-    catch (const sdbusplus::exception::SdBusError& e)
-    {
-        std::string errorStr("Function sendSwitchResetCommand failed");
-        log<level::ERR>(errorStr.c_str());
-        log<level::ERR>(e.what());
-        return Error;
-    }
-    return Success;
-}
-
-uint8_t sendSwitchEraseCommand(uint8_t switchIndex)
-{
-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
-    auto objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
-                      "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                      std::to_string(switchIndex);
     auto sendCommandMethod =
         bus.new_method_call("xyz.openbmc_project.NSM", objectPath.c_str(),
                             "com.nvidia.Dump.Erase", "EraseDebugInfo");
@@ -507,12 +317,9 @@ uint8_t sendSwitchEraseCommand(uint8_t switchIndex)
     return Success;
 }
 
-uint8_t getSwitchEraseStatus(uint8_t switchIndex)
+uint8_t getEraseStatus()
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
-    auto objectPath = "/xyz/openbmc_project/inventory/system/fabrics/"
-                      "HGX_NVLinkFabric_0/Switches/NVSwitch_" +
-                      std::to_string(switchIndex);
     auto eraseStatusMethod =
         bus.new_method_call("xyz.openbmc_project.NSM", objectPath.c_str(),
                             "org.freedesktop.DBus.Properties", "Get");
@@ -526,31 +333,37 @@ uint8_t getSwitchEraseStatus(uint8_t switchIndex)
             std::get<std::tuple<std::string, std::string>>(response));
         std::string eraseReason(std::get<0>(eraseResponse));
         std::string eraseStatus(std::get<1>(eraseResponse));
-        if (eraseReason != "com.nvidia.Dump.Erase.OperationStatus.Success")
+        if ("com.nvidia.Dump.Erase.OperationStatus.InProgress" == eraseReason)
         {
-            log<level::ERR>(eraseReason.c_str());
-            return Error;
+            return InProgress;
         }
-        else
+        else if ("com.nvidia.Dump.Erase.OperationStatus.Success" == eraseReason)
         {
-            if (eraseStatus ==
-                "com.nvidia.Dump.Erase.EraseStatus.DataEraseInProgress")
             {
-                return InProgress;
-            }
-            else
-            {
-                if (eraseStatus ==
-                    "com.nvidia.Dump.Erase.EraseStatus.DataErased")
+                if ("com.nvidia.Dump.Erase.EraseStatus.DataEraseInProgress" ==
+                    eraseStatus)
                 {
-                    return Success;
+                    return InProgress;
                 }
                 else
                 {
-                    log<level::ERR>(eraseStatus.c_str());
-                    return Error;
+                    if ("com.nvidia.Dump.Erase.EraseStatus.DataErased" ==
+                        eraseStatus)
+                    {
+                        return Success;
+                    }
+                    else
+                    {
+                        log<level::ERR>(eraseStatus.c_str());
+                        return Error;
+                    }
                 }
             }
+        }
+        else
+        {
+            log<level::ERR>(eraseStatus.c_str());
+            return Error;
         }
     }
 
@@ -565,18 +378,31 @@ uint8_t getSwitchEraseStatus(uint8_t switchIndex)
     return Success;
 }
 
-uint8_t getSwitchDump(uint8_t switchIndex)
+void getNetIRData(DataType dataType)
 {
+    std::string statusStr;
     uint64_t currentRecord = 0;
     uint64_t segmentsCounter = 0;
     uint8_t errorCounter = 0;
     uint16_t busyCounter = 0;
     uint8_t res;
     outputFileSize = 0;
-    outputFileName = dumpPath + "/NVSwitch_" + std::to_string(switchIndex) +
-                     "_dump.bin";
-    std::string statusStr = "Started to get the Net_NVSwitch_" +
-                            std::to_string(switchIndex) + " dump";
+
+    switch (dataType)
+    {
+        case DataType::Dump:
+            outputFileName = tempPath + "/" + targetDevice + "_dump.bin";
+            statusStr = "Started to get the " + targetDevice + " dump";
+            break;
+        case DataType::Log:
+            outputFileName = tempPath + "/" + targetDevice + "_log.bin";
+            statusStr = "Started to get the " + targetDevice + " log";
+            break;
+        default:
+            std::string errorStr("Invalid data type in getDumpData");
+            log<level::ERR>(errorStr.c_str());
+            break;
+    }
     log_msg(statusStr);
     do
     {
@@ -584,8 +410,7 @@ uint8_t getSwitchDump(uint8_t switchIndex)
         errorCounter = 0;
         while (errorCounter < MAX_ERROR_COUNT && res != Success)
         {
-            res = sendRequestRecordCommand(switchIndex, currentRecord,
-                                           DeviceTypeData::NVSwitch);
+            res = sendRequestRecordCommand(currentRecord, dataType);
             if (res != Success)
             {
                 sleep(SLEEP_DURING_WAIT);
@@ -602,35 +427,59 @@ uint8_t getSwitchDump(uint8_t switchIndex)
         while (errorCounter < MAX_ERROR_COUNT &&
                busyCounter < MAX_IN_PROGRESS_COUNT && res != Success)
         {
-            res = getRequestRecordCommandStatus(switchIndex,
-                                                DeviceTypeData::NVSwitch);
+            res = getRequestRecordCommandStatus(dataType);
             errorCounter += (res == Error);
             busyCounter += (res == InProgress);
         }
         res = InProgress;
-        statusStr = "Getting the Net_NVSwitch_" + std::to_string(switchIndex);
+        switch (dataType)
+        {
+            case DataType::Dump:
+                statusStr = "Getting the " + targetDevice + " dump";
+                break;
+            case DataType::Log:
+                statusStr = "Getting the " + targetDevice + " log";
+                break;
+            default:
+                std::string errorStr("Invalid data type in getNetIRData");
+                log<level::ERR>(errorStr.c_str());
+                break;
+        }
         if (MAX_ERROR_COUNT == errorCounter)
         {
-            statusStr += " dump reported errors";
+            statusStr += " reported errors";
             log_msg(statusStr);
             break;
         }
         if (MAX_IN_PROGRESS_COUNT == busyCounter)
         {
-            statusStr += " dump timeout";
+            statusStr += " timeout";
             log_msg(statusStr);
             break;
         }
-        if (saveRecord(switchIndex, DeviceTypeData::NVSwitch))
+        if (saveRecord(dataType))
         {
-            statusStr = "Saving the Net_NVSwitch_" +
-                        std::to_string(switchIndex) + " dump reported errors";
+            switch (dataType)
+            {
+                case DataType::Dump:
+                    statusStr = "Saving the " + targetDevice +
+                                " dump reported errors";
+                    break;
+                case DataType::Log:
+                    statusStr = "Saving the " + targetDevice +
+                                " log reported errors";
+                    break;
+                default:
+                    std::string errorStr("Invalid data type in getNetIRData");
+                    log<level::ERR>(errorStr.c_str());
+                    break;
+            }
             log_msg(statusStr);
             break;
         }
         res = Success;
         segmentsCounter++;
-        currentRecord = getNextRecord(switchIndex, DeviceTypeData::NVSwitch);
+        currentRecord = getNextRecord(dataType);
     } while (currentRecord != 0);
     statusStr = "Total number of segments: " + std::to_string(segmentsCounter);
     log_msg(statusStr);
@@ -638,316 +487,151 @@ uint8_t getSwitchDump(uint8_t switchIndex)
     log_msg(statusStr);
     if (res != Success)
     {
-        statusStr = "Getting the Net_NVSwitch_" + std::to_string(switchIndex) +
-                    " dump completed with errors";
+        switch (dataType)
+        {
+            case DataType::Dump:
+                statusStr = "Getting the " + targetDevice +
+                            " dump completed with errors";
+                break;
+            case DataType::Log:
+                statusStr = "Getting the " + targetDevice +
+                            " log completed with errors";
+                break;
+            default:
+                std::string errorStr("Invalid data type in getNetIRData");
+                log<level::ERR>(errorStr.c_str());
+                break;
+        }
         log_msg(statusStr);
     }
     else
     {
-        statusStr = "Getting the Net_NVSwitch_" + std::to_string(switchIndex) +
-                    " dump completed successfully";
-        log_msg(statusStr);
-        statusStr = "Started to erase the Net_NVSwitch_" +
-                    std::to_string(switchIndex) + " dump contents";
-        log_msg(statusStr);
-        res = InProgress;
-        errorCounter = 0;
-        busyCounter = 0;
-        while (errorCounter < MAX_ERROR_COUNT &&
-               busyCounter < MAX_IN_PROGRESS_COUNT && res != Success)
+        switch (dataType)
         {
-            res = sendSwitchEraseCommand(switchIndex);
-            errorCounter += (Error == res);
-            if (Success == res)
-            {
-                res = getSwitchEraseStatus(switchIndex);
-                errorCounter += (Error == res);
-                busyCounter += (InProgress == res);
-            }
-        }
-        if (res != Success)
-        {
-            statusStr = "Erasing the Net_NVSwitch_" +
-                        std::to_string(switchIndex) +
-                        " dump completed with errors";
-            log_msg(statusStr);
-        }
-        else
-        {
-            log_msg("Done.");
+            case DataType::Dump:
+                statusStr = "Getting the " + targetDevice +
+                            " dump completed successfully";
+                log_msg(statusStr);
+                statusStr = "Started to erase the " + targetDevice +
+                            " dump contents";
+                log_msg(statusStr);
+                res = InProgress;
+                errorCounter = 0;
+                busyCounter = 0;
+                res = sendEraseCommand();
+                if (Success == res)
+                {
+                    while (errorCounter < MAX_ERROR_COUNT &&
+                           busyCounter < MAX_IN_PROGRESS_COUNT &&
+                           res != Success)
+                    {
+                        res = getEraseStatus();
+                        errorCounter += (Error == res);
+                        busyCounter += (InProgress == res);
+                    }
+                }
+                if (res != Success)
+                {
+                    statusStr = "Erasing the " + targetDevice +
+                                " dump completed with errors";
+                    log_msg(statusStr);
+                }
+                else
+                {
+                    log_msg("Done.");
+                }
+                break;
+            case DataType::Log:
+                statusStr = "Getting the " + targetDevice +
+                            " log completed successfully";
+                break;
+            default:
+                std::string errorStr("Invalid data type in getNetIRData");
+                log<level::ERR>(errorStr.c_str());
+                break;
         }
     }
-    return res;
+    return;
 }
 
-uint8_t getLinkMgmtNICDump()
+std::string getDBusObject(const std::string& targetDevice, DataType dataType)
 {
-    uint64_t currentRecord = 0;
-    uint64_t segmentsCounter = 0;
-    uint8_t errorCounter = 0;
-    uint16_t busyCounter = 0;
-    uint8_t res;
-    outputFileSize = 0;
-    outputFileName = dumpPath + "/NVLinkMgmtNIC_0_dump.bin";
-    std::string statusStr = "Started to get the Net_NVLinkManagementNIC_0 dump";
-    log_msg(statusStr);
+    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
 
-    do
+    std::string rootPath("/xyz/openbmc_project/inventory/system");
+
+    std::vector<std::string> paths;
+
+    auto mapper = bus.new_method_call("xyz.openbmc_project.ObjectMapper",
+                                      "/xyz/openbmc_project/object_mapper",
+                                      "xyz.openbmc_project.ObjectMapper",
+                                      "GetSubTreePaths");
+    mapper.append(rootPath.c_str());
+    mapper.append(0); // Depth 0 to search all
+    switch (dataType)
     {
-        res = InProgress;
-        errorCounter = 0;
-        while (errorCounter < MAX_ERROR_COUNT && res != Success)
-        {
-            res = sendRequestRecordCommand(0, currentRecord,
-                                           DeviceTypeData::NVLinkMgmtNIC_Dump);
-            if (res != Success)
-            {
-                sleep(SLEEP_DURING_WAIT);
-                errorCounter++;
-            }
-        }
-        if (res != Success)
-        {
+        case DataType::Dump:
+            mapper.append(
+                std::vector<std::string>({"com.nvidia.Dump.DebugInfo"}));
             break;
-        }
-        res = InProgress;
-        errorCounter = 0;
-        busyCounter = 0;
-        while (errorCounter < MAX_ERROR_COUNT &&
-               busyCounter < MAX_IN_PROGRESS_COUNT && res != Success)
-        {
-            res = getRequestRecordCommandStatus(
-                0, DeviceTypeData::NVLinkMgmtNIC_Dump);
-            errorCounter += (res == Error);
-            busyCounter += (res == InProgress);
-        }
-        res = InProgress;
-        statusStr = "Getting the Net_NVLinkManagementNIC_0";
-        if (MAX_ERROR_COUNT == errorCounter)
-        {
-            statusStr += " dump reported errors";
-            log_msg(statusStr);
+        case DataType::Log:
+            mapper.append(
+                std::vector<std::string>({"com.nvidia.Dump.LogInfo"}));
             break;
-        }
-        if (MAX_IN_PROGRESS_COUNT == busyCounter)
-        {
-            statusStr += " dump timeout";
-            log_msg(statusStr);
+        default:
+            std::string errorStr("Invalid data type in getDBusObject");
+            log<level::ERR>(errorStr.c_str());
             break;
-        }
-        if (saveRecord(0, DeviceTypeData::NVLinkMgmtNIC_Dump))
-        {
-            statusStr =
-                "Saving the Net_NVLinkManagementNIC_0 dump reported errors";
-            log_msg(statusStr);
-            break;
-        }
-        res = Success;
-        segmentsCounter++;
-        currentRecord = getNextRecord(0, DeviceTypeData::NVLinkMgmtNIC_Dump);
-    } while (currentRecord != 0);
-    statusStr = "Total number of segments: " + std::to_string(segmentsCounter);
-    log_msg(statusStr);
-    statusStr = "Output file size: " + std::to_string(outputFileSize);
-    log_msg(statusStr);
-    if (res != Success)
-    {
-        statusStr =
-            "Getting the Net_NVLinkManagementNIC_0 dump completed with errors";
-        log_msg(statusStr);
     }
-    else
+    auto reply = bus.call(mapper);
+
+    reply.read(paths);
+    for (auto& path : paths)
     {
-        statusStr =
-            "Getting the Net_NVLinkManagementNIC_0 dump completed successfully";
-        log_msg(statusStr);
+        if (path.find(targetDevice) != std::string::npos)
+        {
+            return path;
+        }
     }
-    return res;
+
+    std::string errorStr("D-Bus path not found for ");
+    errorStr += targetDevice;
+    log<level::ERR>(errorStr.c_str());
+
+    return {};
 }
 
-uint8_t getLinkMgmtNICLog()
+std::string generateTempFolderName(std::string dumpID)
 {
-    uint64_t currentRecord = 0;
-    uint64_t segmentsCounter = 0;
-    uint8_t errorCounter = 0;
-    uint16_t busyCounter = 0;
-    uint8_t res;
-    outputFileSize = 0;
-    outputFileName = dumpPath + "/NVLinkMgmtNIC_0_Log.bin";
-    std::string statusStr = "Started to get the Net_NVLinkManagementNIC_0 Log";
-    log_msg(statusStr);
-    do
-    {
-        res = InProgress;
-        errorCounter = 0;
-        while (errorCounter < MAX_ERROR_COUNT && res != Success)
-        {
-            res = sendRequestRecordCommand(0, currentRecord,
-                                           DeviceTypeData::NVLinkMgmtNIC_Log);
-            if (res != Success)
-            {
-                sleep(SLEEP_DURING_WAIT);
-                errorCounter++;
-            }
-        }
-        if (res != Success)
-        {
-            break;
-        }
-        res = InProgress;
-        errorCounter = 0;
-        busyCounter = 0;
-        while (errorCounter < MAX_ERROR_COUNT &&
-               busyCounter < MAX_IN_PROGRESS_COUNT && res != Success)
-        {
-            res = getRequestRecordCommandStatus(
-                0, DeviceTypeData::NVLinkMgmtNIC_Log);
-            errorCounter += (res == Error);
-            busyCounter += (res == InProgress);
-        }
-        res = InProgress;
-        statusStr = "Getting the Net_NVLinkManagementNIC_0";
-        if (MAX_ERROR_COUNT == errorCounter)
-        {
-            statusStr += " Log reported errors";
-            log_msg(statusStr);
-            break;
-        }
-        if (MAX_IN_PROGRESS_COUNT == busyCounter)
-        {
-            statusStr += " Log timeout";
-            log_msg(statusStr);
-            break;
-        }
-        if (saveRecord(0, DeviceTypeData::NVLinkMgmtNIC_Log))
-        {
-            statusStr =
-                "Saving the Net_NVLinkManagementNIC_0 Log reported errors";
-            log_msg(statusStr);
-            break;
-        }
-        res = Success;
-        segmentsCounter++;
-        currentRecord = getNextRecord(0, DeviceTypeData::NVLinkMgmtNIC_Log);
-    } while (currentRecord != 0);
-    statusStr = "Total number of segments: " + std::to_string(segmentsCounter);
-    log_msg(statusStr);
-    statusStr = "Output file size: " + std::to_string(outputFileSize);
-    log_msg(statusStr);
-    if (res != Success)
-    {
-        statusStr =
-            "Getting the Net_NVLinkManagementNIC_0 Log completed with errors";
-        log_msg(statusStr);
-    }
-    else
-    {
-        statusStr =
-            "Getting the Net_NVLinkManagementNIC_0 Log completed successfully";
-        log_msg(statusStr);
-    }
-    return res;
-}
+    auto now = std::chrono::system_clock::now();
+    std::time_t time_now = std::chrono::system_clock::to_time_t(now);
 
-uint8_t getGPUDump(uint8_t GPUIndex)
-{
-    uint64_t currentRecord = 0;
-    uint64_t segmentsCounter = 0;
-    uint8_t errorCounter = 0;
-    uint16_t busyCounter = 0;
-    uint8_t res;
-    outputFileSize = 0;
-    outputFileName = dumpPath + "/GPU_SXM_" + std::to_string(GPUIndex) +
-                     "_dump.bin";
-    std::string statusStr = "Started to get the Net_GPU_SXM_" +
-                            std::to_string(GPUIndex) + " dump";
-    log_msg(statusStr);
+    // Use ctime_r for thread safety
+    struct tm time_info;
+    char time_string[26]; // Buffer for ctime_r output
+    ctime_r(&time_now, time_string);
 
-    do
-    {
-        res = InProgress;
-        errorCounter = 0;
-        while (errorCounter < MAX_ERROR_COUNT && res != Success)
-        {
-            res = sendRequestRecordCommand(GPUIndex, currentRecord,
-                                           DeviceTypeData::GPU_SXM);
-            if (res != Success)
-            {
-                sleep(SLEEP_DURING_WAIT);
-                errorCounter++;
-            }
-        }
-        if (res != Success)
-        {
-            break;
-        }
-        res = InProgress;
-        errorCounter = 0;
-        busyCounter = 0;
-        while (errorCounter < MAX_ERROR_COUNT &&
-               busyCounter < MAX_IN_PROGRESS_COUNT && res != Success)
-        {
-            res = getRequestRecordCommandStatus(GPUIndex,
-                                                DeviceTypeData::GPU_SXM);
-            errorCounter += (res == Error);
-            busyCounter += (res == InProgress);
-        }
-        res = InProgress;
-        statusStr = "Getting the Net_GPU_SXM_" + std::to_string(GPUIndex);
-        if (MAX_ERROR_COUNT == errorCounter)
-        {
-            statusStr += " dump reported errors";
-            log_msg(statusStr);
-            break;
-        }
-        if (MAX_IN_PROGRESS_COUNT == busyCounter)
-        {
-            statusStr += " dump timeout";
-            log_msg(statusStr);
-            break;
-        }
-        if (saveRecord(GPUIndex, DeviceTypeData::GPU_SXM))
-        {
-            statusStr = "Saving the Net_GPU_SXM_" + std::to_string(GPUIndex) +
-                        " dump reported errors";
-            log_msg(statusStr);
-            break;
-        }
-        res = Success;
-        segmentsCounter++;
-        currentRecord = getNextRecord(GPUIndex, DeviceTypeData::GPU_SXM);
-    } while (currentRecord != 0);
-    statusStr = "Total number of segments: " + std::to_string(segmentsCounter);
-    log_msg(statusStr);
-    statusStr = "Output file size: " + std::to_string(outputFileSize);
-    log_msg(statusStr);
-    if (res != Success)
-    {
-        statusStr = "Getting the Net_GPU_SXM_" + std::to_string(GPUIndex) +
-                    " dump completed with errors";
-        log_msg(statusStr);
-    }
-    else
-    {
-        statusStr = "Getting the Net_GPU_SXM_" + std::to_string(GPUIndex) +
-                    " dump completed successfully";
-        log_msg(statusStr);
-    }
-    return res;
+    // Parse time string (format: "Day Mon DD HH:MM:SS YYYY\n")
+    strptime(time_string, "%a %b %d %H:%M:%S %Y", &time_info);
+
+    sprintf(time_string, "_%02d%02d%02d%02d%02d", time_info.tm_mon + 1,
+            time_info.tm_mday, time_info.tm_hour, time_info.tm_min,
+            time_info.tm_sec);
+
+    std::string folderName = std::format("{}{}{}", "obmcdump_", dumpID,
+                                         time_string);
+
+    return folderName;
 }
 
 int main(int argc, char** argv)
 {
-    uint8_t res_dump = Error;
-
-    if (argc > 2)
+    if (argc > 7)
     {
-        dumpPath = argv[1];
-        targetDevice = argv[2];
-        log_msg(dumpPath);
-        log_msg(targetDevice);
-
-        std::string switchStr("Net_NVSwitch_");
+        std::string dumpPath = argv[2];
+        std::string dumpID = argv[4];
+        tempPath = argv[6];
+        targetDevice = argv[8];
 
         using std::chrono::duration_cast;
         using std::chrono::high_resolution_clock;
@@ -955,28 +639,52 @@ int main(int argc, char** argv)
 
         auto t1 = high_resolution_clock::now();
 
-        if (targetDevice.find(switchStr) != std::string::npos)
+        std::string tempFolderName = generateTempFolderName(dumpID);
+
+        std::string tempDir = tempPath + "/netIR_dump/";
+
+        tempPath = tempDir + tempFolderName;
+
+        if (!std::filesystem::exists(tempPath))
         {
-            uint16_t switchIndex =
-                atoi(targetDevice.substr(switchStr.length(), std::string::npos)
-                         .c_str());
-            res_dump = getSwitchDump(switchIndex);
+            std::filesystem::create_directories(tempPath);
         }
-        else if ("Net_NVLinkManagementNIC_0" == targetDevice)
+
+        if (!std::filesystem::exists(dumpPath))
         {
-            res_dump = getLinkMgmtNICDump();
-            getLinkMgmtNICLog();
+            std::filesystem::create_directories(dumpPath);
+        }
+
+        log_msg(targetDevice);
+
+        objectPath = getDBusObject(targetDevice, DataType::Dump);
+
+        if ("" == objectPath)
+        {
+            std::string errorStr(
+                "D-Bus path with DebugInfo interface not found for ");
+            errorStr += targetDevice;
+            log_msg(errorStr);
         }
         else
         {
-            switchStr = "Net_GPU_SXM_";
-            if (targetDevice.find(switchStr) != std::string::npos)
-            {
-                uint16_t GPUIndex = atoi(
-                    targetDevice.substr(switchStr.length(), std::string::npos)
-                        .c_str());
-                res_dump = getGPUDump(GPUIndex);
-            }
+            log_msg(objectPath);
+            getNetIRData(DataType::Dump);
+        }
+
+        objectPath = getDBusObject(targetDevice, DataType::Log);
+
+        if ("" == objectPath)
+        {
+            std::string errorStr(
+                "D-Bus path with LogInfo interface not found for ");
+            errorStr += targetDevice;
+            log_msg(errorStr);
+        }
+        else
+        {
+            log_msg(objectPath);
+            getNetIRData(DataType::Log);
         }
 
         auto t2 = high_resolution_clock::now();
@@ -994,12 +702,27 @@ int main(int argc, char** argv)
             std::to_string(mins) + " minutes, " + std::to_string(seconds) +
             " seconds, " + std::to_string(msecs) + " milliseconds";
         log_msg(executionTime);
+
+        std::string command = "tar -Jcf " + dumpPath + '/' + tempFolderName +
+                              ".tar.xz -C " + tempDir + " " + tempFolderName;
+
+        int result = system(command.c_str());
+
+        if (result != 0)
+        {
+            std::string errorStr("Command failed with error code: ");
+            errorStr += std::to_string(result);
+            log<level::ERR>(errorStr.c_str());
+        }
+
+        std::filesystem::remove_all(tempDir);
     }
     else
     {
         printf("nsm-net-dump-tool version " VERSION "\n");
-        printf("Usage: nsm-net-dump-tool <temp folder> <target device>\n");
+        printf(
+            "Usage: nsm-net-dump-tool -p <file_path> -i <dump_id> -t <temp_path> -d <target_device>\n");
     }
 
-    return res_dump;
+    return 0;
 }
