@@ -58,6 +58,7 @@ enum class DiagnosticType
     NVLinkManagementNIC,
     GPU_SXM,
     NetIR,
+    GPUDeviceDiagnostics,
     RetLTSSM,
     RetRegister,
     FirmwareAttributes,
@@ -76,6 +77,7 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"Net_NVLinkManagementNIC", DiagnosticType::NVLinkManagementNIC},
     {"Net_GPU_SXM", DiagnosticType::GPU_SXM},
     {"NetIR", DiagnosticType::NetIR},
+    {"GPUDeviceDiagnostics", DiagnosticType::GPUDeviceDiagnostics},
     {"RetLTSSM", DiagnosticType::RetLTSSM},
     {"RetRegister", DiagnosticType::RetRegister},
     {"FirmwareAttributes", DiagnosticType::FirmwareAttributes},
@@ -139,6 +141,28 @@ sdbusplus::message::object_path
         (Manager::dumpInProgress.find("RetRegister") !=
              Manager::dumpInProgress.end() &&
          diagnosticType == DiagnosticType::RetLTSSM))
+    {
+        elog<Unavailable>();
+    }
+
+    // Ensure NetIR and GPUDeviceDiagnostics will not run at the same time
+    if ((Manager::dumpInProgress.find("NetIR") !=
+             Manager::dumpInProgress.end() &&
+         diagnosticType == DiagnosticType::GPUDeviceDiagnostics) ||
+        (Manager::dumpInProgress.find("GPUDeviceDiagnostics") !=
+             Manager::dumpInProgress.end() &&
+         diagnosticType == DiagnosticType::NetIR))
+    {
+        elog<Unavailable>();
+    }
+
+    // Ensure Net_GPU_SXM and GPUDeviceDiagnostics will not run at the same time
+    if ((Manager::dumpInProgress.find("Net_GPU_SXM") !=
+             Manager::dumpInProgress.end() &&
+         diagnosticType == DiagnosticType::GPUDeviceDiagnostics) ||
+        (Manager::dumpInProgress.find("GPUDeviceDiagnostics") !=
+             Manager::dumpInProgress.end() &&
+         diagnosticType == DiagnosticType::GPU_SXM))
     {
         elog<Unavailable>();
     }
@@ -258,13 +282,14 @@ uint32_t mcuRegDump(const std::string& dumpId, const std::string& dumpPath)
         "System dump: Error occurred during MCU register dump execution");
 }
 
-uint32_t netDump(const std::string& dumpId, const std::string& dumpPath,
-                 const std::string& tempPath, const std::string& targetDevice)
+uint32_t nsmDump(const std::string& dumpId, const std::string& dumpPath,
+                 const std::string& tempPath, const std::string& targetDevice,
+                 const std::string& dumpType)
 {
     return executeDumpCommand(
-        NET_DUMP_BIN_PATH, dumpId, dumpPath,
-        {{"-t", tempPath}, {"-d", targetDevice}},
-        "System dump: Error occurred during netDump function execution");
+        NSM_DUMP_BIN_PATH, dumpId, dumpPath,
+        {{"-t", tempPath}, {"-d", targetDevice}, {"-o", dumpType}},
+        "System dump: Error occurred during nsmDump function execution");
 }
 
 uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
@@ -460,18 +485,42 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
             case DiagnosticType::GPU_SXM:
                 if (deviceID.empty())
                 {
-                    deviceID = "0";
+                    log<level::ERR>("System dump: missing DeviceID parameter");
+                    elog<InternalFailure>();
                 }
-                diagnosticTypeStr = diagnosticTypeStr.erase(0, 4) + "_" +
-                                    deviceID;
-                netDump(id, dumpPath, NET_DUMP_TEMP_PATH, diagnosticTypeStr);
+                else
+                {
+                    diagnosticTypeStr = diagnosticTypeStr.erase(0, 4) + "_" +
+                                        deviceID;
+                    nsmDump(id, dumpPath, NSM_DUMP_TEMP_PATH, diagnosticTypeStr,
+                            "Network");
+                }
                 break;
             case DiagnosticType::NetIR:
                 if (deviceType.empty())
                 {
-                    deviceType = "NVSwitch_0";
+                    log<level::ERR>(
+                        "System dump: missing DeviceType parameter");
+                    elog<InternalFailure>();
                 }
-                netDump(id, dumpPath, NET_DUMP_TEMP_PATH, deviceType);
+                else
+                {
+                    nsmDump(id, dumpPath, NSM_DUMP_TEMP_PATH, deviceType,
+                            "Network");
+                }
+                break;
+            case DiagnosticType::GPUDeviceDiagnostics:
+                if (deviceType.empty())
+                {
+                    log<level::ERR>(
+                        "System dump: missing DeviceType parameter");
+                    elog<InternalFailure>();
+                }
+                else
+                {
+                    nsmDump(id, dumpPath, NSM_DUMP_TEMP_PATH, deviceType,
+                            "Diagnostics");
+                }
                 break;
             case DiagnosticType::RetLTSSM:
                 retimerLtssmDump(id, dumpPath, retimerState.getVendorId());

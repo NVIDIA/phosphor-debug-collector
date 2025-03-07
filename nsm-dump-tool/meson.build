@@ -13,4 +13,4 @@ if not fmt_dep.found()
   fmt_dep = fmt_proj.dependency('fmt')
 endif
 
-executable('nsm-net-dump-tool', sources, dependencies: [sdbusplus_dep, fmt_dep], install: true)
+executable('nsm-dump-tool', sources, dependencies: [sdbusplus_dep, fmt_dep], install: true)
