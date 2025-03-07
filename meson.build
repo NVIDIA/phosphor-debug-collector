@@ -337,8 +337,8 @@ endforeach
 
 subdir('create-dump-dbus')
 
-if get_option('nsm-net-dump-tool').allowed()
-  subdir('nsm-net-dump-tool')
+if get_option('nsm-dump-tool').allowed()
+  subdir('nsm-dump-tool')
 endif
 
 unit_subs = configuration_data()

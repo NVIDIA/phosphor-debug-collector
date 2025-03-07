@@ -16,7 +16,7 @@
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 
-#define VERSION "2.0"
+#define VERSION "2.1"
 #define MAX_IN_PROGRESS_COUNT 1000
 #define MAX_ERROR_COUNT 3
 #define SLEEP_DURING_WAIT 20
@@ -41,7 +41,27 @@ enum class DataType
 {
     Dump,
     Log,
+    Diagnostics,
 };
+
+// Dump type enumeration
+enum class DumpType
+{
+    Network,
+    Diagnostics,
+    Unknown
+};
+
+// String to enum mapping
+const std::unordered_map<std::string, DumpType> dumpTypeMap = {
+    {"Network", DumpType::Network}, {"Diagnostics", DumpType::Diagnostics}};
+
+// Helper function to get DumpType from string
+DumpType getDumpType(const std::string& typeStr)
+{
+    auto it = dumpTypeMap.find(typeStr);
+    return it != dumpTypeMap.end() ? it->second : DumpType::Unknown;
+}
 
 void log_msg(std::string msg)
 {
@@ -62,6 +82,7 @@ uint8_t sendRequestRecordCommand(uint64_t nextRecord, DataType dataType)
     switch (dataType)
     {
         case DataType::Dump:
+        case DataType::Diagnostics:
             interf = "com.nvidia.Dump.DebugInfo";
             method = "GetDebugInfo";
             break;
@@ -84,6 +105,11 @@ uint8_t sendRequestRecordCommand(uint64_t nextRecord, DataType dataType)
         case DataType::Dump:
             sendCommandMethod.append("com.nvidia.Dump.DebugInfo."
                                      "DebugInformationType.DeviceInformation",
+                                     nextRecord);
+            break;
+        case DataType::Diagnostics:
+            sendCommandMethod.append("com.nvidia.Dump.DebugInfo."
+                                     "DebugInformationType.DeviceDump",
                                      nextRecord);
             break;
         case DataType::Log:
@@ -127,6 +153,7 @@ uint8_t getRequestRecordCommandStatus(DataType dataType)
     switch (dataType)
     {
         case DataType::Dump:
+        case DataType::Diagnostics:
             commandStatusMethod.append("com.nvidia.Dump.DebugInfo", "Status");
             break;
         case DataType::Log:
@@ -204,6 +231,7 @@ uint64_t getNextRecord(DataType dataType)
     switch (dataType)
     {
         case DataType::Dump:
+        case DataType::Diagnostics:
             getNextRecord.append("com.nvidia.Dump.DebugInfo",
                                  "NextRecordHandle");
             break;
@@ -250,6 +278,7 @@ uint8_t saveRecord(DataType dataType)
     switch (dataType)
     {
         case DataType::Dump:
+        case DataType::Diagnostics:
             getFdHandleMethod.append("com.nvidia.Dump.DebugInfo", "Fd");
             break;
         case DataType::Log:
@@ -376,6 +405,89 @@ uint8_t getEraseStatus()
     }
 
     return Success;
+}
+
+void getGpuDeviceDiagnosticsData(DataType dataType)
+{
+    std::string statusStr;
+    uint64_t currentRecord = 0;
+    uint64_t segmentsCounter = 0;
+    uint8_t errorCounter = 0;
+    uint16_t busyCounter = 0;
+    uint8_t res;
+    outputFileSize = 0;
+
+    outputFileName = tempPath + "/" + targetDevice + "_dump.bin";
+    statusStr = "Started to get the " + targetDevice + " dump";
+    log_msg(statusStr);
+    do
+    {
+        res = InProgress;
+        errorCounter = 0;
+        while (errorCounter < MAX_ERROR_COUNT && res != Success)
+        {
+            res = sendRequestRecordCommand(currentRecord, dataType);
+            if (res != Success)
+            {
+                sleep(SLEEP_DURING_WAIT);
+                errorCounter++;
+            }
+        }
+        if (res != Success)
+        {
+            break;
+        }
+        res = InProgress;
+        errorCounter = 0;
+        busyCounter = 0;
+        while (errorCounter < MAX_ERROR_COUNT &&
+               busyCounter < MAX_IN_PROGRESS_COUNT && res != Success)
+        {
+            res = getRequestRecordCommandStatus(dataType);
+            errorCounter += (res == Error);
+            busyCounter += (res == InProgress);
+        }
+        res = InProgress;
+        statusStr = "Getting the " + targetDevice + " dump";
+        if (MAX_ERROR_COUNT == errorCounter)
+        {
+            statusStr += " reported errors";
+            log_msg(statusStr);
+            break;
+        }
+        if (MAX_IN_PROGRESS_COUNT == busyCounter)
+        {
+            statusStr += " timeout";
+            log_msg(statusStr);
+            break;
+        }
+        if (saveRecord(dataType))
+        {
+            statusStr = "Saving the " + targetDevice + " dump reported errors";
+            log_msg(statusStr);
+            break;
+        }
+        res = Success;
+        segmentsCounter++;
+        currentRecord = getNextRecord(dataType);
+    } while (currentRecord != 0xFF);
+    statusStr = "Total number of segments: " + std::to_string(segmentsCounter);
+    log_msg(statusStr);
+    statusStr = "Output file size: " + std::to_string(outputFileSize);
+    log_msg(statusStr);
+    if (res != Success)
+    {
+        statusStr = "Getting the " + targetDevice +
+                    " dump completed with errors";
+        log_msg(statusStr);
+    }
+    else
+    {
+        statusStr = "Getting the " + targetDevice +
+                    " dump completed successfully";
+        log_msg(statusStr);
+    }
+    return;
 }
 
 void getNetIRData(DataType dataType)
@@ -554,7 +666,8 @@ void getNetIRData(DataType dataType)
     return;
 }
 
-std::string getDBusObject(const std::string& targetDevice, DataType dataType)
+std::string getDBusObject(const std::string& targetDevice, DataType dataType,
+                          DumpType dumpType)
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
 
@@ -571,6 +684,7 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType)
     switch (dataType)
     {
         case DataType::Dump:
+        case DataType::Diagnostics:
             mapper.append(
                 std::vector<std::string>({"com.nvidia.Dump.DebugInfo"}));
             break;
@@ -583,6 +697,7 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType)
             log<level::ERR>(errorStr.c_str());
             break;
     }
+
     auto reply = bus.call(mapper);
 
     reply.read(paths);
@@ -590,7 +705,43 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType)
     {
         if (path.find(targetDevice) != std::string::npos)
         {
-            return path;
+            auto GetDumpTypeMethod =
+                bus.new_method_call("xyz.openbmc_project.NSM", path.c_str(),
+                                    "org.freedesktop.DBus.Properties", "Get");
+            GetDumpTypeMethod.append("com.nvidia.Dump.DebugInfo",
+                                     "SupportedDumpType");
+            try
+            {
+                auto statusReply = bus.call(GetDumpTypeMethod);
+                std::variant<std::string> dumpTypeResponse;
+                statusReply.read(dumpTypeResponse);
+                std::string response(std::get<std::string>(dumpTypeResponse));
+                switch (dumpType)
+                {
+                    case DumpType::Network:
+                        if ("com.nvidia.Dump.DebugInfo.DumpType.Network" ==
+                            response)
+                        {
+                            return path;
+                        }
+                        break;
+                    case DumpType::Diagnostics:
+                        if ("com.nvidia.Dump.DebugInfo.DumpType.Diagnostics" ==
+                            response)
+                        {
+                            return path;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            catch (const sdbusplus::exception::SdBusError& e)
+            {
+                std::string errorStr("Function getDBusObject failed");
+                log<level::ERR>(errorStr.c_str());
+                log<level::ERR>(e.what());
+            }
         }
     }
 
@@ -639,9 +790,22 @@ int main(int argc, char** argv)
 
         auto t1 = high_resolution_clock::now();
 
-        std::string tempFolderName = generateTempFolderName(dumpID);
+        auto dumpType = getDumpType(argv[10]);
 
-        std::string tempDir = tempPath + "/netIR_dump/";
+        std::string tempFolderName = generateTempFolderName(dumpID);
+        std::string tempDir;
+
+        switch (dumpType)
+        {
+            case DumpType::Network:
+                tempDir = tempPath + "/NetIR_dump/";
+                break;
+            case DumpType::Diagnostics:
+                tempDir = tempPath + "/Diagnostics_dump/";
+                break;
+            default:
+                tempDir = tempPath + "/NetIR_dump/";
+        }
 
         tempPath = tempDir + tempFolderName;
 
@@ -657,34 +821,62 @@ int main(int argc, char** argv)
 
         log_msg(targetDevice);
 
-        objectPath = getDBusObject(targetDevice, DataType::Dump);
+        switch (dumpType)
+        {
+            case DumpType::Network:
+                objectPath = getDBusObject(targetDevice, DataType::Dump,
+                                           dumpType);
 
-        if ("" == objectPath)
-        {
-            std::string errorStr(
-                "D-Bus path with DebugInfo interface not found for ");
-            errorStr += targetDevice;
-            log_msg(errorStr);
-        }
-        else
-        {
-            log_msg(objectPath);
-            getNetIRData(DataType::Dump);
-        }
+                if ("" == objectPath)
+                {
+                    std::string errorStr(
+                        "D-Bus path with DebugInfo interface not found for ");
+                    errorStr += targetDevice;
+                    log_msg(errorStr);
+                }
+                else
+                {
+                    log_msg(objectPath);
+                    getNetIRData(DataType::Dump);
+                }
 
-        objectPath = getDBusObject(targetDevice, DataType::Log);
+                objectPath = getDBusObject(targetDevice, DataType::Log,
+                                           dumpType);
 
-        if ("" == objectPath)
-        {
-            std::string errorStr(
-                "D-Bus path with LogInfo interface not found for ");
-            errorStr += targetDevice;
-            log_msg(errorStr);
-        }
-        else
-        {
-            log_msg(objectPath);
-            getNetIRData(DataType::Log);
+                if ("" == objectPath)
+                {
+                    std::string errorStr(
+                        "D-Bus path with LogInfo interface not found for ");
+                    errorStr += targetDevice;
+                    log_msg(errorStr);
+                }
+                else
+                {
+                    log_msg(objectPath);
+                    getNetIRData(DataType::Log);
+                }
+                break;
+            case DumpType::Diagnostics:
+                objectPath = getDBusObject(targetDevice, DataType::Dump,
+                                           dumpType);
+                if ("" == objectPath)
+                {
+                    std::string errorStr(
+                        "D-Bus path with DebugInfo interface not found for ");
+                    errorStr += targetDevice;
+                    log_msg(errorStr);
+                }
+                else
+                {
+                    log_msg(objectPath);
+                    getGpuDeviceDiagnosticsData(DataType::Diagnostics);
+                }
+                break;
+            default:
+                std::string errorStr = std::format("{}{}{}", "Dump Type ",
+                                                   argv[10], " not found");
+                log_msg(errorStr);
+                break;
         }
 
         auto t2 = high_resolution_clock::now();
@@ -719,9 +911,9 @@ int main(int argc, char** argv)
     }
     else
     {
-        printf("nsm-net-dump-tool version " VERSION "\n");
+        printf("nsm-dump-tool version " VERSION "\n");
         printf(
-            "Usage: nsm-net-dump-tool -p <file_path> -i <dump_id> -t <temp_path> -d <target_device>\n");
+            "Usage: nsm-dump-tool -p <file_path> -i <dump_id> -t <temp_path> -d <target_device> -o <dump_type>\n");
     }
 
     return 0;
