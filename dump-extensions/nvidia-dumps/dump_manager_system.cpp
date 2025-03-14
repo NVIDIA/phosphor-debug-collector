@@ -53,7 +53,7 @@ enum class DiagnosticType
     FPGA,
     EROT,
     ROT,
-    MCU,
+    SMA,
     NVSwitch,
     NVLinkManagementNIC,
     GPU_SXM,
@@ -72,7 +72,7 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"FPGA", DiagnosticType::FPGA},
     {"EROT", DiagnosticType::EROT},
     {"ROT", DiagnosticType::ROT},
-    {"MCU", DiagnosticType::MCU},
+    {"SMA", DiagnosticType::SMA},
     {"Net_NVSwitch", DiagnosticType::NVSwitch},
     {"Net_NVLinkManagementNIC", DiagnosticType::NVLinkManagementNIC},
     {"Net_GPU_SXM", DiagnosticType::GPU_SXM},
@@ -275,11 +275,11 @@ uint32_t fpgaRegDump(const std::string& dumpId, const std::string& dumpPath)
         "System dump: Error occurred during FPGA register dump execution");
 }
 
-uint32_t mcuRegDump(const std::string& dumpId, const std::string& dumpPath)
+uint32_t smaRegDump(const std::string& dumpId, const std::string& dumpPath)
 {
     return executeDumpCommand(
-        MCU_DUMP_BIN_PATH, dumpId, dumpPath, {},
-        "System dump: Error occurred during MCU register dump execution");
+        SMA_DUMP_BIN_PATH, dumpId, dumpPath, {},
+        "System dump: Error occurred during SMA register dump execution");
 }
 
 uint32_t nsmDump(const std::string& dumpId, const std::string& dumpPath,
@@ -473,8 +473,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
             case DiagnosticType::FPGA:
                 fpgaRegDump(id, dumpPath);
                 break;
-            case DiagnosticType::MCU:
-                mcuRegDump(id, dumpPath);
+            case DiagnosticType::SMA:
+                smaRegDump(id, dumpPath);
                 break;
             case DiagnosticType::EROT:
             case DiagnosticType::ROT:
