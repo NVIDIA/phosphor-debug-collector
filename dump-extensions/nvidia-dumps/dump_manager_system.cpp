@@ -220,9 +220,9 @@ uint32_t executeDumpCommand(
     // Add additional options
     for (const auto& opt : options)
     {
+        arg_v.push_back(const_cast<char*>(opt.first.c_str()));
         if (!opt.second.empty())
         {
-            arg_v.push_back(const_cast<char*>(opt.first.c_str()));
             arg_v.push_back(const_cast<char*>(opt.second.c_str()));
         }
     }
