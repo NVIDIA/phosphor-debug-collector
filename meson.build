@@ -116,6 +116,9 @@ conf_data.set('SYSTEM_DUMP_TOTAL_SIZE', get_option('SYSTEM_DUMP_TOTAL_SIZE'),
 conf_data.set('SYSTEM_DUMP_MAX_LIMIT', get_option('SYSTEM_DUMP_MAX_LIMIT'),
                description : 'Total system dumps to be retained on bmc'
              )
+conf_data.set_quoted('SYSTEM_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE', get_option('SYSTEM_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE'),
+                      description : 'OEM diagnostic data allowable type for system dump'
+                    )
 conf_data.set_quoted('RETIMER_DEBUG_MODE_OBJPATH', get_option('RETIMER_DEBUG_MODE_OBJPATH'),
                       description : 'The retimer Debug Mode state D-Bus object path'
                     )
