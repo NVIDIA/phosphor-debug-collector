@@ -3,6 +3,7 @@
 #include "dump-extensions.hpp"
 #include "dump-extensions/faultlog-dump/faultlog-dump-extensions.hpp"
 #include "dump-extensions/fdr-dump/fdr-dump-extensions.hpp"
+#include "dump-extensions/nvidia-dumps/oem_dump_utils.hpp"
 #include "dump_manager.hpp"
 #include "dump_manager_bmc.hpp"
 #include "dump_manager_faultlog.hpp"
@@ -73,6 +74,10 @@ int main()
 
     try
     {
+        // Add the object for the AllowableValues interface
+        phosphor::dump::OEMTypeAllowableValuesIf objOEMTypeAllowableValuesIf(
+            DUMP_OEM_ALLOWABLE_VALUES_PATH);
+
         phosphor::dump::DumpManagerList dumpMgrList{};
         std::unique_ptr<phosphor::dump::bmc::Manager> bmcDumpMgr =
             std::make_unique<phosphor::dump::bmc::Manager>(
