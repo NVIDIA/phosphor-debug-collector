@@ -303,8 +303,15 @@ uint32_t retimerLtssmDump(const std::string& dumpId,
                           const std::string& dumpPath,
                           const std::string& vendorId)
 {
+    // Construct additional options for Retimer Ltssm Dump
+    std::vector<std::pair<std::string, std::string>> options;
+    if (!vendorId.empty())
+    {
+        options.push_back({"-v", vendorId});
+    }
+
     return executeDumpCommand(
-        RETIMER_LTSSM_DUMP_BIN_PATH, dumpId, dumpPath, {{"-v", vendorId}},
+        RETIMER_LTSSM_DUMP_BIN_PATH, dumpId, dumpPath, options,
         "System dump: Error occurred during retimerLtssmDump function execution");
 }
 
@@ -313,9 +320,19 @@ uint32_t retimerRegisterDump(const std::string& dumpId,
                              const std::string& retimer_address,
                              const std::string& vendorId)
 {
+    // Construct additional options for Retimer Register Dump
+    std::vector<std::pair<std::string, std::string>> options;
+    if (!retimer_address.empty())
+    {
+        options.push_back({"-a", retimer_address});
+    }
+    if (!vendorId.empty())
+    {
+        options.push_back({"-v", vendorId});
+    }
+
     return executeDumpCommand(
-        RETIMER_REGISTER_DUMP_BIN_PATH, dumpId, dumpPath,
-        {{"-a", retimer_address}, {"-v", vendorId}},
+        RETIMER_REGISTER_DUMP_BIN_PATH, dumpId, dumpPath, options,
         "System dump: Error occurred during retimerRegisterDump function execution");
 }
 
