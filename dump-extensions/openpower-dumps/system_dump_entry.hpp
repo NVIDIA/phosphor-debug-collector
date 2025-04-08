@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dump_entry.hpp"
+#include "dump_manager_system.hpp"
 #include "xyz/openbmc_project/Dump/Entry/System/server.hpp"
 
 #include <sdbusplus/bus.hpp>
@@ -18,7 +19,6 @@ using ServerObject = typename sdbusplus::server::object_t<T>;
 using EntryIfaces = sdbusplus::server::object_t<
     sdbusplus::xyz::openbmc_project::Dump::Entry::server::System>;
 
-namespace fs = std::experimental::filesystem;
 using originatorTypes = sdbusplus::xyz::openbmc_project::Common::server::
     OriginatedBy::OriginatorTypes;
 

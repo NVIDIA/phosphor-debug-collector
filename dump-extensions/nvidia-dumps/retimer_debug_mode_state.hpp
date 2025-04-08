@@ -48,7 +48,7 @@ class State : virtual public DebugModeIface, virtual public ServiceReadyIface
 {
   public:
     State() = delete;
-    State(const State&) = default;
+    State(const State&) = delete;
     State& operator=(const State&) = delete;
     State(State&&) = delete;
     State& operator=(State&&) = delete;

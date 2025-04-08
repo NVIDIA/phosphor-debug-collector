@@ -69,9 +69,9 @@ class CreateDumpDbusException : std::exception
      *
      * @return error message
      */
-    std::string what()
+    const char* what() const noexcept override
     {
-        return this->errorMsg;
+        return this->errorMsg.c_str();
     }
 
   protected:

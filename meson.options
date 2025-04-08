@@ -2,296 +2,393 @@
 
 option('tests', type: 'feature', description: 'Build tests')
 
-option('create-dump-dbus', type: 'feature', description:
-        'Tool allows the service user create a dump via dbus', value: 'enabled'
-      )
+option(
+    'create-dump-dbus',
+    type: 'feature',
+    value: 'enabled',
+    description: 'Tool allows the service user create a dump via dbus',
+)
 
-option('nsm-net-dump-tool', type: 'feature', description:
-        'Wrapper tool around the NSM APIs for debug logs collection', value: 'disabled'
-      )
+option(
+    'nsm-net-dump-tool',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Wrapper tool around the NSM APIs for debug logs collection',
+)
 
-option('jffs-workaround', type: 'feature',
-        description : 'Turn on jffs workaround for core file'
-      )
+option(
+    'jffs-workaround',
+    type: 'feature',
+    description: 'Turn on jffs workaround for core file',
+)
 
-option('JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT', type : 'integer',
-        value : 2,
-        description : '''jffs2 reported no-space-left write error despite clearly 
+option(
+    'JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT',
+    type: 'integer',
+    value: 2,
+    description: '''jffs2 reported no-space-left write error despite clearly 
         showing some space left, use percent of partition *capacity* as a space 
-        *available* offset, eg. 200MB partition, 2% offset, 196MB available'''
-      )      
-
-option('DUMP_BUSNAME', type : 'string',
-        value : 'xyz.openbmc_project.Dump.Manager',
-        description : 'The D-Bus busname to own'
-      )
-
-option('DUMP_OBJPATH', type : 'string',
-        value : '/xyz/openbmc_project/dump',
-        description : 'The dump manager D-Bus root'
-      )
-
-option('BMC_DUMP_OBJPATH', type : 'string',
-        value : '/xyz/openbmc_project/dump/bmc',
-        description : 'The BMC dump manager D-Bus object path'
-      )
-
-option('CORE_FILE_DIR', type : 'string',
-        value : '/var/lib/systemd/coredump',
-        description : 'Directory where core dumps are placed'
-      )
-
-option('BMC_DUMP_OBJ_ENTRY', type : 'string',
-        value : '/xyz/openbmc_project/dump/bmc/entry',
-        description : 'The BMC dump entry D-Bus object path'
-      )
-
-option('BMC_DUMP_PATH', type : 'string',
-        value : '/var/lib/logging/dumps/bmc/',
-        description : 'Directory where bmc dumps are placed'
-      )
-
-option('SYSTEMD_PSTORE_PATH', type : 'string',
-        value : '/var/lib/systemd/pstore/',
-        description : 'Path to the systemd pstore directory'
+        *available* offset, eg. 200MB partition, 2% offset, 196MB available''',
 )
 
-option('SYSTEM_DUMP_PATH', type : 'string',
-        value : '/var/lib/logging/dumps/system/',
-        description : 'Directory where system dumps are placed'
+option(
+    'DUMP_BUSNAME',
+    type: 'string',
+    value: 'xyz.openbmc_project.Dump.Manager',
+    description: 'The D-Bus busname to own',
 )
 
-option('BMC_DUMP_MAX_SIZE', type : 'integer',
-        value : 200,
-        description : 'Maximum size of one bmc dump in kilo bytes'
-      )
+option(
+    'DUMP_OBJPATH',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump',
+    description: 'The dump manager D-Bus root',
+)
 
-option('BMC_DUMP_MIN_SPACE_REQD', type : 'integer',
-        value : 20,
-        description : 'Minimum space required for one bmc dump in kilo bytes'
-      )
+option(
+    'BMC_DUMP_OBJPATH',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/bmc',
+    description: 'The BMC dump manager D-Bus object path',
+)
 
-option('BMC_DUMP_TOTAL_SIZE', type : 'integer',
-        value : 1024,
-        description : 'Total size of the dump in kilo bytes'
-      )
+option(
+    'CORE_FILE_DIR',
+    type: 'string',
+    value: '/var/lib/systemd/coredump',
+    description: 'Directory where core dumps are placed',
+)
 
-option('BMC_DUMP_MAX_LIMIT', type : 'integer',
-        value : 0,
-        description : 'Total dumps to be retained on bmc, 0 represents unlimited dumps'
-      )
+option(
+    'BMC_DUMP_OBJ_ENTRY',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/bmc/entry',
+    description: 'The BMC dump entry D-Bus object path',
+)
 
-option('BMC_CORE_DUMP_MAX_LIMIT', type : 'integer',
-        value : 5,
-        description : 'Total core dumps to be retained on bmc, 0 represents unlimited dumps'
-      )
+option(
+    'BMC_DUMP_PATH',
+    type: 'string',
+    value: '/var/lib/logging/dumps/bmc/',
+    description: 'Directory where bmc dumps are placed',
+)
 
-option('ELOG_ID_PERSIST_PATH', type : 'string',
-        value : '/var/lib/logging/dumps/elogid',
-        description : 'Path of file for storing elog id\'s, which have associated dumps'
-      )
+option(
+    'SYSTEMD_PSTORE_PATH',
+    type: 'string',
+    value: '/var/lib/systemd/pstore/',
+    description: 'Path to the systemd pstore directory',
+)
 
-option('CLASS_VERSION', type : 'integer',
-        value : 1,
-        description : 'Class version to register with Cereal'
-      )
+option(
+    'SYSTEM_DUMP_PATH',
+    type: 'string',
+    value: '/var/lib/logging/dumps/system/',
+    description: 'Directory where system dumps are placed',
+)
 
-option('ERROR_MAP_YAML', type : 'string',
-        value : 'example_errors_watch.yaml',
-        description : 'YAML filepath containing error object paths'
-      )
+option(
+    'BMC_DUMP_MAX_SIZE',
+    type: 'integer',
+    value: 200,
+    description: 'Maximum size of one bmc dump in kilo bytes',
+)
 
-option('host-transport', type : 'string',
-        value : 'default',
-        description : 'To specify the host dump transport protocol')
+option(
+    'BMC_DUMP_MIN_SPACE_REQD',
+    type: 'integer',
+    value: 20,
+    description: 'Minimum space required for one bmc dump in kilo bytes',
+)
 
-option('openpower-dumps-extension', type: 'feature',
-        value : 'disabled',
-        description : 'Enable Open Power specific dumps'
-      )
+option(
+    'BMC_DUMP_TOTAL_SIZE',
+    type: 'integer',
+    value: 1024,
+    description: 'Total size of the dump in kilo bytes',
+)
 
-option('nvidia-dumps-extension', type: 'feature',
-        value : 'enabled',
-        description : 'Enable Nvidia system specific dumps'
-      )
+option(
+    'BMC_DUMP_MAX_LIMIT',
+    type: 'integer',
+    value: 0,
+    description: 'Total dumps to be retained on bmc, 0 represents unlimited dumps',
+)
 
-option('SYSTEM_DUMP_MAX_SIZE', type : 'integer',
-        value : 500,
-        description : 'Maximum size of one system dump in kilo bytes'
-      )
+option(
+    'BMC_CORE_DUMP_MAX_LIMIT',
+    type: 'integer',
+    value: 5,
+    description: 'Total core dumps to be retained on bmc, 0 represents unlimited dumps',
+)
 
-option('SYSTEM_DUMP_MIN_SPACE_REQD', type : 'integer',
-        value : 50,
-        description : 'Minimum space required for one system dump in kilo bytes'
-      )
+option(
+    'ELOG_ID_PERSIST_PATH',
+    type: 'string',
+    value: '/var/lib/logging/dumps/elogid',
+    description: 'Path of file for storing elog id\'s, which have associated dumps',
+)
 
-option('SYSTEM_DUMP_TOTAL_SIZE', type : 'integer',
-        value : 1024,
-        description : 'Total size of the dump in kilo bytes'
-      )
+option(
+    'CLASS_VERSION',
+    type: 'integer',
+    value: 1,
+    description: 'Class version to register with Cereal',
+)
 
-option('SYSTEM_DUMP_MAX_LIMIT', type : 'integer',
-        value : 10,
-        description : 'Total system dumps to be retained on bmc, 0 represents unlimited dumps'
-      )
+option(
+    'ERROR_MAP_YAML',
+    type: 'string',
+    value: 'example_errors_watch.yaml',
+    description: 'YAML filepath containing error object paths',
+)
 
-option('dump_rotate_config', type: 'feature',
-        value : 'disabled',
-        description : 'Enable rotate config for bmc dump'
-      )
+option(
+    'host-transport',
+    type: 'string',
+    value: 'default',
+    description: 'To specify the host dump transport protocol',
+)
+
+option(
+    'nvidia-dumps-extension',
+    type: 'feature',
+    value: 'enabled',
+    description: 'Enable Nvidia system specific dumps',
+)
+
+option(
+    'openpower-dumps-extension',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Enable Open Power specific dumps',
+)
+
+option(
+    'SYSTEM_DUMP_MAX_SIZE',
+    type: 'integer',
+    value: 500,
+    description: 'Maximum size of one system dump in kilo bytes',
+)
+
+option(
+    'SYSTEM_DUMP_MIN_SPACE_REQD',
+    type: 'integer',
+    value: 50,
+    description: 'Minimum space required for one system dump in kilo bytes',
+)
+
+option(
+    'SYSTEM_DUMP_TOTAL_SIZE',
+    type: 'integer',
+    value: 1024,
+    description: 'Total size of the dump in kilo bytes',
+)
+
+option(
+    'SYSTEM_DUMP_MAX_LIMIT',
+    type: 'integer',
+    value: 10,
+    description: 'Total system dumps to be retained on bmc, 0 represents unlimited dumps',
+)
+
+option(
+    'dump_rotate_config',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Enable rotate config for bmc dump',
+)
 
 # Fault log options
 
-option('FAULTLOG_DUMP_PATH', type : 'string',
-        value : '/var/lib/phosphor-debug-collector/faultlogs/',
-        description : 'Directory where fault logs are placed'
-      )
+option(
+    'FAULTLOG_DUMP_PATH',
+    type: 'string',
+    value: '/var/lib/logging/dumps/faultlog/',
+    description: 'Directory where fault logs are placed',
+)
 
-option('FAULTLOG_DUMP_OBJPATH', type : 'string',
-        value : '/xyz/openbmc_project/dump/faultlog',
-        description : 'The fault log dump manager D-Bus object path'
-      )
+option(
+    'FAULTLOG_DUMP_OBJPATH',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/faultlog',
+    description: 'The fault log dump manager D-Bus object path',
+)
 
-option('FAULTLOG_DUMP_OBJ_ENTRY', type : 'string',
-        value : '/xyz/openbmc_project/dump/faultlog/entry',
-        description : 'The fault log dump entry D-Bus object path'
-      )
+option(
+    'FAULTLOG_DUMP_OBJ_ENTRY',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/faultlog/entry',
+    description: 'The fault log dump entry D-Bus object path',
+)
+
+option(
+    'FAULTLOG_DUMP_MAX_LIMIT',
+    type: 'integer',
+    value: 10,
+    description: 'Total fault log dumps to be retained on bmc, 0 represents unlimited dumps',
+)
+
+option(
+    'FAULTLOG_DUMP_TOTAL_SIZE',
+    type: 'integer',
+    value: 1024,
+    description: 'Total size of the dump in kilo bytes',
+)
+
+option(
+    'FAULTLOG_DUMP_MIN_SPACE_REQD',
+    type: 'integer',
+    value: 50,
+    description: 'Minimum space required for one fault log dump in kilo bytes',
+)
+
+option(
+    'FAULTLOG_DUMP_MAX_SIZE',
+    type: 'integer',
+    value: 500,
+    description: 'Maximum size of one fault log dump in kilo bytes',
+)
+
+option(
+    'faultlog-dump-extension',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Enable FaultLog dump',
+)
+
+option(
+    'faultlog-dump-rotation',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Rotate dump when total size of dumps exceed the quota',
+)
+
+option(
+    'CPER_DUMP_BIN_PATH',
+    type: 'string',
+    value: '/usr/bin/cper_dump.sh',
+    description: 'The path of cper dump script',
+)
 
 # Configurations for openpower-dump extension
 
 # System dump options
 
-option('SYSTEM_DUMP_OBJPATH', type : 'string',
-        value : '/xyz/openbmc_project/dump/system',
-        description : 'The system dump manager D-Bus object path'
-      )
+option(
+    'SYSTEM_DUMP_OBJPATH',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/system',
+    description: 'The system dump manager D-Bus object path',
+)
 
-option('SYSTEM_DUMP_OBJ_ENTRY', type : 'string',
-        value : '/xyz/openbmc_project/dump/system/entry',
-        description : 'The system dump entry D-Bus object path'
-      )
-
+option(
+    'SYSTEM_DUMP_OBJ_ENTRY',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/system/entry',
+    description: 'The system dump entry D-Bus object path',
+)
 
 # Retimer debug mode options
 
-option('RETIMER_DEBUG_MODE_OBJPATH', type : 'string',
-        value : '/xyz/openbmc_project/dump/retimer',
-        description : 'The retimer Debug Mode state D-Bus object path'
-      )
+option(
+    'RETIMER_DEBUG_MODE_OBJPATH',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/retimer',
+    description: 'The retimer Debug Mode state D-Bus object path',
+)
 
 # Resource dump options
 
-option('RESOURCE_DUMP_OBJPATH', type : 'string',
-        value : '/xyz/openbmc_project/dump/resource',
-        description : 'The resource dump manager D-Bus object path'
-      )
-
-option('RESOURCE_DUMP_OBJ_ENTRY', type : 'string',
-        value : '/xyz/openbmc_project/dump/resource/entry',
-        description : 'The resource dump entry D-Bus object path'
-      )
-
-# FaultLog dump options
-option('CPER_DUMP_BIN_PATH', type : 'string',
-        value : '/usr/bin/cper_dump.sh',
-        description : 'The path of cper dump script'
-      )
-
-option('faultlog-dump-extension', type: 'feature',
-        value : 'disabled',
-        description : 'Enable FaultLog dump'
-      )
-
-option('FAULTLOG_DUMP_OBJPATH', type : 'string',
-        value : '/xyz/openbmc_project/dump/faultlog',
-        description : 'The fault log dump manager D-Bus object path'
-      )
-
-option('FAULTLOG_DUMP_OBJ_ENTRY', type : 'string',
-        value : '/xyz/openbmc_project/dump/faultlog/entry',
-        description : 'The fault log dump entry D-Bus object path'
-      )
-
-option('FAULTLOG_DUMP_MAX_LIMIT', type : 'integer',
-        value : 10,
-        description : 'Total fault log dumps to be retained on bmc, 0 represents unlimited dumps'
-      )
-
-option('FAULTLOG_DUMP_PATH', type : 'string',
-        value : '/var/lib/logging/dumps/faultlog/',
-        description : 'Directory where fault log dumps are placed'
+option(
+    'RESOURCE_DUMP_OBJPATH',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/resource',
+    description: 'The resource dump manager D-Bus object path',
 )
 
-option('FAULTLOG_DUMP_TOTAL_SIZE', type : 'integer',
-        value : 1024,
-        description : 'Total size of the dump in kilo bytes'
-      )
-
-option('FAULTLOG_DUMP_MIN_SPACE_REQD', type : 'integer',
-        value : 50,
-        description : 'Minimum space required for one fault log dump in kilo bytes'
-      )
-
-option('FAULTLOG_DUMP_MAX_SIZE', type : 'integer',
-        value : 500,
-        description : 'Maximum size of one fault log dump in kilo bytes'
-      )
-
-option('faultlog-dump-rotation', type : 'feature',
-        description : 'Rotate dump when total size of dumps exceed the quota', value: 'disabled'
-      )
+option(
+    'RESOURCE_DUMP_OBJ_ENTRY',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/resource/entry',
+    description: 'The resource dump entry D-Bus object path',
+)
 
 # FDR dump options
-option('FDR_DUMP_BIN_PATH', type : 'string',
-        value : '/usr/bin/fdr_dump.sh',
-        description : 'The path of FDR dump script'
-      )
 
-option('fdr-dump-extension', type: 'feature',
-        value : 'disabled',
-        description : 'Enable FDR dump'
-      )
-
-option('FDR_DUMP_OBJPATH', type : 'string',
-        value : '/xyz/openbmc_project/dump/fdr',
-        description : 'The FDR dump manager D-Bus object path'
-      )
-
-option('FDR_DUMP_OBJ_ENTRY', type : 'string',
-        value : '/xyz/openbmc_project/dump/fdr/entry',
-        description : 'The FDR dump entry D-Bus object path'
-      )
-
-option('FDR_DUMP_MAX_LIMIT', type : 'integer',
-        value : 1,
-        description : 'Total FDR dumps to be retained on bmc, 0 represents unlimited dumps'
-      )
-
-option('FDR_DUMP_PATH', type : 'string',
-        value : '/var/lib/logging/dumps/fdr/',
-        description : 'Directory where FDR dumps are placed'
+option(
+    'FDR_DUMP_BIN_PATH',
+    type: 'string',
+    value: '/usr/bin/fdr_dump.sh',
+    description: 'The path of FDR dump script',
 )
 
-option('FDR_DUMP_TOTAL_SIZE', type : 'integer',
-        value : 1024,
-        description : 'Total size of the dump in kilo bytes'
-      )
+option(
+    'fdr-dump-extension',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Enable FDR dump',
+)
 
-option('FDR_DUMP_MIN_SPACE_REQD', type : 'integer',
-        value : 50,
-        description : 'Minimum space required for one FDR dump in kilo bytes'
-      )
+option(
+    'FDR_DUMP_OBJPATH',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/fdr',
+    description: 'The FDR dump manager D-Bus object path',
+)
 
-option('FDR_DUMP_MAX_SIZE', type : 'integer',
-        value : 500,
-        description : 'Maximum size of one FDR dump in kilo bytes'
-      )
+option(
+    'FDR_DUMP_OBJ_ENTRY',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/fdr/entry',
+    description: 'The FDR dump entry D-Bus object path',
+)
 
-option('fdr-dump-rotation', type : 'feature',
-        description : 'Rotate dump when total size of dumps exceed the quota', value: 'disabled'
-      )
+option(
+    'FDR_DUMP_MAX_LIMIT',
+    type: 'integer',
+    value: 1,
+    description: 'Total FDR dumps to be retained on bmc, 0 represents unlimited dumps',
+)
 
-option('COMPRESSION_TYPE', type : 'string',
-        value : 'xz',
-        description : 'compression type for the bmc dump it can be xz or zstd'
+option(
+    'FDR_DUMP_PATH',
+    type: 'string',
+    value: '/var/lib/logging/dumps/fdr/',
+    description: 'Directory where FDR dumps are placed',
+)
+
+option(
+    'FDR_DUMP_TOTAL_SIZE',
+    type: 'integer',
+    value: 1024,
+    description: 'Total size of the dump in kilo bytes',
+)
+
+option(
+    'FDR_DUMP_MIN_SPACE_REQD',
+    type: 'integer',
+    value: 50,
+    description: 'Minimum space required for one FDR dump in kilo bytes',
+)
+
+option(
+    'FDR_DUMP_MAX_SIZE',
+    type: 'integer',
+    value: 500,
+    description: 'Maximum size of one FDR dump in kilo bytes',
+)
+
+option(
+    'fdr-dump-rotation',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Rotate dump when total size of dumps exceed the quota',
+)
+
+option(
+    'COMPRESSION_TYPE',
+    type: 'string',
+    value: 'xz',
+    description: 'compression type for the bmc dump it can be xz or zstd',
 )

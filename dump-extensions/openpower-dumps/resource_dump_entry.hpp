@@ -2,10 +2,12 @@
 
 #include "com/ibm/Dump/Entry/Resource/server.hpp"
 #include "dump_entry.hpp"
+#include "dump_manager_resource.hpp"
 
-#include <chrono>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
+
+#include <chrono>
 
 namespace openpower
 {
@@ -19,7 +21,6 @@ using ServerObject = typename sdbusplus::server::object_t<T>;
 using EntryIfaces = sdbusplus::server::object_t<
     sdbusplus::com::ibm::Dump::Entry::server::Resource>;
 
-namespace fs = std::experimental::filesystem;
 using originatorTypes = sdbusplus::xyz::openbmc_project::Common::server::
     OriginatedBy::OriginatorTypes;
 

@@ -23,7 +23,6 @@ namespace dump
 namespace elog
 {
 
-constexpr auto LOG_PATH = "/xyz/openbmc_project/logging";
 using Message = std::string;
 using Attributes = std::variant<Message>;
 using AttributeName = std::string;
@@ -141,7 +140,8 @@ void Watch::addCallback(sdbusplus::message_t& msg)
     }
     catch (const QuotaExceeded& e)
     {
-        // No action now
+        // No action needed
+        lg2::warning("Skipping exception: QuotaExceeded during createDump");
     }
     return;
 }

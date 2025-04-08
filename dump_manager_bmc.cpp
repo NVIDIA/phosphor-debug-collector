@@ -31,8 +31,8 @@ using namespace phosphor::logging;
 bool Manager::fUserDumpInProgress = false;
 constexpr auto BMC_DUMP = "BMC_DUMP";
 
-sdbusplus::message::object_path
-    Manager::createDump(phosphor::dump::DumpCreateParams params)
+sdbusplus::message::object_path Manager::createDump(
+    phosphor::dump::DumpCreateParams params)
 {
     if (params.size() > CREATE_DUMP_MAX_PARAMS)
     {
@@ -70,7 +70,8 @@ sdbusplus::message::object_path
     }
 
     lg2::info("Initiating new BMC dump with type: {TYPE} path: {PATH}", "TYPE",
-              dumpTypeToString(dumpType).value(), "PATH", path);
+              dumpTypeToString(dumpType).value_or("unknown").c_str(), "PATH",
+              path);
 
     auto id = captureDump(dumpType, path);
 
@@ -122,7 +123,7 @@ uint32_t Manager::captureDump(DumpTypes type, const std::string& path)
         auto id = std::to_string(lastEntryId + 1);
         dumpPath /= id;
 
-        auto strType = dumpTypeToString(type).value();
+        auto strType = dumpTypeToString(type).value_or("unknown");
         execl("/usr/bin/dreport", "dreport", "-d", dumpPath.c_str(), "-i",
               id.c_str(), "-s", std::to_string(size).c_str(), "-q", "-v", "-p",
               path.empty() ? "" : path.c_str(), "-t", strType.c_str(), "-c",
@@ -331,7 +332,8 @@ size_t getDirectorySize(const std::string dir)
     {
         if (!std::filesystem::is_directory(p))
         {
-            size += std::ceil(std::filesystem::file_size(p) / 1024.0);
+            std::uintmax_t fileSize = std::filesystem::file_size(p);
+            size += std::ceil(static_cast<double>(fileSize) / 1024.0);
         }
     }
     return size;

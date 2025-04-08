@@ -15,6 +15,9 @@
 #include <xyz/openbmc_project/Common/File/error.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 
+#include <fstream>
+#include <span>
+
 namespace phosphor
 {
 namespace dump
@@ -36,7 +39,7 @@ using namespace phosphor::logging;
 void writeOnUnixSocket(const int socket, const char* buf,
                        const uint64_t blockSize)
 {
-    int numOfBytesWrote = 0;
+    ssize_t numOfBytesWrote = 0;
 
     for (uint64_t i = 0; i < blockSize; i = i + numOfBytesWrote)
     {
@@ -50,8 +53,8 @@ void writeOnUnixSocket(const int socket, const char* buf,
         FD_SET(socket, &writeFileDescriptor);
         int nextFileDescriptor = socket + 1;
 
-        int retVal = select(nextFileDescriptor, NULL, &writeFileDescriptor,
-                            NULL, &timeVal);
+        int retVal = select(nextFileDescriptor, nullptr, &writeFileDescriptor,
+                            nullptr, &timeVal);
         if (retVal <= 0)
         {
             lg2::error("writeOnUnixSocket: select() failed, errno: {ERRNO}",
@@ -101,8 +104,12 @@ int socketInit(const std::string& sockPath)
             "UNIX socket path is too long " + std::string(strerror(errno));
         throw std::length_error(msg);
     }
-    strncpy(socketAddr.sun_path, sockPath.c_str(),
-            sizeof(socketAddr.sun_path) - 1);
+
+    std::span<char> sunPathSpan(reinterpret_cast<char*>(socketAddr.sun_path),
+                                sizeof(socketAddr.sun_path));
+    strncpy(sunPathSpan.data(), sockPath.c_str(), sunPathSpan.size() - 1);
+    sunPathSpan[sunPathSpan.size() - 1] = '\0'; // Ensure null-termination
+
     if ((unixSocket = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) == -1)
     {
         lg2::error("socketInit: socket() failed, errno: {ERRNO}", "ERRNO",
@@ -150,7 +157,7 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
         FD_SET(unixSocket(), &readFD);
         int numOfFDs = unixSocket() + 1;
 
-        int retVal = select(numOfFDs, &readFD, NULL, NULL, &timeVal);
+        int retVal = select(numOfFDs, &readFD, nullptr, nullptr, &timeVal);
         if (retVal <= 0)
         {
             lg2::error("select() failed, errno: {ERRNO}, DUMP_ID: {DUMP_ID}",
@@ -160,7 +167,7 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
         }
         else if ((retVal > 0) && (FD_ISSET(unixSocket(), &readFD)))
         {
-            CustomFd socketFD = accept(unixSocket(), NULL, NULL);
+            CustomFd socketFD = accept(unixSocket(), nullptr, nullptr);
             if (socketFD() < 0)
             {
                 lg2::error(
@@ -197,7 +204,7 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
             // allocate memory to contain file data
             std::unique_ptr<char[]> buffer(new char[size]);
             // get file data
-            pbuf->sgetn(buffer.get(), size);
+            pbuf->sgetn(buffer.get(), static_cast<std::streamsize>(size));
             infile.close();
             writeOnUnixSocket(socketFD(), buffer.get(), size);
         }

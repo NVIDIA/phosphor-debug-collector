@@ -164,7 +164,7 @@ int CreateDumpDbus::copyDumpToTmpDir(const std::string& dPath,
     }
     catch (CreateDumpDbusException& e)
     {
-        log<level::ERR>(e.what().c_str());
+        log<level::ERR>(e.what());
         response = e.what();
         return -1;
     }

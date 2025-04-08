@@ -1,12 +1,13 @@
 #!/bin/bash
 #
 # config: 2 30
-# @brief: Collect kernal command line  information.
+# @brief: Collect kernal command line  parameter.
 #
 
-. $DREPORT_INCLUDE/functions
+# shellcheck source=/dev/null
+. "$DREPORT_INCLUDE"/functions
 
-desc="kernalcmdline"
+desc="Kernel command line parameters"
 file_name="kernalcmdline.log"
 command="cat /proc/cmdline"
 

@@ -5,6 +5,8 @@
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/lg2.hpp>
 
+#include <span>
+
 namespace phosphor
 {
 namespace dump
@@ -20,6 +22,7 @@ Watch::~Watch()
 {
     if ((fd() >= 0) && (wd >= 0))
     {
+        sd_event_source_unref(source);
         inotify_rm_watch(fd(), wd);
     }
 
@@ -54,7 +57,7 @@ Watch::Watch(const EventPtr& eventObj, const int flags, const uint32_t mask,
     }
 
     auto rc =
-        sd_event_add_io(eventObj.get(), nullptr, fd(), events, callback, this);
+        sd_event_add_io(eventObj.get(), &source, fd(), events, callback, this);
     if (0 > rc)
     {
         // Failed to add to event loop
@@ -83,7 +86,7 @@ int Watch::callback(sd_event_source*, int fd, uint32_t revents, void* userdata)
 {
     auto userData = static_cast<Watch*>(userdata);
 
-    if (!(revents & userData->events))
+    if ((revents & userData->events) == 0U)
     {
         return 0;
     }
@@ -93,7 +96,8 @@ int Watch::callback(sd_event_source*, int fd, uint32_t revents, void* userdata)
     uint8_t buffer[maxBytes];
     memset(buffer, '\0', maxBytes);
 
-    auto bytes = read(fd, buffer, maxBytes - 1);
+    std::span<char> bufferSpan(reinterpret_cast<char*>(buffer), maxBytes);
+    auto bytes = read(fd, bufferSpan.data(), bufferSpan.size());
     if (0 > bytes)
     {
         // Failed to read inotify event
@@ -114,7 +118,7 @@ int Watch::callback(sd_event_source*, int fd, uint32_t revents, void* userdata)
         auto event = reinterpret_cast<inotify_event*>(&buffer[offset]);
         auto mask = event->mask & userData->mask;
 
-        if (mask)
+        if (mask != 0U)
         {
             userMap.emplace((userData->path / event->name), mask);
         }

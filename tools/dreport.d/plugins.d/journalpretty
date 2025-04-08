@@ -8,7 +8,7 @@
 
 desc="Journal pretty log"
 file_name="journal-pretty.log"
-command="journalctl -o json-pretty"
+command="journalctl --namespace=* -o json-pretty"
 
 add_cmd_output "$command" "$file_name" "$desc"
 

@@ -50,8 +50,8 @@ class Watch
 
     Watch(const Watch&) = delete;
     Watch& operator=(const Watch&) = delete;
-    Watch(Watch&&) = default;
-    Watch& operator=(Watch&&) = default;
+    Watch(Watch&&) = delete;
+    Watch& operator=(Watch&&) = delete;
 
     /* @brief dtor - remove inotify watch and close fd's */
     ~Watch();
@@ -97,6 +97,9 @@ class Watch
 
     /** @brief The user level callback function wrapper */
     UserType userFunc;
+
+    /** @brief The event source object reference */
+    sd_event_source* source = nullptr;
 };
 
 } // namespace inotify
