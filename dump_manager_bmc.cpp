@@ -112,6 +112,7 @@ uint32_t Manager::captureDump(DumpTypes type, const std::string& path)
     auto size = getAllowedSize();
 
     log<level::INFO>(fmt::format("Capturing BMC dump of type ({})",
+                                 //NOLINTNEXTLINE
                                  dumpTypeToString(type).value())
                          .c_str());
 
@@ -150,7 +151,7 @@ uint32_t Manager::captureDump(DumpTypes type, const std::string& path)
                                   std::to_string(si->si_pid) + "; (status)" +
                                   std::to_string(si->si_status);
                 lg2::error(msg.c_str());
-                this->createDumpFailed(entryId);
+                this->createDumpFailed(static_cast<int>(entryId));
             }
             if (type == DumpTypes::USER)
             {

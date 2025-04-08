@@ -81,10 +81,12 @@ class State : virtual public DebugModeIface, virtual public ServiceReadyIface
             reply.read(propertyValue);
             vendorId = std::get<std::string>(propertyValue);
         }
+        //NOLINTBEGIN
         catch (const std::exception& e)
         {
             // ignore the error when the resource service is also starting
         }
+        //NOLINTEND
         if (!vendorId.empty())
         {
             retimerVendorId = vendorId;

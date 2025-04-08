@@ -51,6 +51,7 @@ constexpr auto systemDumpMaxTimeLimitInSec = 2700;
 
 namespace fs = std::filesystem;
 
+//NOLINTNEXTLINE
 class Manager;
 
 /** @class Entry
@@ -116,11 +117,11 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize,
                               file, status, originatorId, originatorType,
                               parent),
-        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit)
+        EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),
+        dumpType(diagnosticType)
     {
         // Emit deferred signal.
         this->phosphor::dump::system::EntryIfaces::emit_object_added();
-        dumpType = diagnosticType;
         // Create timer for entries which are in progress
         if (phosphor::dump::Entry::status() == OperationStatus::InProgress)
         {
@@ -131,9 +132,9 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
                 float timeProgress =
                     now <= limit ? (((float)(limit - now) /
                                      (float)systemDumpMaxTimeLimitInSec) *
-                                    100.0)
-                                 : 100.0;
-                progress(100 - timeProgress);
+                                    100.0F)
+                                 : 100.0F;
+                progress(static_cast<uint8_t>(100 - timeProgress));
                 std::string m =
                     "Dump is " + std::to_string(100 - timeProgress) + " " +
                     std::to_string(now) + " " + std::to_string(limit) + +" " +
@@ -201,7 +202,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
 
     /** @brief Minimal interface to allow setting status as failed
      */
-    void setFailedStatus(void)
+    void setFailedStatus()
     {
         status(phosphor::dump::OperationStatus::Failed);
     }
@@ -214,7 +215,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         return dumpType;
     }
 
-    void clearProcessGroupId(void)
+    void clearProcessGroupId()
     {
         entryProcessGroupID = 0;
     }

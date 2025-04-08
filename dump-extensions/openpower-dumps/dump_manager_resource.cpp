@@ -74,7 +74,7 @@ void Manager::notify(uint32_t dumpId, uint64_t size)
     // Get the id
     auto id = lastEntryId + 1;
     auto idString = std::to_string(id);
-    auto objPath = fs::path(baseEntryPath) / idString;
+    auto objPath = std::filesystem::path(baseEntryPath) / idString;
 
     // TODO: Get the originator Id, type from the persisted file.
     // For now replacing it with null
@@ -120,6 +120,10 @@ sdbusplus::message::object_path Manager::createDump(
             Reason("Resource dump can be initiated only when the host is up"));
         return std::string();
     }
+
+    using InvalidArgument =
+        sdbusplus::xyz::openbmc_project::Common::Error::InvalidArgument;
+    using Argument = xyz::openbmc_project::Common::InvalidArgument;
     using CreateParameters =
         sdbusplus::com::ibm::Dump::server::Create::CreateParameters;
 

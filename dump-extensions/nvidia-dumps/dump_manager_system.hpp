@@ -16,6 +16,7 @@
  */
 #pragma once
 
+#include "config.h"
 #include "dump_manager.hpp"
 #include "dump_utils.hpp"
 #include "nvidia_dumps_config.hpp"
@@ -51,6 +52,7 @@ using ::sdeventplus::source::Child;
  *  @details A concrete implementation for the
  *  xyz.openbmc_project.Dump.Create DBus API
  */
+//NOLINTNEXTLINE
 class Manager :
     virtual public CreateIface,
     virtual public phosphor::dump::Manager

@@ -25,7 +25,6 @@
 #include <phosphor-logging/elog-errors.hpp>
 #include <sdbusplus/bus.hpp>
 
-#include "dump-extensions/fdr-dump/fdr_dump_config.h"
 
 namespace phosphor
 {

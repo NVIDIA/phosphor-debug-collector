@@ -37,7 +37,6 @@
 #include <sdeventplus/source/base.hpp>
 #include <string>
 
-#include "dump-extensions/faultlog-dump/faultlog_dump_config.h"
 
 using json = nlohmann::json;
 
@@ -66,7 +65,7 @@ void Manager::limitDumpEntries()
         return;
     }
     // Get the oldest dumps
-    int excessDumps = totalDumps - (FAULTLOG_DUMP_MAX_LIMIT - 1);
+    size_t excessDumps = totalDumps - (FAULTLOG_DUMP_MAX_LIMIT - 1);
     // Delete the oldest dumps
     auto d = entries.begin();
     while (d != entries.end() && excessDumps)
@@ -183,6 +182,7 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
+//NOLINTBEGIN
 uint32_t cperDump(const std::string& dumpId, const std::string& dumpPath,
                   const std::string& cperPath)
 {
@@ -209,7 +209,7 @@ uint32_t cperDump(const std::string& dumpId, const std::string& dumpPath,
                     entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
-
+//NOLINTEND
 FaultLogEntryInfo Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     FaultDataType type{};
@@ -259,7 +259,7 @@ FaultLogEntryInfo Manager::captureDump(phosphor::dump::DumpCreateParams params)
                                   std::to_string(si->si_pid) + "; (status)" +
                                   std::to_string(si->si_status);
                 log<level::ERR>(msg.c_str());
-                this->createDumpFailed(entryId);
+                this->createDumpFailed(static_cast<int>(entryId));
             }
 
             this->childPtrMap.erase(pid);
@@ -301,7 +301,7 @@ void Manager::createEntry(const fs::path& file)
     // Dump File Name format obmcdump_ID_EPOCHTIME.EXT
     static constexpr auto ID_POS = 1;
     static constexpr auto EPOCHTIME_POS = 2;
-    std::regex file_regex("obmcdump_([0-9]+)_([0-9]+)\\.([a-zA-Z0-9]+)");
+    static std::regex file_regex("obmcdump_([0-9]+)_([0-9]+)\\.([a-zA-Z0-9]+)");
 
     std::smatch match;
     std::string name = file.filename();
@@ -362,7 +362,9 @@ void Manager::createEntry(const fs::path& file)
                 const json& hdr = jsonData["Header"];
 
                 if (hdr.contains("NotificationType"))
+                {
                     notifType = hdr["NotificationType"];
+                }
 
                 if (hdr.contains("SectionCount"))
                 {
@@ -382,27 +384,39 @@ void Manager::createEntry(const fs::path& file)
 
                             // Extracting existing fields
                             if (descToLog.contains("SectionType"))
+                            {
                                 sectionType = descToLog["SectionType"];
+                            }
 
                             if (descToLog.contains("FRUId"))
+                            {
                                 fruid = descToLog["FRUId"];
+                            }
 
                             if (descToLog.contains("SectionSeverity"))
+                            {
                                 severity = descToLog["SectionSeverity"];
+                            }
 
                             if (toLog.contains("Section"))
                             {
                                 const json& sectionToLog = toLog["Section"];
 
                                 if (sectionToLog.contains("IPSignature"))
+                                {
                                     nvipSignature = sectionToLog["IPSignature"];
+                                }
 
                                 if (sectionToLog.contains("Severity"))
+                                {
                                     nvSeverity = sectionToLog["Severity"];
+                                }
 
                                 if (sectionToLog.contains("SocketNumber"))
+                                {
                                     nvSocketNumber =
                                         sectionToLog["SocketNumber"].dump();
+                                }
 
                                 if (sectionToLog.contains("DeviceID"))
                                 {
@@ -410,37 +424,55 @@ void Manager::createEntry(const fs::path& file)
                                         sectionToLog["DeviceID"];
 
                                     if (devID.contains("VendorID"))
+                                    {
                                         pcieVendorID = devID["VendorID"];
+                                    }
 
                                     if (devID.contains("DeviceID"))
+                                    {
                                         pcieDeviceID = devID["DeviceID"];
+                                    }
 
                                     if (devID.contains("ClassCode"))
+                                    {
                                         pcieClassCode = devID["ClassCode"];
+                                    }
 
                                     if (devID.contains("FunctionNumber"))
+                                    {
                                         pcieFunctionNumber =
                                             devID["FunctionNumber"];
+                                    }
 
                                     if (devID.contains("DeviceNumber"))
+                                    {
                                         pcieDeviceNumber =
                                             devID["DeviceNumber"];
+                                    }
 
                                     if (devID.contains("SegmentNumber"))
+                                    {
                                         pcieSegmentNumber =
                                             devID["SegmentNumber"];
+                                    }
 
                                     if (devID.contains("DeviceBusNumber"))
+                                    {
                                         pcieDeviceBusNumber =
                                             devID["DeviceBusNumber"];
+                                    }
 
                                     if (devID.contains("SecondaryBusNumber"))
+                                    {
                                         pcieSecondaryBusNumber =
                                             devID["SecondaryBusNumber"];
+                                    }
 
                                     if (devID.contains("SlotNumber"))
+                                    {
                                         pcieSlotNumber =
                                             devID["SlotNumber"].dump();
+                                    }
                                 }
                             }
                         }
@@ -558,7 +590,7 @@ void Manager::restore()
     }
 }
 
-size_t calculate_directory_size(const fs::path& directory)
+size_t calculateDirectorySize(const fs::path& directory)
 {
     size_t size = 0;
 
@@ -566,7 +598,7 @@ size_t calculate_directory_size(const fs::path& directory)
     {
         if (fs::is_directory(entry))
         {
-            size += calculate_directory_size(entry.path());
+            size += calculateDirectorySize(entry.path());
         }
         else if (fs::is_regular_file(entry))
         {
@@ -582,7 +614,7 @@ size_t Manager::getAllowedSize()
 
     try
     {
-        size = calculate_directory_size(dumpDir);
+        size = calculateDirectorySize(dumpDir);
     }
     catch (const fs::filesystem_error& e)
     {

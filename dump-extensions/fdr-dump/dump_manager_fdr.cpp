@@ -34,7 +34,6 @@
 #include <sdeventplus/source/base.hpp>
 #include <string>
 
-#include "dump-extensions/fdr-dump/fdr_dump_config.h"
 
 namespace phosphor
 {
@@ -61,7 +60,7 @@ void Manager::limitDumpEntries()
         return;
     }
     // Get the oldest dumps
-    int excessDumps = totalDumps - (FDR_DUMP_MAX_LIMIT - 1);
+    size_t excessDumps = totalDumps - (FDR_DUMP_MAX_LIMIT - 1);
     // Delete the oldest dumps
     auto d = entries.begin();
     while (d != entries.end() && excessDumps)
@@ -81,7 +80,9 @@ sdbusplus::message::object_path
 {
     // Default action is to collect the dump
     if (auto search = params.find("Action"); search == params.end())
+    {
         params["Action"] = "Collect";
+    }
 
     // Handle other actions like clear log and generate certificates
     auto dumpAction = std::get<std::string>(params["Action"]);
@@ -126,6 +127,7 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
+//NOLINTBEGIN
 uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
 {
     // Construct FDR dump arguments
@@ -200,6 +202,7 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
         entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
+//NOLINTEND
 
 uint32_t Manager::triggerFDRDumpScript(phosphor::dump::DumpCreateParams params)
 {
@@ -321,7 +324,7 @@ uint32_t Manager::triggerFDRDumpScript(phosphor::dump::DumpCreateParams params)
                                   std::to_string(si->si_pid) + "; (status)" +
                                   std::to_string(si->si_status);
                 log<level::ERR>(msg.c_str());
-                this->createDumpFailed(entryId);
+                this->createDumpFailed(static_cast<int>(entryId));
             }
 
             this->childPtrMap.erase(pid);
@@ -362,7 +365,7 @@ void Manager::createEntry(const fs::path& file)
     // Dump File Name format obmcdump_ID_EPOCHTIME.EXT
     static constexpr auto ID_POS = 1;
     static constexpr auto EPOCHTIME_POS = 2;
-    std::regex file_regex("obmcdump_([0-9]+)_([0-9]+)\\.([a-zA-Z0-9]+)");
+    static std::regex file_regex("obmcdump_([0-9]+)_([0-9]+)\\.([a-zA-Z0-9]+)");
 
     std::smatch match;
     std::string name = file.filename();
@@ -490,7 +493,7 @@ size_t Manager::getAllowedSize()
     using namespace sdbusplus::xyz::openbmc_project::Dump::Create::Error;
     using Reason = xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
 
-    auto size = 0;
+    uintmax_t size = 0;
 
     // Get current size of the dump directory.
     for (const auto& p : fs::recursive_directory_iterator(dumpDir))
@@ -519,7 +522,7 @@ size_t Manager::getAllowedSize()
         size = FDR_DUMP_MAX_SIZE;
     }
 
-    return size;
+    return static_cast<size_t>(size);
 }
 
 } // namespace FDR

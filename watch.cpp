@@ -33,13 +33,13 @@ Watch::~Watch()
 }
 
 Watch::Watch(const EventPtr& eventObj, const int flags, const uint32_t mask,
-             const uint32_t events, const fs::path& path,
+             const uint32_t events, const std::filesystem::path& path,
              UserType userFunc) :
     flags(flags), mask(mask), events(events), path(path), fd(inotifyInit()),
     userFunc(userFunc)
 {
     // Check if watch DIR exists.
-    if (!fs::is_directory(path))
+    if (!std::filesystem::is_directory(path))
     {
         lg2::error("Watch directory doesn't exist, DIR: {DIRECTORY}",
                    "DIRECTORY", path);
@@ -94,7 +94,6 @@ int Watch::callback(sd_event_source*, int fd, uint32_t revents, void* userdata)
     // Maximum inotify events supported in the buffer
     constexpr auto maxBytes = sizeof(struct inotify_event) + NAME_MAX + 1;
     uint8_t buffer[maxBytes];
-    memset(buffer, '\0', maxBytes);
 
     std::span<char> bufferSpan(reinterpret_cast<char*>(buffer), maxBytes);
     auto bytes = read(fd, bufferSpan.data(), bufferSpan.size());

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "bmc_dump_entry.hpp"
 #include "dump_entry.hpp"
 #include "xyz/openbmc_project/Dump/Entry/BMC/server.hpp"
 #include "xyz/openbmc_project/Dump/Entry/server.hpp"
@@ -91,9 +90,9 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
                 float timeProgress = now <= limit
                                          ? (((float)(limit - now) /
                                              (float)bmcDumpMaxTimeLimitInSec) *
-                                            100.0)
-                                         : 100.0;
-                progress(100 - timeProgress);
+                                            100.0F)
+                                         : 100.0F;
+                progress(static_cast<uint8_t>(100 - timeProgress));
 
                 bool completed = phosphor::dump::Entry::status() ==
                                  OperationStatus::Completed;
@@ -203,7 +202,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
 
     /** @brief Minimal interface to allow setting status as failed
      */
-    void setFailedStatus(void)
+    void setFailedStatus()
     {
         status(OperationStatus::Failed);
     }
@@ -242,12 +241,11 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         return file;
     }
 
-    void clearProcessGroupId(void)
+    void clearProcessGroupId()
     {
         entryProcessGroupID = 0;
     }
 
-  private:
     /**
      * @brief timer to update progress percent
      *

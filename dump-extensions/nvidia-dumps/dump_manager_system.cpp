@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "config.h"
 
 #include "dump_manager_system.hpp"
 
@@ -62,7 +61,7 @@ void Manager::limitDumpEntries()
         return;
     }
     // Get the oldest dumps
-    int excessDumps = totalDumps - (SYSTEM_DUMP_MAX_LIMIT - 1);
+    size_t excessDumps = totalDumps - (SYSTEM_DUMP_MAX_LIMIT - 1);
     // Delete the oldest dumps
     auto d = entries.begin();
     while (d != entries.end() && excessDumps)
@@ -131,6 +130,7 @@ sdbusplus::message::object_path
 }
 
 // captureDump helper functions
+//NOLINTBEGIN
 uint32_t executeDreport(const std::string& dumpType, const std::string& dumpId,
                         const std::string& dumpPath, const size_t size,
                         const std::array<std::string, 3>& addArgs)
@@ -405,6 +405,7 @@ uint32_t hwCheckoutDump(const std::string& dumpId, const std::string& dumpPath)
     elog<InternalFailure>();
 }
 
+//NOLINTEND
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     // check if minimum required space is available on destination partition
@@ -528,19 +529,18 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         // Construct additional arguments from params
         std::array<std::string, 3> addArgs;
         // Fix additional arguments order 'bf_ip', 'bf_username', 'bf_password'
-        // std::map<std::string, std::string>::iterator itr;
-        for (auto itr = params.begin(); itr != params.end(); ++itr)
+        for (const auto& param : params)
         {
-            auto kvPair = itr->first + "=" + std::get<std::string>(itr->second);
-            if (itr->first == "bf_ip")
+            auto kvPair = param.first + "=" + std::get<std::string>(param.second);
+            if (param.first == "bf_ip")
             {
                 addArgs[0] = kvPair;
             }
-            else if (itr->first == "bf_username")
+            else if (param.first == "bf_username")
             {
                 addArgs[1] = kvPair;
             }
-            else if (itr->first == "bf_password")
+            else if (param.first == "bf_password")
             {
                 addArgs[2] = kvPair;
             }
@@ -616,7 +616,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                                   std::to_string(si->si_pid) + "; (status)" +
                                   std::to_string(si->si_status);
                 log<level::ERR>(msg.c_str());
-                this->createDumpFailed(entryId);
+                this->createDumpFailed(static_cast<int>(entryId));
             }
 
             this->childPtrMap.erase(pid);
@@ -801,7 +801,7 @@ size_t Manager::getAllowedSize()
     using namespace sdbusplus::xyz::openbmc_project::Dump::Create::Error;
     using Reason = xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
 
-    auto size = 0;
+    uintmax_t size = 0;
 
     // Get current size of the dump directory.
     for (const auto& p : fs::recursive_directory_iterator(dumpDir))
@@ -830,7 +830,7 @@ size_t Manager::getAllowedSize()
         size = SYSTEM_DUMP_MAX_SIZE;
     }
 
-    return size;
+    return static_cast<size_t>(size);
 }
 
 } // namespace system

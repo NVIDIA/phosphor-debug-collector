@@ -4,7 +4,7 @@
  */
 
 #include <fcntl.h>
-#include <stdio.h>
+#include <cstdio>
 #include <unistd.h>
 
 #include <chrono>
@@ -43,6 +43,7 @@ enum class DeviceTypeData
     NVLinkMgmtNIC_Log,
 };
 
+//NOLINTBEGIN
 void log_msg(std::string msg)
 {
     fstream log_file;
@@ -862,3 +863,4 @@ int main(int argc, char** argv)
 
     return res_dump;
 }
+//NOLINTEND

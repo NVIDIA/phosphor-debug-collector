@@ -35,6 +35,7 @@ namespace phosphor
 {
 namespace dump
 {
+//NOLINTNEXTLINE
 namespace faultLog
 {
 template <typename T>
@@ -48,6 +49,7 @@ using FaultDataType = sdbusplus::xyz::openbmc_project::Common::server::
     FaultLogType::FaultLogTypes;
 
 namespace fs = std::filesystem;
+//NOLINTNEXTLINE
 class Manager;
 
 /** @class Entry
@@ -144,6 +146,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
      * @param[in] fileSize - Dump file size in bytes.
      * @param[in] file - Name of dump file.
      */
+    //NOLINTBEGIN
     void update(uint64_t timeStamp, uint64_t fileSize, const fs::path& filePath,
                 std::string id)
     {
@@ -259,10 +262,10 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
             }
         }
     }
-
+    //NOLINTEND
     /** @brief Minimal interface to allow setting status as failed
      */
-    void setFailedStatus(void)
+    void setFailedStatus()
     {
         status(phosphor::dump::OperationStatus::Failed);
     }

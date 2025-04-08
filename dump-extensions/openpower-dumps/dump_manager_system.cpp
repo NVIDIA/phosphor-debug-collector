@@ -98,7 +98,7 @@ void Manager::notify(uint32_t dumpId, uint64_t size)
     // Get the id
     auto id = lastEntryId + 1;
     auto idString = std::to_string(id);
-    auto objPath = fs::path(baseEntryPath) / idString;
+    auto objPath = std::filesystem::path(baseEntryPath) / idString;
 
     // TODO: Get the originator Id, Type from the persisted file.
     // For now replacing it with null

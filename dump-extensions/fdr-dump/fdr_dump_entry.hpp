@@ -29,6 +29,7 @@ namespace phosphor
 {
 namespace dump
 {
+//NOLINTNEXTLINE
 namespace FDR
 {
 template <typename T>
@@ -39,6 +40,7 @@ using EntryIfaces = sdbusplus::server::object::object<
 
 namespace fs = std::filesystem;
 
+//NOLINTNEXTLINE
 class Manager;
 
 /** @class Entry
@@ -109,7 +111,7 @@ class Entry : virtual public EntryIfaces, virtual public phosphor::dump::Entry
 
     /** @brief Minimal interface to allow setting status as failed
      */
-    void setFailedStatus(void)
+    void setFailedStatus()
     {
         status(phosphor::dump::OperationStatus::Failed);
     }

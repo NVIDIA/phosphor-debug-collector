@@ -45,6 +45,7 @@ using EntryIfaces = sdbusplus::server::object_t<
 
 using OperationStatus =
     sdbusplus::xyz::openbmc_project::Common::server::Progress::OperationStatus;
+// NOLINTNEXTLINE
 namespace fs = std::filesystem;
 
 using originatorTypes = sdbusplus::xyz::openbmc_project::Common::server::

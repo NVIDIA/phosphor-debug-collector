@@ -299,7 +299,7 @@ void CreateDumpDbus::processDumpRequest(int fd, const std::string& type)
             if (std::filesystem::is_regular_file(entry))
             {
                 std::string filename = entry.path().filename();
-                if (filename.rfind(DUMP_COPY_PREFIX, 0) == 0 &&
+                if (filename.starts_with(DUMP_COPY_PREFIX) &&
                     filename.find("dump") != std::string::npos)
                 {
                     {
@@ -352,65 +352,92 @@ void CreateDumpDbus::launchServer()
     int r = -1;
     sigset_t ss;
 
+    // Initialize event
     r = sd_event_default(&event);
     if (r < 0)
     {
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to create event: {}", err).c_str());
+        return;
     }
 
     eventPtr.reset(event);
     event = nullptr;
 
+    // Set up signal handling
     if (sigemptyset(&ss) < 0 || sigaddset(&ss, SIGTERM) < 0 ||
         sigaddset(&ss, SIGINT) < 0)
     {
         r = -errno;
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to set up signals: {}", err).c_str());
+        return;
     }
 
-    /* Block SIGTERM first, so that the event loop can handle it */
+    // Block SIGTERM first, so that the event loop can handle it
     if (sigprocmask(SIG_BLOCK, &ss, NULL) < 0)
     {
         r = -errno;
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to block signals: {}", err).c_str());
+        return;
     }
 
-    /* Let's make use of the default handler and "floating"
-       reference features of sd_event_add_signal() */
+    // Let's make use of the default handler and "floating" reference features of sd_event_add_signal()
     r = sd_event_add_signal(eventPtr.get(), NULL, SIGTERM, NULL, NULL);
     if (r < 0)
     {
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to add SIGTERM: {}", err).c_str());
+        return;
     }
 
     r = sd_event_add_signal(eventPtr.get(), NULL, SIGINT, NULL, NULL);
     if (r < 0)
     {
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to add SIGINT: {}", err).c_str());
+        return;
     }
 
+    // Create socket
     fd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
     if (fd < 0)
     {
         r = -errno;
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to create socket: {}", err).c_str());
+        return;
     }
 
     sock.sun_family = AF_UNIX;
+    // NOLINTNEXTLINE
     strncpy(sock.sun_path, (char*)SOCKET_PATH, sizeof(sock.sun_path));
 
     r = bind(fd, (struct sockaddr*)&sock, sizeof(struct sockaddr_un));
     if (r < 0)
     {
         r = -errno;
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to bind socket: {}", err).c_str());
+        return;
     }
 
     r = chmod(SOCKET_PATH, target_mode);
     if (r < 0)
     {
         log<level::ERR>(fmt::format("chmod error: {}", r).c_str());
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to chmod socket: {}", err).c_str());
+        return;
     }
 
     r = listen(fd, 4);
@@ -418,9 +445,13 @@ void CreateDumpDbus::launchServer()
     {
         r = -errno;
         log<level::ERR>(fmt::format("listen error: {}", r).c_str());
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to listen: {}", err).c_str());
+        return;
     }
 
+    // Add event handler
     r = sd_event_add_io(
         eventPtr.get(), nullptr, fd, EPOLLIN,
         [](sd_event_source*, int fd, uint32_t, void*) -> int {
@@ -432,7 +463,7 @@ void CreateDumpDbus::launchServer()
         }
 
         std::vector<unsigned char> buffer(BUFFER_SIZE);
-        int ret = read(fd, &buffer[0], BUFFER_SIZE);
+        ssize_t ret = read(fd, buffer.data(), BUFFER_SIZE);
         if (ret < 0)
         {
             log<level::ERR>(fmt::format("read error: {}", ret).c_str());
@@ -494,25 +525,28 @@ void CreateDumpDbus::launchServer()
 
     if (r < 0)
     {
-        goto finish;
+        dispose();
+        auto err = std::strerror(-r);
+        log<level::ERR>(fmt::format("Failed to add event handler: {}", err).c_str());
+        return;
     }
 
+    // Run event loop
     r = sd_event_loop(eventPtr.get());
 
-finish:
+    // Clean up
     dispose();
 
     if (r < 0)
     {
         auto err = std::strerror(-r);
-        log<level::ERR>(fmt::format("Failure: {}", err).c_str());
+        log<level::ERR>(fmt::format("Event loop failure: {}", err).c_str());
     }
 }
 
 void CreateDumpDbus::doCreateDumpCall(const std::string& type)
 {
     struct sockaddr_un addr;
-    int ret = -1;
     std::vector<unsigned char> buffer(BUFFER_SIZE);
 
     dataSocket = socket(AF_UNIX, SOCK_SEQPACKET, 0);
@@ -524,7 +558,7 @@ void CreateDumpDbus::doCreateDumpCall(const std::string& type)
 
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-
+    // NOLINTNEXTLINE
     strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path));
 
     fd = connect(dataSocket, (const struct sockaddr*)&addr, sizeof(addr));
@@ -547,7 +581,7 @@ void CreateDumpDbus::doCreateDumpCall(const std::string& type)
         buffer.clear();
         buffer.resize(BUFFER_SIZE);
 
-        ret = read(dataSocket, &buffer[0], BUFFER_SIZE);
+        ssize_t ret = read(dataSocket, buffer.data(), BUFFER_SIZE);
         if (ret == -1)
         {
             std::cerr << "read" << std::endl;
@@ -571,7 +605,7 @@ void CreateDumpDbus::sendMsg(int fd, const std::string& msg)
 {
     if (fd != -1)
     {
-        int ret;
+        ssize_t ret;
         std::vector<unsigned char> buffer(msg.begin(), msg.end());
 
         ret = write(fd, buffer.data(), buffer.size());

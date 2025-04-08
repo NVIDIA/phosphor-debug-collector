@@ -72,7 +72,7 @@ int main(int argc, char** argv)
     int c, option_index = 0;
     bool serverMode = false;
     std::string bmcPath, systemPath, type;
-    while ((c = getopt_long(argc, argv, "hsp:q:t:", opts, &option_index)) != -1)
+    while ((c = getopt_long(argc, argv, "hsp:q:t:", static_cast<struct option*>(opts), &option_index)) != -1)
     {
         switch (c)
         {

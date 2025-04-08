@@ -15,7 +15,6 @@
 #include <xyz/openbmc_project/Common/File/error.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 
-#include <fstream>
 #include <span>
 
 namespace phosphor

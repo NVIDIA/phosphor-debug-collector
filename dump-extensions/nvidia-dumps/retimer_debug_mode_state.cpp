@@ -65,6 +65,7 @@ bool State::debugMode() const
     struct i2c_rdwr_ioctl_data packets;
     struct i2c_msg messages[2];
 
+    //NOLINTBEGIN
     int file = open(i2cBus, O_RDONLY);
 
     if (file < 0)
@@ -87,6 +88,7 @@ bool State::debugMode() const
 
     packets.msgs = messages;
     packets.nmsgs = 2;
+    //NOLINTEND
 
     if (ioctl(file, I2C_RDWR, &packets) < 0)
     {
@@ -129,6 +131,7 @@ bool State::debugMode(bool value)
     struct i2c_rdwr_ioctl_data packets;
     struct i2c_msg messages[1];
 
+    //NOLINTBEGIN
     int file = open(i2cBus, O_RDONLY);
     if (file < 0)
     {
@@ -145,7 +148,7 @@ bool State::debugMode(bool value)
 
     packets.msgs = messages;
     packets.nmsgs = 1;
-
+    //NOLINTEND
     if (ioctl(file, I2C_RDWR, &packets) < 0)
     {
         auto error = errno;
