@@ -26,14 +26,14 @@
 #include <sys/inotify.h>
 #include <unistd.h>
 
-#include <chrono>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
-#include <regex>
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
-#include <string>
 
+#include <chrono>
+#include <regex>
+#include <string>
 
 namespace phosphor
 {
@@ -75,8 +75,8 @@ void Manager::limitDumpEntries()
 #endif // #if FDR_DUMP_MAX_LIMIT == 0
 }
 
-sdbusplus::message::object_path
-    Manager::createDump(phosphor::dump::DumpCreateParams params)
+sdbusplus::message::object_path Manager::createDump(
+    phosphor::dump::DumpCreateParams params)
 {
     // Default action is to collect the dump
     if (auto search = params.find("Action"); search == params.end())
@@ -127,7 +127,7 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
-//NOLINTBEGIN
+// NOLINTBEGIN
 uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
 {
     // Construct FDR dump arguments
@@ -202,7 +202,7 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
         entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
-//NOLINTEND
+// NOLINTEND
 
 uint32_t Manager::triggerFDRDumpScript(phosphor::dump::DumpCreateParams params)
 {
@@ -313,22 +313,23 @@ uint32_t Manager::triggerFDRDumpScript(phosphor::dump::DumpCreateParams params)
     else if (pid > 0)
     {
         auto entryId = lastEntryId + 1;
-        Child::Callback callback = [this, pid, entryId](Child&,
-                                                        const siginfo_t* si) {
-            if (si->si_status != 0)
-            {
-                std::string msg = "Dump process failed: (signo)" +
-                                  std::to_string(si->si_signo) + "; (code)" +
-                                  std::to_string(si->si_code) + "; (errno)" +
-                                  std::to_string(si->si_errno) + "; (pid)" +
-                                  std::to_string(si->si_pid) + "; (status)" +
-                                  std::to_string(si->si_status);
-                log<level::ERR>(msg.c_str());
-                this->createDumpFailed(static_cast<int>(entryId));
-            }
+        Child::Callback callback =
+            [this, pid, entryId](Child&, const siginfo_t* si) {
+                if (si->si_status != 0)
+                {
+                    std::string msg =
+                        "Dump process failed: (signo)" +
+                        std::to_string(si->si_signo) + "; (code)" +
+                        std::to_string(si->si_code) + "; (errno)" +
+                        std::to_string(si->si_errno) + "; (pid)" +
+                        std::to_string(si->si_pid) + "; (status)" +
+                        std::to_string(si->si_status);
+                    log<level::ERR>(msg.c_str());
+                    this->createDumpFailed(static_cast<int>(entryId));
+                }
 
-            this->childPtrMap.erase(pid);
-        };
+                this->childPtrMap.erase(pid);
+            };
 
         try
         {
@@ -476,8 +477,8 @@ void Manager::restore()
         if ((fs::is_directory(p.path())) &&
             std::all_of(idStr.begin(), idStr.end(), ::isdigit))
         {
-            lastEntryId = std::max(lastEntryId,
-                                   static_cast<uint32_t>(std::stoul(idStr)));
+            lastEntryId =
+                std::max(lastEntryId, static_cast<uint32_t>(std::stoul(idStr)));
             auto fileIt = fs::directory_iterator(p.path());
             // Create dump entry d-bus object.
             if (fileIt != fs::end(fileIt))

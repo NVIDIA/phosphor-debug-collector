@@ -6,12 +6,13 @@
 #include "xyz/openbmc_project/Object/Delete/server.hpp"
 #include "xyz/openbmc_project/Time/EpochTime/server.hpp"
 
-#include <chrono>
-#include <filesystem>
 #include <phosphor-logging/log.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
 #include <sdbusplus/timer.hpp>
+
+#include <chrono>
+#include <filesystem>
 
 namespace phosphor
 {
@@ -84,14 +85,14 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         {
             progressTimer = std::make_unique<sdbusplus::Timer>([this]() {
                 uint64_t now = std::time(nullptr);
-                uint64_t limit = (phosphor::dump::Entry::startTime()) /
-                                     1000000 +
-                                 bmcDumpMaxTimeLimitInSec;
-                float timeProgress = now <= limit
-                                         ? (((float)(limit - now) /
-                                             (float)bmcDumpMaxTimeLimitInSec) *
-                                            100.0F)
-                                         : 100.0F;
+                uint64_t limit =
+                    (phosphor::dump::Entry::startTime()) / 1000000 +
+                    bmcDumpMaxTimeLimitInSec;
+                float timeProgress =
+                    now <= limit ? (((float)(limit - now) /
+                                     (float)bmcDumpMaxTimeLimitInSec) *
+                                    100.0F)
+                                 : 100.0F;
                 progress(static_cast<uint8_t>(100 - timeProgress));
 
                 bool completed = phosphor::dump::Entry::status() ==
@@ -101,9 +102,9 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
 
                 if (pastTimeout && validProcesGroupId && !completed)
                 {
-                    std::string msg = "Terminating " +
-                                      std::to_string(entryProcessGroupID) +
-                                      " PGID\r\n";
+                    std::string msg =
+                        "Terminating " + std::to_string(entryProcessGroupID) +
+                        " PGID\r\n";
                     log<level::ERR>(msg.c_str());
                     /* use SIGTERM as dreport has TRAP on it to clean-up
                         leftovers in /tmp */

@@ -17,6 +17,7 @@
 #pragma once
 
 #include "config.h"
+
 #include "dump_manager.hpp"
 #include "dump_utils.hpp"
 #include "nvidia_dumps_config.hpp"
@@ -52,7 +53,7 @@ using ::sdeventplus::source::Child;
  *  @details A concrete implementation for the
  *  xyz.openbmc_project.Dump.Create DBus API
  */
-//NOLINTNEXTLINE
+// NOLINTNEXTLINE
 class Manager :
     virtual public CreateIface,
     virtual public phosphor::dump::Manager
@@ -101,8 +102,8 @@ class Manager :
      *
      *  @return object_path - The object path of the new dump entry.
      */
-    sdbusplus::message::object_path
-        createDump(phosphor::dump::DumpCreateParams params) override;
+    sdbusplus::message::object_path createDump(
+        phosphor::dump::DumpCreateParams params) override;
 
     /** @brief Used to serve case where create dump failed
      *  @param [in] id - entry id which failed

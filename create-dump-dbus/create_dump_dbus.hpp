@@ -81,7 +81,7 @@ class CreateDumpDbusException : std::exception
 /** @class CreateDumpDbus
  *  @brief calls CreateDump dbus method
  */
-//NOLINTBEGIN
+// NOLINTBEGIN
 class CreateDumpDbus
 {
   public:
@@ -173,7 +173,7 @@ class CreateDumpDbus
     int fd = -1;
     int dataSocket = -1;
 };
-//NOLINTEND
+// NOLINTEND
 
 } // namespace create
 } // namespace dump

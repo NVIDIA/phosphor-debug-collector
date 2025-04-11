@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-#include <cstdlib>
 #include <dump_serialize.hpp>
+
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <set>

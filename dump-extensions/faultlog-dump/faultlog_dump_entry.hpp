@@ -24,10 +24,11 @@
 #include "xyz/openbmc_project/Object/Delete/server.hpp"
 #include "xyz/openbmc_project/Time/EpochTime/server.hpp"
 
-#include <fstream>
 #include <nlohmann/json.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
+
+#include <fstream>
 #include <string>
 using json = nlohmann::json;
 
@@ -35,7 +36,7 @@ namespace phosphor
 {
 namespace dump
 {
-//NOLINTNEXTLINE
+// NOLINTNEXTLINE
 namespace faultLog
 {
 template <typename T>
@@ -49,7 +50,7 @@ using FaultDataType = sdbusplus::xyz::openbmc_project::Common::server::
     FaultLogType::FaultLogTypes;
 
 namespace fs = std::filesystem;
-//NOLINTNEXTLINE
+// NOLINTNEXTLINE
 class Manager;
 
 /** @class Entry
@@ -146,7 +147,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
      * @param[in] fileSize - Dump file size in bytes.
      * @param[in] file - Name of dump file.
      */
-    //NOLINTBEGIN
+    // NOLINTBEGIN
     void update(uint64_t timeStamp, uint64_t fileSize, const fs::path& filePath,
                 std::string id)
     {
@@ -156,8 +157,8 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         file = filePath;
         completedTime(timeStamp);
 
-        std::string cperDecodePath = "/var/lib/logging/dumps/faultlog/" + id +
-                                     "/Decoded/decoded.json";
+        std::string cperDecodePath =
+            "/var/lib/logging/dumps/faultlog/" + id + "/Decoded/decoded.json";
         std::ifstream cperFile(cperDecodePath.c_str());
 
         if (cperFile.is_open())
@@ -262,7 +263,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
             }
         }
     }
-    //NOLINTEND
+    // NOLINTEND
     /** @brief Minimal interface to allow setting status as failed
      */
     void setFailedStatus()

@@ -23,11 +23,12 @@
 #include "xyz/openbmc_project/Dump/Entry/CPERDecode/server.hpp"
 #include "xyz/openbmc_project/Dump/NewDump/server.hpp"
 
-#include <experimental/filesystem>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
 #include <sdeventplus/source/child.hpp>
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
+
+#include <experimental/filesystem>
 
 namespace phosphor
 {
@@ -105,8 +106,8 @@ class Manager :
      *
      *  @return object_path - The object path of the new dump entry.
      */
-    sdbusplus::message::object_path
-        createDump(phosphor::dump::DumpCreateParams params) override;
+    sdbusplus::message::object_path createDump(
+        phosphor::dump::DumpCreateParams params) override;
 
     /** @brief Used to serve case where create dump failed
      *  @param [in] id - entry id which failed

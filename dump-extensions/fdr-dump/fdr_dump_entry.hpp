@@ -29,7 +29,7 @@ namespace phosphor
 {
 namespace dump
 {
-//NOLINTNEXTLINE
+// NOLINTNEXTLINE
 namespace FDR
 {
 template <typename T>
@@ -40,7 +40,7 @@ using EntryIfaces = sdbusplus::server::object::object<
 
 namespace fs = std::filesystem;
 
-//NOLINTNEXTLINE
+// NOLINTNEXTLINE
 class Manager;
 
 /** @class Entry

@@ -25,14 +25,15 @@
 #include <sys/inotify.h>
 #include <unistd.h>
 
+#include <phosphor-logging/elog-errors.hpp>
+#include <phosphor-logging/elog.hpp>
+#include <sdeventplus/exception.hpp>
+#include <sdeventplus/source/base.hpp>
+
 #include <array>
 #include <chrono>
 #include <iostream>
-#include <phosphor-logging/elog-errors.hpp>
-#include <phosphor-logging/elog.hpp>
 #include <regex>
-#include <sdeventplus/exception.hpp>
-#include <sdeventplus/source/base.hpp>
 
 namespace phosphor
 {
@@ -76,8 +77,8 @@ void Manager::limitDumpEntries()
 #endif // #if SYSTEM_DUMP_MAX_LIMIT == 0
 }
 
-sdbusplus::message::object_path
-    Manager::createDump(phosphor::dump::DumpCreateParams params)
+sdbusplus::message::object_path Manager::createDump(
+    phosphor::dump::DumpCreateParams params)
 {
     // Limit dumps to max allowed entries
     limitDumpEntries();
@@ -130,7 +131,7 @@ sdbusplus::message::object_path
 }
 
 // captureDump helper functions
-//NOLINTBEGIN
+// NOLINTBEGIN
 uint32_t executeDreport(const std::string& dumpType, const std::string& dumpId,
                         const std::string& dumpPath, const size_t size,
                         const std::array<std::string, 3>& addArgs)
@@ -313,10 +314,9 @@ uint32_t retimerLtssmDump(const std::string& dumpId,
     elog<InternalFailure>();
 }
 
-uint32_t retimerRegisterDump(const std::string& dumpId,
-                             const std::string& dumpPath,
-                             const std::string& retimer_address,
-                             const std::string& vendorId)
+uint32_t retimerRegisterDump(
+    const std::string& dumpId, const std::string& dumpPath,
+    const std::string& retimer_address, const std::string& vendorId)
 {
     // Construct Register dump arguments
     std::vector<char*> arg_v;
@@ -405,7 +405,7 @@ uint32_t hwCheckoutDump(const std::string& dumpId, const std::string& dumpPath)
     elog<InternalFailure>();
 }
 
-//NOLINTEND
+// NOLINTEND
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     // check if minimum required space is available on destination partition
@@ -531,7 +531,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         // Fix additional arguments order 'bf_ip', 'bf_username', 'bf_password'
         for (const auto& param : params)
         {
-            auto kvPair = param.first + "=" + std::get<std::string>(param.second);
+            auto kvPair = param.first + "=" +
+                          std::get<std::string>(param.second);
             if (param.first == "bf_ip")
             {
                 addArgs[0] = kvPair;
@@ -607,22 +608,23 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         auto entryId = lastEntryId + 1;
         Child::Callback callback =
             [this, pid, entryId, diagnosticType](Child&, const siginfo_t* si) {
-            if (si->si_status != 0)
-            {
-                std::string msg = "Dump process failed: (signo)" +
-                                  std::to_string(si->si_signo) + "; (code)" +
-                                  std::to_string(si->si_code) + "; (errno)" +
-                                  std::to_string(si->si_errno) + "; (pid)" +
-                                  std::to_string(si->si_pid) + "; (status)" +
-                                  std::to_string(si->si_status);
-                log<level::ERR>(msg.c_str());
-                this->createDumpFailed(static_cast<int>(entryId));
-            }
+                if (si->si_status != 0)
+                {
+                    std::string msg =
+                        "Dump process failed: (signo)" +
+                        std::to_string(si->si_signo) + "; (code)" +
+                        std::to_string(si->si_code) + "; (errno)" +
+                        std::to_string(si->si_errno) + "; (pid)" +
+                        std::to_string(si->si_pid) + "; (status)" +
+                        std::to_string(si->si_status);
+                    log<level::ERR>(msg.c_str());
+                    this->createDumpFailed(static_cast<int>(entryId));
+                }
 
-            this->childPtrMap.erase(pid);
-            // Remove dumpType from dumpInProgress when dump ends
-            Manager::dumpInProgress.erase(diagnosticType);
-        };
+                this->childPtrMap.erase(pid);
+                // Remove dumpType from dumpInProgress when dump ends
+                Manager::dumpInProgress.erase(diagnosticType);
+            };
 
         try
         {
@@ -784,8 +786,8 @@ void Manager::restore()
         if ((fs::is_directory(p.path())) &&
             std::all_of(idStr.begin(), idStr.end(), ::isdigit))
         {
-            lastEntryId = std::max(lastEntryId,
-                                   static_cast<uint32_t>(std::stoul(idStr)));
+            lastEntryId =
+                std::max(lastEntryId, static_cast<uint32_t>(std::stoul(idStr)));
             auto fileIt = fs::directory_iterator(p.path());
             // Create dump entry d-bus object.
             if (fileIt != fs::end(fileIt))

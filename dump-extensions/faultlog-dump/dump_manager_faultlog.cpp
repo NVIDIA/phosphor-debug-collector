@@ -26,17 +26,17 @@
 #include <sys/inotify.h>
 #include <unistd.h>
 
-#include <chrono>
-#include <fstream>
-#include <iostream>
 #include <nlohmann/json.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
-#include <regex>
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
-#include <string>
 
+#include <chrono>
+#include <fstream>
+#include <iostream>
+#include <regex>
+#include <string>
 
 using json = nlohmann::json;
 
@@ -120,16 +120,16 @@ void Manager::limitTotalDumpSize()
 #endif
 }
 
-sdbusplus::message::object_path
-    Manager::createDump(phosphor::dump::DumpCreateParams params)
+sdbusplus::message::object_path Manager::createDump(
+    phosphor::dump::DumpCreateParams params)
 {
     // Limit dumps to max allowed entries
     limitDumpEntries();
     // Limit dumps to max allowed size
     limitTotalDumpSize();
 
-    const auto& [id, type, additionalTypeName,
-                 primayLogId] = captureDump(params);
+    const auto& [id, type, additionalTypeName, primayLogId] =
+        captureDump(params);
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
@@ -182,7 +182,7 @@ sdbusplus::message::object_path
     return objPath.string();
 }
 
-//NOLINTBEGIN
+// NOLINTBEGIN
 uint32_t cperDump(const std::string& dumpId, const std::string& dumpPath,
                   const std::string& cperPath)
 {
@@ -209,7 +209,7 @@ uint32_t cperDump(const std::string& dumpId, const std::string& dumpPath,
                     entry("ERRNO=%d", error));
     elog<InternalFailure>();
 }
-//NOLINTEND
+// NOLINTEND
 FaultLogEntryInfo Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
     FaultDataType type{};
@@ -248,22 +248,23 @@ FaultLogEntryInfo Manager::captureDump(phosphor::dump::DumpCreateParams params)
     else if (pid > 0)
     {
         auto entryId = lastEntryId + 1;
-        Child::Callback callback = [this, pid, entryId](Child&,
-                                                        const siginfo_t* si) {
-            if (si->si_status != 0)
-            {
-                std::string msg = "Dump process failed: (signo)" +
-                                  std::to_string(si->si_signo) + "; (code)" +
-                                  std::to_string(si->si_code) + "; (errno)" +
-                                  std::to_string(si->si_errno) + "; (pid)" +
-                                  std::to_string(si->si_pid) + "; (status)" +
-                                  std::to_string(si->si_status);
-                log<level::ERR>(msg.c_str());
-                this->createDumpFailed(static_cast<int>(entryId));
-            }
+        Child::Callback callback =
+            [this, pid, entryId](Child&, const siginfo_t* si) {
+                if (si->si_status != 0)
+                {
+                    std::string msg =
+                        "Dump process failed: (signo)" +
+                        std::to_string(si->si_signo) + "; (code)" +
+                        std::to_string(si->si_code) + "; (errno)" +
+                        std::to_string(si->si_errno) + "; (pid)" +
+                        std::to_string(si->si_pid) + "; (status)" +
+                        std::to_string(si->si_status);
+                    log<level::ERR>(msg.c_str());
+                    this->createDumpFailed(static_cast<int>(entryId));
+                }
 
-            this->childPtrMap.erase(pid);
-        };
+                this->childPtrMap.erase(pid);
+            };
 
         try
         {
@@ -576,8 +577,8 @@ void Manager::restore()
         if ((fs::is_directory(p.path())) &&
             std::all_of(idStr.begin(), idStr.end(), ::isdigit))
         {
-            lastEntryId = std::max(lastEntryId,
-                                   static_cast<uint32_t>(std::stoul(idStr)));
+            lastEntryId =
+                std::max(lastEntryId, static_cast<uint32_t>(std::stoul(idStr)));
             for (const auto& fileIt : fs::directory_iterator(p.path()))
             {
                 // Create dump entry d-bus object.
@@ -632,8 +633,8 @@ size_t Manager::getAllowedSize()
     // Set the Dump size to Maximum  if the free space is greater than
     // Dump max size otherwise return the available size.
 
-    size = (size > FAULTLOG_DUMP_TOTAL_SIZE ? 0
-                                            : FAULTLOG_DUMP_TOTAL_SIZE - size);
+    size =
+        (size > FAULTLOG_DUMP_TOTAL_SIZE ? 0 : FAULTLOG_DUMP_TOTAL_SIZE - size);
 
     if (size > FAULTLOG_DUMP_MAX_SIZE)
     {

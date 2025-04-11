@@ -22,12 +22,13 @@
 #include "xyz/openbmc_project/Object/Delete/server.hpp"
 #include "xyz/openbmc_project/Time/EpochTime/server.hpp"
 
-#include <chrono>
-#include <filesystem>
 #include <phosphor-logging/log.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
 #include <sdbusplus/timer.hpp>
+
+#include <chrono>
+#include <filesystem>
 
 namespace phosphor
 {
@@ -51,7 +52,7 @@ constexpr auto systemDumpMaxTimeLimitInSec = 2700;
 
 namespace fs = std::filesystem;
 
-//NOLINTNEXTLINE
+// NOLINTNEXTLINE
 class Manager;
 
 /** @class Entry
@@ -148,9 +149,9 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
 
                 if (pastTimeout && validProcesGroupId && !completed)
                 {
-                    std::string msg = "Terminating " +
-                                      std::to_string(entryProcessGroupID) +
-                                      " PGID\r\n";
+                    std::string msg =
+                        "Terminating " + std::to_string(entryProcessGroupID) +
+                        " PGID\r\n";
                     log<level::ERR>(msg.c_str());
                     /* use SIGTERM as dreport has TRAP on it to clean-up
                         leftovers in /tmp */

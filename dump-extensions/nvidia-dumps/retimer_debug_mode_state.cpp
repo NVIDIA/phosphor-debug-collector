@@ -29,15 +29,16 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#include <array>
-#include <chrono>
-#include <iostream>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/lg2.hpp>
-#include <regex>
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
+
+#include <array>
+#include <chrono>
+#include <iostream>
+#include <regex>
 
 namespace phosphor
 {
@@ -65,7 +66,7 @@ bool State::debugMode() const
     struct i2c_rdwr_ioctl_data packets;
     struct i2c_msg messages[2];
 
-    //NOLINTBEGIN
+    // NOLINTBEGIN
     int file = open(i2cBus, O_RDONLY);
 
     if (file < 0)
@@ -88,7 +89,7 @@ bool State::debugMode() const
 
     packets.msgs = messages;
     packets.nmsgs = 2;
-    //NOLINTEND
+    // NOLINTEND
 
     if (ioctl(file, I2C_RDWR, &packets) < 0)
     {
@@ -131,7 +132,7 @@ bool State::debugMode(bool value)
     struct i2c_rdwr_ioctl_data packets;
     struct i2c_msg messages[1];
 
-    //NOLINTBEGIN
+    // NOLINTBEGIN
     int file = open(i2cBus, O_RDONLY);
     if (file < 0)
     {
@@ -148,7 +149,7 @@ bool State::debugMode(bool value)
 
     packets.msgs = messages;
     packets.nmsgs = 1;
-    //NOLINTEND
+    // NOLINTEND
     if (ioctl(file, I2C_RDWR, &packets) < 0)
     {
         auto error = errno;
@@ -172,10 +173,10 @@ std::string State::getDBusObject(sdbusplus::bus::bus& bus,
 {
     std::vector<std::string> paths;
 
-    auto mapper = bus.new_method_call("xyz.openbmc_project.ObjectMapper",
-                                      "/xyz/openbmc_project/object_mapper",
-                                      "xyz.openbmc_project.ObjectMapper",
-                                      "GetSubTreePaths");
+    auto mapper = bus.new_method_call(
+        "xyz.openbmc_project.ObjectMapper",
+        "/xyz/openbmc_project/object_mapper",
+        "xyz.openbmc_project.ObjectMapper", "GetSubTreePaths");
     mapper.append(rootPath.c_str());
     mapper.append(0); // Depth 0 to search all
     mapper.append(std::vector<std::string>({SWITCH_INTERFACE}));
@@ -199,10 +200,10 @@ std::string State::getService(sdbusplus::bus::bus& bus, const char* path,
     using DbusInterfaceList = std::vector<std::string>;
     std::map<std::string, std::vector<std::string>> mapperResponse;
 
-    auto mapper = bus.new_method_call("xyz.openbmc_project.ObjectMapper",
-                                      "/xyz/openbmc_project/object_mapper",
-                                      "xyz.openbmc_project.ObjectMapper",
-                                      "GetObject");
+    auto mapper =
+        bus.new_method_call("xyz.openbmc_project.ObjectMapper",
+                            "/xyz/openbmc_project/object_mapper",
+                            "xyz.openbmc_project.ObjectMapper", "GetObject");
     mapper.append(path, DbusInterfaceList({interface}));
 
     auto mapperResponseMsg = bus.call(mapper);

@@ -4,17 +4,18 @@
  */
 
 #include <fcntl.h>
-#include <cstdio>
 #include <unistd.h>
 
-#include <chrono>
-#include <ctime>
-#include <fstream>
-#include <iostream>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
+
+#include <chrono>
+#include <cstdio>
+#include <ctime>
+#include <fstream>
+#include <iostream>
 
 #define VERSION "1.0"
 #define MAX_IN_PROGRESS_COUNT 1000
@@ -43,7 +44,7 @@ enum class DeviceTypeData
     NVLinkMgmtNIC_Log,
 };
 
-//NOLINTBEGIN
+// NOLINTBEGIN
 void log_msg(std::string msg)
 {
     fstream log_file;
@@ -282,9 +283,9 @@ uint64_t getNextRecord(uint8_t switchIndex, DeviceTypeData dataType)
             break;
     }
 
-    auto getNextRecord = bus.new_method_call("xyz.openbmc_project.NSM",
-                                             objectPath.c_str(), interf.c_str(),
-                                             method.c_str());
+    auto getNextRecord =
+        bus.new_method_call("xyz.openbmc_project.NSM", objectPath.c_str(),
+                            interf.c_str(), method.c_str());
 
     switch (dataType)
     {
@@ -531,8 +532,8 @@ uint8_t getSwitchDump(uint8_t switchIndex)
     uint16_t busyCounter = 0;
     uint8_t res;
     outputFileSize = 0;
-    outputFileName = dumpPath + "/NVSwitch_" + std::to_string(switchIndex) +
-                     "_dump.bin";
+    outputFileName =
+        dumpPath + "/NVSwitch_" + std::to_string(switchIndex) + "_dump.bin";
     std::string statusStr = "Started to get the Net_NVSwitch_" +
                             std::to_string(switchIndex) + " dump";
     log_msg(statusStr);
@@ -863,4 +864,4 @@ int main(int argc, char** argv)
 
     return res_dump;
 }
-//NOLINTEND
+// NOLINTEND

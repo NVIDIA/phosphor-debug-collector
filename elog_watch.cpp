@@ -7,11 +7,12 @@
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
 #include <cereal/cereal.hpp>
-#include <fstream>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/exception.hpp>
 #include <xyz/openbmc_project/Dump/Create/common.hpp>
+
+#include <fstream>
 
 // Register class version with Cereal
 CEREAL_CLASS_VERSION(phosphor::dump::elog::Watch, CLASS_VERSION)

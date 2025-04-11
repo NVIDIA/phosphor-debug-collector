@@ -5,15 +5,16 @@
 #include "dump_utils.hpp"
 #include "faultlog_dump_entry.hpp"
 
-#include <filesystem>
-#include <fstream>
-#include <iostream>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/lg2.hpp>
-#include <string>
 #include <xyz/openbmc_project/Common/File/error.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
+
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <string>
 
 namespace phosphor
 {

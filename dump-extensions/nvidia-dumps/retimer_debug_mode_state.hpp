@@ -68,10 +68,10 @@ class State : virtual public DebugModeIface, virtual public ServiceReadyIface
         std::string vendorId;
         try
         {
-            std::string objectPath = getDBusObject(bus,
-                                                   RETIMER_SWITCHES_BASE_PATH);
-            std::string service = getService(bus, objectPath.c_str(),
-                                             SWITCH_INTERFACE);
+            std::string objectPath =
+                getDBusObject(bus, RETIMER_SWITCHES_BASE_PATH);
+            std::string service =
+                getService(bus, objectPath.c_str(), SWITCH_INTERFACE);
             auto method =
                 bus.new_method_call(service.c_str(), objectPath.c_str(),
                                     "org.freedesktop.DBus.Properties", "Get");
@@ -81,12 +81,12 @@ class State : virtual public DebugModeIface, virtual public ServiceReadyIface
             reply.read(propertyValue);
             vendorId = std::get<std::string>(propertyValue);
         }
-        //NOLINTBEGIN
+        // NOLINTBEGIN
         catch (const std::exception& e)
         {
             // ignore the error when the resource service is also starting
         }
-        //NOLINTEND
+        // NOLINTEND
         if (!vendorId.empty())
         {
             retimerVendorId = vendorId;

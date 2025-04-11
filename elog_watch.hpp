@@ -5,11 +5,12 @@
 #include "dump_manager_bmc.hpp"
 
 #include <cereal/access.hpp>
-#include <filesystem>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server.hpp>
-#include <set>
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
+
+#include <filesystem>
+#include <set>
 
 namespace phosphor
 {

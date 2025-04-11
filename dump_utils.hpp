@@ -5,7 +5,6 @@
 #include <systemd/sd-event.h>
 #include <unistd.h>
 
-#include <memory>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/lg2.hpp>
@@ -15,6 +14,8 @@
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
 #include <xyz/openbmc_project/State/Boot/Progress/server.hpp>
 #include <xyz/openbmc_project/State/Host/server.hpp>
+
+#include <memory>
 
 namespace phosphor
 {

@@ -22,6 +22,7 @@ BinPackArguments: true
 BinPackParameters: true
 BitFieldColonSpacing: None
 BraceWrapping:
+  AfterCaseLabel:  true
   AfterClass:      true
   AfterControlStatement: true
   AfterEnum:       true
@@ -64,17 +65,21 @@ ForEachMacros:
 IncludeBlocks: Regroup
 IncludeCategories:
   - Regex:           '^[<"](gtest|gmock)'
-    Priority:        5
+    Priority:        7
   - Regex:           '^"config.h"'
     Priority:        -1
-  - Regex:           '^".*\.hpp"'
+  - Regex:           '^".*\.h"'
     Priority:        1
-  - Regex:           '^<.*\.h>'
+  - Regex:           '^".*\.hpp"'
     Priority:        2
-  - Regex:           '^<.*'
+  - Regex:           '^<.*\.h>'
     Priority:        3
-  - Regex:           '.*'
+  - Regex:           '^<.*\.hpp>'
     Priority:        4
+  - Regex:           '^<.*'
+    Priority:        5
+  - Regex:           '.*'
+    Priority:        6
 IndentCaseLabels: true
 IndentExternBlock: NoIndent
 IndentRequiresClause: true
@@ -110,8 +115,13 @@ RequiresExpressionIndentation: Keyword
 SortIncludes: CaseSensitive
 SortUsingDeclarations: true
 SpaceAfterCStyleCast: false
+SpaceAfterTemplateKeyword: true
 SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
 SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
 SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 1
 SpacesInAngles: Never
@@ -119,7 +129,6 @@ SpacesInContainerLiterals: true
 SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
-Standard:        Cpp11
+Standard:        Latest
 TabWidth:        4
 UseTab:          Never
-...

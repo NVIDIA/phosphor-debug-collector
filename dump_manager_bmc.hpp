@@ -6,10 +6,11 @@
 #include "dump_utils.hpp"
 #include "watch.hpp"
 
-#include <filesystem>
-#include <map>
 #include <sdeventplus/source/child.hpp>
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
+
+#include <filesystem>
+#include <map>
 
 namespace phosphor
 {
