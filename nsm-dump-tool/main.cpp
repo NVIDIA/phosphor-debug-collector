@@ -338,7 +338,7 @@ uint8_t sendEraseCommand()
     }
     catch (const sdbusplus::exception::SdBusError& e)
     {
-        std::string errorStr("Function sendSwitchEraseCommand failed");
+        std::string errorStr("Function sendEraseCommand failed");
         log<level::ERR>(errorStr.c_str());
         log<level::ERR>(e.what());
         return Error;
@@ -398,7 +398,7 @@ uint8_t getEraseStatus()
 
     catch (const sdbusplus::exception::SdBusError& e)
     {
-        std::string errorStr("Function getSwitchEraseStatus failed");
+        std::string errorStr("Function getEraseStatus failed");
         log<level::ERR>(errorStr.c_str());
         log<level::ERR>(e.what());
         return Error;
@@ -633,14 +633,14 @@ void getNetIRData(DataType dataType)
                 res = sendEraseCommand();
                 if (Success == res)
                 {
-                    while (errorCounter < MAX_ERROR_COUNT &&
-                           busyCounter < MAX_IN_PROGRESS_COUNT &&
-                           res != Success)
+                    do
                     {
                         res = getEraseStatus();
                         errorCounter += (Error == res);
                         busyCounter += (InProgress == res);
-                    }
+                    } while (errorCounter < MAX_ERROR_COUNT &&
+                             busyCounter < MAX_IN_PROGRESS_COUNT &&
+                             res != Success);
                 }
                 if (res != Success)
                 {
