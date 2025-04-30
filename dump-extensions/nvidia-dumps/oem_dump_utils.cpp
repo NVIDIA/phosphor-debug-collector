@@ -19,7 +19,6 @@
 
 #include <algorithm>
 #include <map>
-#include <phosphor-logging/lg2.hpp>
 #include <string>
 #include <vector>
 
@@ -30,11 +29,6 @@ namespace dump
 
 using MapperGetSubTreeResponse =
     std::map<std::string, std::map<std::string, std::vector<std::string>>>;
-
-// <SupportedDumpType, DiagnosticType>
-const std::unordered_map<std::string, std::string> debugInfoDumpTypeMapping{
-    {"com.nvidia.Dump.DebugInfo.DumpType.Network", "NetIR"},
-    {"com.nvidia.Dump.DebugInfo.DumpType.Diagnostics", "GPUDeviceDiagnostics"}};
 
 std::vector<std::string> splitString(const std::string& str, char delimiter)
 {

@@ -20,6 +20,7 @@
 #include "com/nvidia/Dump/AllowableValues/server.hpp"
 
 #include <boost/asio/io_context.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/asio/connection.hpp>
 
 constexpr auto DUMP_OEM_ALLOWABLE_VALUES_PATH =
@@ -38,6 +39,11 @@ using DumpType = AllowableValuesIface::DumpType;
 
 using OEMDataTypeAllowableValuesObject =
     sdbusplus::server::object::object<AllowableValuesIface>;
+
+// <SupportedDumpType, DiagnosticType>
+const std::unordered_map<std::string, std::string> debugInfoDumpTypeMapping{
+    {"com.nvidia.Dump.DebugInfo.DumpType.Network", "NetIR"},
+    {"com.nvidia.Dump.DebugInfo.DumpType.Diagnostics", "GPUDeviceDiagnostics"}};
 
 class AsioConnection
 {
@@ -93,14 +99,49 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
             std::map<std::string, std::variant<std::string>> properties;
             msg.read(interface, properties);
 
-            if (properties.find("SupportedDumpType") != properties.end())
+            auto supportedTypeIt = properties.find("SupportedDumpType");
+            if (supportedTypeIt != properties.end())
             {
-                // There is an nsmd issue that we cannot receive the
-                // PropertiesChanged signal of NetIR. Need the full rediscovery
-                // for now.
-                // TODO: Read the message of property change and update the
-                // allowable types with no additional D-Bus call
-                populateDebugInfoDumpTypes(*this);
+                const std::string* dumpType =
+                    std::get_if<std::string>(&supportedTypeIt->second);
+                if (dumpType)
+                {
+                    if (auto it = debugInfoDumpTypeMapping.find(*dumpType);
+                        it != debugInfoDumpTypeMapping.end())
+                    {
+                        try
+                        {
+                            auto path = msg.get_path();
+                            std::string dumpDebugInfoName =
+                                sdbusplus::message::object_path(path)
+                                    .filename();
+                            std::string diagTypeStr =
+                                "DiagnosticType=" + it->second +
+                                ";DeviceType=" + dumpDebugInfoName;
+                            std::map<DumpType, std::vector<std::string>>
+                                oemAllowableValuesMap =
+                                    this->oemDataTypeAllowableValues();
+                            auto& systemValues =
+                                oemAllowableValuesMap[DumpType::System];
+                            if (std::ranges::find(systemValues, diagTypeStr) ==
+                                systemValues.end())
+                            {
+                                systemValues.emplace_back(diagTypeStr);
+                                std::sort(systemValues.begin(),
+                                          systemValues.end());
+                                this->oemDataTypeAllowableValues(
+                                    oemAllowableValuesMap);
+                            }
+                        }
+                        catch (const sdbusplus::exception_t& e)
+                        {
+                            lg2::error(
+                                "Failed to update OEM allowable values for System {TYPE} Dump: "
+                                "ERROR={ERROR}",
+                                "TYPE", it->second, "ERROR", e.what());
+                        }
+                    }
+                }
             }
         });
     }
