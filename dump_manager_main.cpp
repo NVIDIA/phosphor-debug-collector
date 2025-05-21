@@ -7,7 +7,9 @@
 #include "dump_manager.hpp"
 #include "dump_manager_bmc.hpp"
 #include "dump_manager_faultlog.hpp"
+#ifdef ENABLE_ELOG_WATCH
 #include "elog_watch.hpp"
+#endif
 #include "watch.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 
@@ -84,7 +86,9 @@ int main()
                 bus, eventP, BMC_DUMP_OBJPATH, BMC_DUMP_OBJ_ENTRY,
                 BMC_DUMP_PATH);
 
+#ifdef ENABLE_ELOG_WATCH
         phosphor::dump::bmc::Manager* ptrBmcDumpMgr = bmcDumpMgr.get();
+#endif
 
         dumpMgrList.push_back(std::move(bmcDumpMgr));
 
@@ -103,7 +107,9 @@ int main()
             dmpMgr->restore();
         }
 
+#ifdef ENABLE_ELOG_WATCH
         phosphor::dump::elog::Watch eWatch(bus, *ptrBmcDumpMgr);
+#endif
 
         bus.attach_event(eventP.get(), SD_EVENT_PRIORITY_NORMAL);
 
