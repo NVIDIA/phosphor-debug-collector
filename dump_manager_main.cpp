@@ -87,6 +87,29 @@ int main()
 
 #ifdef FAULTLOG_DUMP_EXTENSION
         phosphor::dump::loadExtensionsFaultLog(bus, dumpMgrList);
+#else
+        std::error_code ec;
+        if (std::filesystem::exists(FAULTLOG_DUMP_PATH, ec))
+        {
+            if (ec)
+            {
+                lg2::error(
+                    "Failed to check existence of FAULTLOG_DUMP_PATH: {ERROR}",
+                    "ERROR", ec.message());
+            }
+            else
+            {
+                lg2::info(
+                    "Cleaning up FAULTLOG_DUMP_PATH directory since FAULTLOG_DUMP_EXTENSION is disabled");
+                std::filesystem::remove_all(FAULTLOG_DUMP_PATH, ec);
+                if (ec)
+                {
+                    lg2::error(
+                        "Failed to clean up FAULTLOG_DUMP_PATH directory: {ERROR}",
+                        "ERROR", ec.message());
+                }
+            }
+        }
 #endif
 
 #ifdef FDR_DUMP_EXTENSION
