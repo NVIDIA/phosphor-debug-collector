@@ -41,26 +41,89 @@ command="busctl call --verbose --no-pager \
 
 add_cmd_output "$command" "$file_name" "$desc"
 
+json_output=$(busctl -j call xyz.openbmc_project.ObjectMapper /xyz/openbmc_project/object_mapper \
+    xyz.openbmc_project.ObjectMapper GetSubTree sias "/" 0 1 xyz.openbmc_project.MCTP.Endpoint)
+
+mctp_EIDs=()
+services=()
+paths=()
+
+tempfile=$(mktemp)
+echo "$json_output" | grep -oE '"/xyz/openbmc_project/mctp/[0-9]+/[0-9]+":[^{]*\{"[^"]+"' > "$tempfile"
+
+while read -r entry
+do
+    path=$(echo "$entry" | grep -oE '/xyz/openbmc_project/mctp/[0-9]+/[0-9]+')
+    mctp_EID="${path##*/}"
+    service=$(echo "$entry" | grep -oE '"xyz\.openbmc_project\.MCTP\.Control\.[^"]+' | tr -d '"')
+
+    mctp_EIDs+=("$mctp_EID")
+    services+=("$service")
+    paths+=("$path")
+done < "$tempfile"
+rm -f "$tempfile"
+
 desc="pldmtool commands"
 op="/tmp/pldmtoolop.log"
 file_name="pldmtool.log"
 echo "pldmtool fw_update GetStatus,GetFwParams,QueryDeviceIdentifiers ----" >> "$op"
-for i in {13..21} {24..29}
-do 
-    if ! timeout 15 pldmtool fw_update GetStatus -m $i &>> "$op"; then
-        log_error "Failed to collect pldmtool fw_update GetStatus for endpoint id $i"
-        continue 
+for i in "${!mctp_EIDs[@]}"
+do
+    mctp_EID="${mctp_EIDs[$i]}"
+    service="${services[$i]}"
+    path="${paths[$i]}"
+
+    enabled=$(busctl get-property "$service" "$path" xyz.openbmc_project.Object.Enable Enabled 2>/dev/null | awk '{print $2}')
+
+    smt_raw=$(busctl get-property "$service" "$path" xyz.openbmc_project.MCTP.Endpoint SupportedMessageTypes 2>/dev/null)
+    smt_clean=$(echo "$smt_raw" | sed 's/.*ay //' | cut -d' ' -f2-)
+
+    read -ra smt_array <<< "$smt_clean"
+
+    pldm_supported=false
+
+    for smt in "${smt_array[@]}"; do
+        if [[ "$smt" == "1" ]]; then
+            pldm_supported=true
+        fi
+    done
+
+    pldm_types=$(timeout 15 pldmtool base GetPLDMTypes -m "$mctp_EID" | grep '"PLDM Type Code"' | awk -F': ' '{print $2}' | tr -d ',')
+
+    if echo "$pldm_types" | grep -q "^5$" && [[ "$pldm_supported" == "true" ]]; then
+        pldm_type_5_supported="true"
+    else
+        pldm_type_5_supported="false"
     fi
 
-    if ! timeout 15 pldmtool fw_update GetFwParams -m $i &>> "$op"; then
-        log_error "Failed to collect pldmtool fw_update GetFwParams for endpoint id $i"
-        continue 
-    fi
+    if [[ "$enabled" == "true" && "$pldm_supported" == "true" && "$pldm_type_5_supported" == "true" ]]; then
 
-    if ! timeout 15 pldmtool fw_update QueryDeviceIdentifiers -m $i &>> "$op"; then
-        log_error "Failed to collect pldmtool fw_update QueryDeviceIdentifiers for endpoint id $i"
-        continue 
-    fi   
+        echo "--- pldmtool fw_update GetStatus for eid $mctp_EID ----" >> "$op"
+        if ! timeout 15 pldmtool fw_update GetStatus -m $mctp_EID &>> "$op"; then
+            log_error "Failed to collect pldmtool fw_update GetStatus for endpoint id $mctp_EID"
+            continue 
+        fi
+
+        echo "--- pldmtool fw_update GetFwParams for eid $mctp_EID ----" >> "$op"
+        if ! timeout 15 pldmtool fw_update GetFwParams -m $mctp_EID &>> "$op"; then
+            log_error "Failed to collect pldmtool fw_update GetFwParams for endpoint id $mctp_EID"
+            continue 
+        fi
+
+        echo "--- pldmtool fw_update QueryDeviceIdentifiers for eid $mctp_EID ----" >> "$op"
+        if ! timeout 15 pldmtool fw_update QueryDeviceIdentifiers -m $mctp_EID &>> "$op"; then
+            log_error "Failed to collect pldmtool fw_update QueryDeviceIdentifiers for endpoint id $mctp_EID"
+            continue 
+        fi
+    else
+        if [[ "$enabled" != "true" ]]; then
+            echo "--- MCTP endpoint not enabled eid $mctp_EID ----" >> "$op"
+        elif [[ "$pldm_supported" != "true" ]]; then
+            echo "--- MCTP endpoint doesn't support PLDM eid $mctp_EID ----" >> "$op"
+        elif [[ "$pldm_type_5_supported" != "true" ]]; then
+            echo "--- MCTP endpoint doesn't support PLDM T5 eid $mctp_EID ----" >> "$op"
+        fi
+    fi
 done
 
 command="cat $op"
