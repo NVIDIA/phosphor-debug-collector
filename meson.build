@@ -143,6 +143,11 @@ conf_data.set_quoted(
     get_option('SYSTEM_DUMP_OBJ_ENTRY'),
     description: 'The system dump entry D-Bus object path',
 )
+conf_data.set_quoted(
+    'SYSTEM_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
+    get_option('SYSTEM_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE'),
+    description: 'OEM diagnostic data allowable type for system dump',
+)
 conf_data.set(
     'SYSTEM_DUMP_MAX_SIZE',
     get_option('SYSTEM_DUMP_MAX_SIZE'),
@@ -513,8 +518,8 @@ endforeach
 
 subdir('create-dump-dbus')
 
-if get_option('nsm-net-dump-tool').allowed()
-  subdir('nsm-net-dump-tool')
+if get_option('nsm-dump-tool').allowed()
+  subdir('nsm-dump-tool')
 endif
 
 unit_subs = configuration_data()

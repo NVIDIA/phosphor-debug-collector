@@ -3,10 +3,13 @@
 #include "dump-extensions.hpp"
 #include "dump-extensions/faultlog-dump/faultlog-dump-extensions.hpp"
 #include "dump-extensions/fdr-dump/fdr-dump-extensions.hpp"
+#include "dump-extensions/nvidia-dumps/oem_dump_utils.hpp"
 #include "dump_manager.hpp"
 #include "dump_manager_bmc.hpp"
 #include "dump_manager_faultlog.hpp"
+#ifdef ENABLE_ELOG_WATCH
 #include "elog_watch.hpp"
+#endif
 #include "watch.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 
@@ -65,13 +68,19 @@ int main()
 
     try
     {
+        // Add the object for the AllowableValues interface
+        phosphor::dump::OEMTypeAllowableValuesIf objOEMTypeAllowableValuesIf(
+            DUMP_OEM_ALLOWABLE_VALUES_PATH);
+
         phosphor::dump::DumpManagerList dumpMgrList{};
         std::unique_ptr<phosphor::dump::bmc::Manager> bmcDumpMgr =
             std::make_unique<phosphor::dump::bmc::Manager>(
                 bus, eventP, BMC_DUMP_OBJPATH, BMC_DUMP_OBJ_ENTRY,
                 BMC_DUMP_PATH);
 
+#ifdef ENABLE_ELOG_WATCH
         phosphor::dump::bmc::Manager* ptrBmcDumpMgr = bmcDumpMgr.get();
+#endif
 
         dumpMgrList.push_back(std::move(bmcDumpMgr));
 
@@ -79,6 +88,29 @@ int main()
 
 #ifdef FAULTLOG_DUMP_EXTENSION
         phosphor::dump::loadExtensionsFaultLog(bus, dumpMgrList);
+#else
+        std::error_code ec;
+        if (std::filesystem::exists(FAULTLOG_DUMP_PATH, ec))
+        {
+            if (ec)
+            {
+                lg2::error(
+                    "Failed to check existence of FAULTLOG_DUMP_PATH: {ERROR}",
+                    "ERROR", ec.message());
+            }
+            else
+            {
+                lg2::info(
+                    "Cleaning up FAULTLOG_DUMP_PATH directory since FAULTLOG_DUMP_EXTENSION is disabled");
+                std::filesystem::remove_all(FAULTLOG_DUMP_PATH, ec);
+                if (ec)
+                {
+                    lg2::error(
+                        "Failed to clean up FAULTLOG_DUMP_PATH directory: {ERROR}",
+                        "ERROR", ec.message());
+                }
+            }
+        }
 #endif
 
 #ifdef FDR_DUMP_EXTENSION
@@ -90,7 +122,9 @@ int main()
             dmpMgr->restore();
         }
 
+#ifdef ENABLE_ELOG_WATCH
         phosphor::dump::elog::Watch eWatch(bus, *ptrBmcDumpMgr);
+#endif
 
         bus.attach_event(eventP.get(), SD_EVENT_PRIORITY_NORMAL);
 

@@ -149,7 +149,7 @@ void requestOffload(fs::path file, uint32_t dumpId, std::string writePath)
 
         fd_set readFD;
         struct timeval timeVal;
-        timeVal.tv_sec = 1;
+        timeVal.tv_sec = 30;
         timeVal.tv_usec = 0;
 
         FD_ZERO(&readFD);
