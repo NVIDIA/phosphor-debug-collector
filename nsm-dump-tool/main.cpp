@@ -16,7 +16,7 @@
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 
-#define VERSION "2.1"
+#define VERSION "2.2"
 #define MAX_IN_PROGRESS_COUNT 1000
 #define MAX_ERROR_COUNT 3
 #define SLEEP_DURING_WAIT 20
@@ -505,17 +505,16 @@ void getNetIRData(DataType dataType)
         case DataType::Dump:
             outputFileName = tempPath + "/" + targetDevice + "_dump.bin";
             statusStr = "Started to get the " + targetDevice + " dump";
+            log_msg(statusStr);
             break;
         case DataType::Log:
             outputFileName = tempPath + "/" + targetDevice + "_log.bin";
-            statusStr = "Started to get the " + targetDevice + " log";
             break;
         default:
             std::string errorStr("Invalid data type in getDumpData");
             log<level::ERR>(errorStr.c_str());
             break;
     }
-    log_msg(statusStr);
     do
     {
         res = InProgress;
@@ -544,59 +543,22 @@ void getNetIRData(DataType dataType)
             busyCounter += (res == InProgress);
         }
         res = InProgress;
-        switch (dataType)
-        {
-            case DataType::Dump:
-                statusStr = "Getting the " + targetDevice + " dump";
-                break;
-            case DataType::Log:
-                statusStr = "Getting the " + targetDevice + " log";
-                break;
-            default:
-                std::string errorStr("Invalid data type in getNetIRData");
-                log<level::ERR>(errorStr.c_str());
-                break;
-        }
         if (MAX_ERROR_COUNT == errorCounter)
         {
-            statusStr += " reported errors";
-            log_msg(statusStr);
             break;
         }
         if (MAX_IN_PROGRESS_COUNT == busyCounter)
         {
-            statusStr += " timeout";
-            log_msg(statusStr);
             break;
         }
         if (saveRecord(dataType))
         {
-            switch (dataType)
-            {
-                case DataType::Dump:
-                    statusStr = "Saving the " + targetDevice +
-                                " dump reported errors";
-                    break;
-                case DataType::Log:
-                    statusStr = "Saving the " + targetDevice +
-                                " log reported errors";
-                    break;
-                default:
-                    std::string errorStr("Invalid data type in getNetIRData");
-                    log<level::ERR>(errorStr.c_str());
-                    break;
-            }
-            log_msg(statusStr);
             break;
         }
         res = Success;
         segmentsCounter++;
         currentRecord = getNextRecord(dataType);
     } while (currentRecord != 0);
-    statusStr = "Total number of segments: " + std::to_string(segmentsCounter);
-    log_msg(statusStr);
-    statusStr = "Output file size: " + std::to_string(outputFileSize);
-    log_msg(statusStr);
     if (res != Success)
     {
         switch (dataType)
@@ -604,17 +566,15 @@ void getNetIRData(DataType dataType)
             case DataType::Dump:
                 statusStr = "Getting the " + targetDevice +
                             " dump completed with errors";
+                log_msg(statusStr);
                 break;
             case DataType::Log:
-                statusStr = "Getting the " + targetDevice +
-                            " log completed with errors";
                 break;
             default:
                 std::string errorStr("Invalid data type in getNetIRData");
                 log<level::ERR>(errorStr.c_str());
                 break;
         }
-        log_msg(statusStr);
     }
     else
     {
@@ -624,8 +584,11 @@ void getNetIRData(DataType dataType)
                 statusStr = "Getting the " + targetDevice +
                             " dump completed successfully";
                 log_msg(statusStr);
-                statusStr = "Started to erase the " + targetDevice +
-                            " dump contents";
+                statusStr = "Total number of segments: " +
+                            std::to_string(segmentsCounter);
+                log_msg(statusStr);
+                statusStr = "Output file size: " +
+                            std::to_string(outputFileSize);
                 log_msg(statusStr);
                 res = InProgress;
                 errorCounter = 0;
@@ -642,20 +605,33 @@ void getNetIRData(DataType dataType)
                              busyCounter < MAX_IN_PROGRESS_COUNT &&
                              res != Success);
                 }
-                if (res != Success)
+                if (res == Success)
                 {
-                    statusStr = "Erasing the " + targetDevice +
-                                " dump completed with errors";
+                    statusStr = "Started to erase the " + targetDevice +
+                                " dump contents";
                     log_msg(statusStr);
-                }
-                else
-                {
                     log_msg("Done.");
                 }
                 break;
             case DataType::Log:
-                statusStr = "Getting the " + targetDevice +
-                            " log completed successfully";
+                if (outputFileSize != 0)
+                {
+                    statusStr = "Started to get the " + targetDevice + " log";
+                    log_msg(statusStr);
+                    statusStr = "Getting the " + targetDevice +
+                                " log completed successfully";
+                    log_msg(statusStr);
+                    statusStr = "Total number of segments: " +
+                                std::to_string(segmentsCounter);
+                    log_msg(statusStr);
+                    statusStr = "Output file size: " +
+                                std::to_string(outputFileSize);
+                    log_msg(statusStr);
+                }
+                else
+                {
+                    std::filesystem::remove(outputFileName);
+                }
                 break;
             default:
                 std::string errorStr("Invalid data type in getNetIRData");
@@ -852,7 +828,6 @@ int main(int argc, char** argv)
                 }
                 else
                 {
-                    log_msg(objectPath);
                     getNetIRData(DataType::Log);
                 }
                 break;
