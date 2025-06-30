@@ -575,6 +575,12 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                                   std::to_string(si->si_status);
                 log<level::ERR>(msg.c_str());
                 this->createDumpFailed(entryId);
+
+                // Disable retimer debug mode if RetLTSSM dump failed
+                if (diagnosticTypeStr == "RetLTSSM")
+                {
+                    retimerState.debugMode(false);
+                }
             }
 
             this->childPtrMap.erase(pid);
