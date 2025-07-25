@@ -357,8 +357,8 @@ function main()
     fi
 }
 
-TEMP=`getopt -o n:d:i:t:s:p:vqh \
-    --long name:,dir:,dumpid:,type:,size:,path:,verbose,quiet,help \
+TEMP=`getopt -o n:d:i:t:s:p:a:c:vqh \
+    --long name:,dir:,dumpid:,type:,size:,path:,args:,compression:,verbose,quiet,help \
     -- "$@"`
 
 if [ $? -ne 0 ]
