@@ -3,6 +3,10 @@
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  */
 
+#include <fcntl.h>
+#include <sys/stat.h> // for fstat
+#include <unistd.h>
+
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/lg2.hpp>
@@ -15,10 +19,6 @@
 #include <format>
 #include <fstream>
 #include <iostream>
-
-#include <fcntl.h>
-#include <sys/stat.h> // for fstat
-#include <unistd.h>
 
 #define VERSION "3.0"
 #define SLEEP_DURING_WAIT_SECONDS 1
@@ -81,9 +81,9 @@ OperationStatus getAsyncStatus(std::string path, std::string& response)
     interf = "org.freedesktop.DBus.Properties";
     method = "Get";
 
-    auto commandStatusMethod = bus.new_method_call("xyz.openbmc_project.NSM",
-                                                   path.c_str(), interf.c_str(),
-                                                   method.c_str());
+    auto commandStatusMethod =
+        bus.new_method_call("xyz.openbmc_project.NSM", path.c_str(),
+                            interf.c_str(), method.c_str());
     commandStatusMethod.append("com.nvidia.Async.Status", "Status");
 
     try
@@ -187,10 +187,10 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType,
 
     std::vector<std::string> paths;
 
-    auto mapper = bus.new_method_call("xyz.openbmc_project.ObjectMapper",
-                                      "/xyz/openbmc_project/object_mapper",
-                                      "xyz.openbmc_project.ObjectMapper",
-                                      "GetSubTreePaths");
+    auto mapper = bus.new_method_call(
+        "xyz.openbmc_project.ObjectMapper",
+        "/xyz/openbmc_project/object_mapper",
+        "xyz.openbmc_project.ObjectMapper", "GetSubTreePaths");
     mapper.append(rootPath.c_str());
     mapper.append(0); // Depth 0 to search all
     switch (dataType)
@@ -274,14 +274,15 @@ std::string generateTempFolderName(std::string dumpID)
     ctime_r(&time_now, static_cast<char*>(time_string));
 
     // Parse time string (format: "Day Mon DD HH:MM:SS YYYY\n")
-    strptime(static_cast<const char*>(time_string), "%a %b %d %H:%M:%S %Y", &time_info);
+    strptime(static_cast<const char*>(time_string), "%a %b %d %H:%M:%S %Y",
+             &time_info);
 
-    sprintf(static_cast<char*>(time_string), "_%02d%02d%02d%02d%02d", time_info.tm_mon + 1,
-            time_info.tm_mday, time_info.tm_hour, time_info.tm_min,
-            time_info.tm_sec);
+    sprintf(static_cast<char*>(time_string), "_%02d%02d%02d%02d%02d",
+            time_info.tm_mon + 1, time_info.tm_mday, time_info.tm_hour,
+            time_info.tm_min, time_info.tm_sec);
 
-    std::string folderName = std::format("{}{}{}", "obmcdump_", dumpID,
-                                         time_string);
+    std::string folderName =
+        std::format("{}{}{}", "obmcdump_", dumpID, time_string);
 
     return folderName;
 }
@@ -395,14 +396,14 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
     int fd = open(outputFileName.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd == -1)
     {
-        throw std::runtime_error("Failed to open output file: " +
-                                 outputFileName);
+        throw std::runtime_error(
+            "Failed to open output file: " + outputFileName);
     }
     auto path = startAsyncDump(objectPath, dataType, dumpType, fd);
     if (path.empty())
     {
-        throw std::runtime_error("Failed to start async dump for " +
-                                 targetDevice);
+        throw std::runtime_error(
+            "Failed to start async dump for " + targetDevice);
     }
 
     OperationStatus status;
@@ -432,8 +433,8 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
         else
         {
             logMsg(std::format("{} file '{}' is empty for {}",
-                                dataType == DataType::Dump ? "Dump" : "Log",
-                                outputFileName, targetDevice));
+                               dataType == DataType::Dump ? "Dump" : "Log",
+                               outputFileName, targetDevice));
         }
     }
     else
@@ -458,7 +459,7 @@ void dumpData(DumpType dumpType)
     }
 
     logMsg(std::format("Starting getting dump data for target device: {}",
-                        targetDevice));
+                       targetDevice));
     // Get the dump data for Network or Diagnostics
     getDumpData(objectPath, DataType::Dump, dumpType);
 
@@ -475,7 +476,7 @@ void dumpData(DumpType dumpType)
         }
 
         logMsg(std::format("Starting getting log data for target device: {}",
-                            targetDevice));
+                           targetDevice));
         getDumpData(objectPath, DataType::Log, dumpType);
         if (objectPath != eraseDumpPath)
         {
@@ -569,15 +570,15 @@ int main(int argc, char** argv)
                               ".tar.xz -C " + tempDir + " " + tempFolderName;
 
         logMsg(std::format("Compressing dump to `{}`",
-                            dumpPath + '/' + tempFolderName + ".tar.xz"));
+                           dumpPath + '/' + tempFolderName + ".tar.xz"));
         // NOLINTBEGIN
         result = system(command.c_str());
         // NOLINTEND
 
         if (result != 0)
         {
-            auto errorStr = std::format("Command failed with error code: {}",
-                                        result);
+            auto errorStr =
+                std::format("Command failed with error code: {}", result);
             log<level::ERR>(errorStr.c_str());
         }
 

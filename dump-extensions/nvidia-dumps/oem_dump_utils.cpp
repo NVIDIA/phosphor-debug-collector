@@ -62,95 +62,104 @@ void OEMTypeAllowableValuesIf::populateDebugInfoDumpTypes(
     conn->async_method_call(
         [conn, &iface](const boost::system::error_code& ec,
                        const MapperGetSubTreeResponse& mapperResponse) {
-        if (ec)
-        {
-            lg2::error(
-                "Failed to get subtree from '{IFACE}' interface: ERROR={ERROR}",
-                "IFACE", DEBUG_INFO_INTERFACE, "ERROR", ec.message());
-            return;
-        }
-
-        for (const auto& [path, serviceMap] : mapperResponse)
-        {
-            if (serviceMap.empty())
+            if (ec)
             {
-                continue;
+                lg2::error(
+                    "Failed to get subtree from '{IFACE}' interface: ERROR={ERROR}",
+                    "IFACE", DEBUG_INFO_INTERFACE, "ERROR", ec.message());
+                return;
             }
 
-            for (const auto& [service, interfaces] : serviceMap)
+            for (const auto& [path, serviceMap] : mapperResponse)
             {
-                conn->async_method_call(
-                    [service, path,
-                     &iface](const boost::system::error_code& ec2,
-                             const std::variant<std::string>& value) {
-                    if (ec2)
-                    {
-                        lg2::error(
-                            "Failed to get 'SupportedDumpType' property in '{IFACE}' interface: "
-                            "PATH={PATH}; SERVICE={SERVICE}; ERROR={ERROR}",
-                            "IFACE", DEBUG_INFO_INTERFACE, "PATH", path.c_str(),
-                            "SERVICE", service.c_str(), "ERROR", ec2.message());
-                        return;
-                    }
+                if (serviceMap.empty())
+                {
+                    continue;
+                }
 
-                    if (std::holds_alternative<std::string>(value))
-                    {
-                        std::string dumpType = std::get<std::string>(value);
-                        sdbusplus::message::object_path dumpDebugInfoId(path);
-                        std::string dumpDebugInfoName =
-                            dumpDebugInfoId.filename();
-
-                        if (auto it = debugInfoDumpTypeMapping.find(dumpType);
-                            it != debugInfoDumpTypeMapping.end())
-                        {
-                            try
-                            {
-                                // Get the DiagnosticType name from the
-                                // mapping's value (it->second)
-                                std::string diagTypeStr =
-                                    "DiagnosticType=" + it->second +
-                                    ";DeviceType=" + dumpDebugInfoName;
-
-                                std::map<DumpType, std::vector<std::string>>
-                                    oemAllowableValuesMap =
-                                        iface.oemDataTypeAllowableValues();
-                                auto& systemValues =
-                                    oemAllowableValuesMap[DumpType::System];
-                                if (std::ranges::find(systemValues,
-                                                      diagTypeStr) ==
-                                    systemValues.end())
-                                {
-                                    systemValues.emplace_back(diagTypeStr);
-                                    std::sort(systemValues.begin(),
-                                              systemValues.end());
-                                    iface.oemDataTypeAllowableValues(
-                                        oemAllowableValuesMap);
-                                }
-                            }
-                            catch (const sdbusplus::exception_t& e)
+                for (const auto& [service, interfaces] : serviceMap)
+                {
+                    conn->async_method_call(
+                        [service, path,
+                         &iface](const boost::system::error_code& ec2,
+                                 const std::variant<std::string>& value) {
+                            if (ec2)
                             {
                                 lg2::error(
-                                    "Failed to set OEM allowable values for System {TYPE} Dump: "
-                                    "ERROR={ERROR}",
-                                    "TYPE", it->second, "ERROR", e.what());
+                                    "Failed to get 'SupportedDumpType' property in '{IFACE}' interface: "
+                                    "PATH={PATH}; SERVICE={SERVICE}; ERROR={ERROR}",
+                                    "IFACE", DEBUG_INFO_INTERFACE, "PATH",
+                                    path.c_str(), "SERVICE", service.c_str(),
+                                    "ERROR", ec2.message());
+                                return;
                             }
-                        }
-                    }
-                    else
-                    {
-                        lg2::error(
-                            "Invalid type for 'SupportedDumpType' property in '{IFACE}' interface: "
-                            "PATH={PATH}; SERVICE={SERVICE}",
-                            "IFACE", DEBUG_INFO_INTERFACE, "PATH", path.c_str(),
-                            "SERVICE", service.c_str());
-                    }
-                },
-                    service.c_str(), path.c_str(),
-                    "org.freedesktop.DBus.Properties", "Get",
-                    DEBUG_INFO_INTERFACE, "SupportedDumpType");
+
+                            if (std::holds_alternative<std::string>(value))
+                            {
+                                std::string dumpType =
+                                    std::get<std::string>(value);
+                                sdbusplus::message::object_path dumpDebugInfoId(
+                                    path);
+                                std::string dumpDebugInfoName =
+                                    dumpDebugInfoId.filename();
+
+                                if (auto it =
+                                        debugInfoDumpTypeMapping.find(dumpType);
+                                    it != debugInfoDumpTypeMapping.end())
+                                {
+                                    try
+                                    {
+                                        // Get the DiagnosticType name from the
+                                        // mapping's value (it->second)
+                                        std::string diagTypeStr =
+                                            "DiagnosticType=" + it->second +
+                                            ";DeviceType=" + dumpDebugInfoName;
+
+                                        std::map<DumpType,
+                                                 std::vector<std::string>>
+                                            oemAllowableValuesMap =
+                                                iface
+                                                    .oemDataTypeAllowableValues();
+                                        auto& systemValues =
+                                            oemAllowableValuesMap
+                                                [DumpType::System];
+                                        if (std::ranges::find(systemValues,
+                                                              diagTypeStr) ==
+                                            systemValues.end())
+                                        {
+                                            systemValues.emplace_back(
+                                                diagTypeStr);
+                                            std::sort(systemValues.begin(),
+                                                      systemValues.end());
+                                            iface.oemDataTypeAllowableValues(
+                                                oemAllowableValuesMap);
+                                        }
+                                    }
+                                    catch (const sdbusplus::exception_t& e)
+                                    {
+                                        lg2::error(
+                                            "Failed to set OEM allowable values for System {TYPE} Dump: "
+                                            "ERROR={ERROR}",
+                                            "TYPE", it->second, "ERROR",
+                                            e.what());
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                lg2::error(
+                                    "Invalid type for 'SupportedDumpType' property in '{IFACE}' interface: "
+                                    "PATH={PATH}; SERVICE={SERVICE}",
+                                    "IFACE", DEBUG_INFO_INTERFACE, "PATH",
+                                    path.c_str(), "SERVICE", service.c_str());
+                            }
+                        },
+                        service.c_str(), path.c_str(),
+                        "org.freedesktop.DBus.Properties", "Get",
+                        DEBUG_INFO_INTERFACE, "SupportedDumpType");
+                }
             }
-        }
-    },
+        },
         "xyz.openbmc_project.ObjectMapper",
         "/xyz/openbmc_project/object_mapper",
         "xyz.openbmc_project.ObjectMapper", "GetSubTree",
@@ -175,8 +184,8 @@ void OEMTypeAllowableValuesIf::populateSystemOEMDataTypeAllowableValues(
 
         if (!std::ranges::any_of(debugInfoDumpTypeMapping,
                                  [&typeStr](const auto& pair) {
-            return pair.second == typeStr;
-        }))
+                                     return pair.second == typeStr;
+                                 }))
         {
             try
             {

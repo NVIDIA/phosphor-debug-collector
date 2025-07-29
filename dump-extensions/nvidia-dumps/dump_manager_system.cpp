@@ -509,8 +509,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                 }
                 else
                 {
-                    diagnosticTypeStr = diagnosticTypeStr.erase(0, 4) + "_" +
-                                        deviceID;
+                    diagnosticTypeStr =
+                        diagnosticTypeStr.erase(0, 4) + "_" + deviceID;
                     nsmDump(id, dumpPath, NSM_DUMP_TEMP_PATH, diagnosticTypeStr,
                             "Network");
                 }
@@ -544,7 +544,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
             case DiagnosticType::RetLTSSM:
                 retimerLtssmDump(id, dumpPath, retimerState.getVendorId());
                 break;
-            case DiagnosticType::RetRegister: {
+            case DiagnosticType::RetRegister:
+            {
                 std::string retimer_address =
                     std::get<std::string>(params["Address"]);
                 retimerRegisterDump(id, dumpPath, retimer_address,
@@ -569,12 +570,13 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                                        Child&, const siginfo_t* si) {
             if (si->si_status != 0)
             {
-                std::string msg = "Dump process failed: (signo)" +
-                                  std::to_string(si->si_signo) + "; (code)" +
-                                  std::to_string(si->si_code) + "; (errno)" +
-                                  std::to_string(si->si_errno) + "; (pid)" +
-                                  std::to_string(si->si_pid) + "; (status)" +
-                                  std::to_string(si->si_status);
+                std::string msg =
+                    "Dump process failed: (signo)" +
+                    std::to_string(si->si_signo) + "; (code)" +
+                    std::to_string(si->si_code) + "; (errno)" +
+                    std::to_string(si->si_errno) + "; (pid)" +
+                    std::to_string(si->si_pid) + "; (status)" +
+                    std::to_string(si->si_status);
                 log<level::ERR>(msg.c_str());
                 this->createDumpFailed(static_cast<int>(entryId));
 
@@ -588,7 +590,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
             this->childPtrMap.erase(pid);
             // Remove dumpType from dumpInProgress when dump ends
             Manager::dumpInProgress.erase(diagnosticTypeStr);
-            };
+        };
 
         try
         {

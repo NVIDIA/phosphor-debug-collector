@@ -251,81 +251,81 @@ conf_data.set_quoted(
 
 # Add FDR dump configuration values to main config.h
 conf_data.set_quoted(
-    'FDR_DUMP_BIN_PATH', 
+    'FDR_DUMP_BIN_PATH',
     get_option('FDR_DUMP_BIN_PATH'),
-    description: 'The path of FDR dump script'
+    description: 'The path of FDR dump script',
 )
 conf_data.set_quoted(
-    'FDR_DUMP_OBJPATH', 
+    'FDR_DUMP_OBJPATH',
     get_option('FDR_DUMP_OBJPATH'),
-    description: 'The FDR dump manager D-Bus object path'
+    description: 'The FDR dump manager D-Bus object path',
 )
 conf_data.set_quoted(
-    'FDR_DUMP_OBJ_ENTRY', 
+    'FDR_DUMP_OBJ_ENTRY',
     get_option('FDR_DUMP_OBJ_ENTRY'),
-    description: 'The FDR dump entry D-Bus object path'
+    description: 'The FDR dump entry D-Bus object path',
 )
 conf_data.set(
-    'FDR_DUMP_MAX_LIMIT', 
+    'FDR_DUMP_MAX_LIMIT',
     get_option('FDR_DUMP_MAX_LIMIT'),
-    description: 'Total FDR dumps to be retained on bmc'
+    description: 'Total FDR dumps to be retained on bmc',
 )
 conf_data.set_quoted(
-    'FDR_DUMP_PATH', 
+    'FDR_DUMP_PATH',
     get_option('FDR_DUMP_PATH'),
-    description: 'Directory where FDR dumps are placed'
+    description: 'Directory where FDR dumps are placed',
 )
 conf_data.set(
-    'FDR_DUMP_MAX_SIZE', 
+    'FDR_DUMP_MAX_SIZE',
     get_option('FDR_DUMP_MAX_SIZE'),
-    description: 'Maximum size of one FDR dump in kilo bytes'
+    description: 'Maximum size of one FDR dump in kilo bytes',
 )
 conf_data.set(
-    'FDR_DUMP_MIN_SPACE_REQD', 
+    'FDR_DUMP_MIN_SPACE_REQD',
     get_option('FDR_DUMP_MIN_SPACE_REQD'),
-    description: 'Minimum space required for one FDR dump in kilo bytes'
+    description: 'Minimum space required for one FDR dump in kilo bytes',
 )
 conf_data.set(
-    'FDR_DUMP_TOTAL_SIZE', 
+    'FDR_DUMP_TOTAL_SIZE',
     get_option('FDR_DUMP_TOTAL_SIZE'),
-    description: 'Total size of the dump in kilo bytes'
+    description: 'Total size of the dump in kilo bytes',
 )
 conf_data.set(
-    'FDR_DUMP_ROTATION', 
+    'FDR_DUMP_ROTATION',
     get_option('fdr-dump-rotation').enabled(),
-    description: 'Rotate dump when total size of dumps exceed the quota'
+    description: 'Rotate dump when total size of dumps exceed the quota',
 )
 
 # Add Fault Log dump configuration values to main config.h
 conf_data.set_quoted(
-    'CPER_DUMP_BIN_PATH', 
+    'CPER_DUMP_BIN_PATH',
     get_option('CPER_DUMP_BIN_PATH'),
-    description : 'The path of cper dump script'
+    description: 'The path of cper dump script',
 )
 conf_data.set(
-    'FAULTLOG_DUMP_MAX_LIMIT', 
+    'FAULTLOG_DUMP_MAX_LIMIT',
     get_option('FAULTLOG_DUMP_MAX_LIMIT'),
-    description : 'Total fault log dumps to be retained on bmc'
+    description: 'Total fault log dumps to be retained on bmc',
 )
 conf_data.set(
-    'FAULTLOG_DUMP_MAX_SIZE', 
+    'FAULTLOG_DUMP_MAX_SIZE',
     get_option('FAULTLOG_DUMP_MAX_SIZE'),
-    description : 'Maximum size of one fault log dump in kilo bytes'
+    description: 'Maximum size of one fault log dump in kilo bytes',
 )
 conf_data.set(
-    'FAULTLOG_DUMP_MIN_SPACE_REQD', 
+    'FAULTLOG_DUMP_MIN_SPACE_REQD',
     get_option('FAULTLOG_DUMP_MIN_SPACE_REQD'),
-    description : 'Minimum space required for one fault log dump in kilo bytes'
+    description: 'Minimum space required for one fault log dump in kilo bytes',
 )
 conf_data.set(
-    'FAULTLOG_DUMP_TOTAL_SIZE', 
+    'FAULTLOG_DUMP_TOTAL_SIZE',
     get_option('FAULTLOG_DUMP_TOTAL_SIZE'),
-    description : 'Total size of the dump in kilo bytes'
+    description: 'Total size of the dump in kilo bytes',
 )
 conf_data.set(
-    'FAULTLOG_DUMP_ROTATION', 
+    'FAULTLOG_DUMP_ROTATION',
     get_option('faultlog-dump-rotation').enabled(),
-    description : 'Rotate dump when total size of dumps exceed the quota'
+    description: 'Rotate dump when total size of dumps exceed the quota',
 )
 
 if cpp.has_header('poll.h')
@@ -519,7 +519,7 @@ endforeach
 subdir('create-dump-dbus')
 
 if get_option('nsm-dump-tool').allowed()
-  subdir('nsm-dump-tool')
+    subdir('nsm-dump-tool')
 endif
 
 unit_subs = configuration_data()

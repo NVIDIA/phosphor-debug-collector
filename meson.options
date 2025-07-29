@@ -199,9 +199,12 @@ option(
     description: 'Enable rotate config for bmc dump',
 )
 
-option('enable-elog-watch', type: 'feature',
-        description : 'Enable elog monitoring for dump creation', value: 'enabled'
-      )
+option(
+    'enable-elog-watch',
+    type: 'feature',
+    description: 'Enable elog monitoring for dump creation',
+    value: 'enabled',
+)
 
 # Fault log options
 
@@ -286,16 +289,18 @@ option(
     description: 'The system dump manager D-Bus object path',
 )
 
-option('SYSTEM_DUMP_OBJ_ENTRY', type : 'string',
-        value : '/xyz/openbmc_project/dump/system/entry',
-        description : 'The system dump entry D-Bus object path'
-      )
+option(
+    'SYSTEM_DUMP_OBJ_ENTRY',
+    type: 'string',
+    value: '/xyz/openbmc_project/dump/system/entry',
+    description: 'The system dump entry D-Bus object path',
+)
 
 option(
     'SYSTEM_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
-    type : 'string',
-    value : 'EROT,ROT,FirmwareAttributes',
-    description : 'OEM diagnostic data allowable type for system dump'
+    type: 'string',
+    value: 'EROT,ROT,FirmwareAttributes',
+    description: 'OEM diagnostic data allowable type for system dump',
 )
 
 

@@ -69,8 +69,8 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
   public:
     OEMTypeAllowableValuesIf() = delete;
     OEMTypeAllowableValuesIf(const OEMTypeAllowableValuesIf&) = delete;
-    OEMTypeAllowableValuesIf&
-        operator=(const OEMTypeAllowableValuesIf&) = delete;
+    OEMTypeAllowableValuesIf& operator=(const OEMTypeAllowableValuesIf&) =
+        delete;
     OEMTypeAllowableValuesIf(OEMTypeAllowableValuesIf&&) = delete;
     OEMTypeAllowableValuesIf& operator=(OEMTypeAllowableValuesIf&&) = delete;
     virtual ~OEMTypeAllowableValuesIf() = default;
@@ -95,55 +95,56 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
             "arg0='" +
                 std::string(DEBUG_INFO_INTERFACE) + "'",
             [this](sdbusplus::message::message& msg) {
-            std::string interface;
-            std::map<std::string, std::variant<std::string>> properties;
-            msg.read(interface, properties);
+                std::string interface;
+                std::map<std::string, std::variant<std::string>> properties;
+                msg.read(interface, properties);
 
-            auto supportedTypeIt = properties.find("SupportedDumpType");
-            if (supportedTypeIt != properties.end())
-            {
-                const std::string* dumpType =
-                    std::get_if<std::string>(&supportedTypeIt->second);
-                if (dumpType)
+                auto supportedTypeIt = properties.find("SupportedDumpType");
+                if (supportedTypeIt != properties.end())
                 {
-                    if (auto it = debugInfoDumpTypeMapping.find(*dumpType);
-                        it != debugInfoDumpTypeMapping.end())
+                    const std::string* dumpType =
+                        std::get_if<std::string>(&supportedTypeIt->second);
+                    if (dumpType)
                     {
-                        try
+                        if (auto it = debugInfoDumpTypeMapping.find(*dumpType);
+                            it != debugInfoDumpTypeMapping.end())
                         {
-                            auto path = msg.get_path();
-                            std::string dumpDebugInfoName =
-                                sdbusplus::message::object_path(path)
-                                    .filename();
-                            std::string diagTypeStr =
-                                "DiagnosticType=" + it->second +
-                                ";DeviceType=" + dumpDebugInfoName;
-                            std::map<DumpType, std::vector<std::string>>
-                                oemAllowableValuesMap =
-                                    this->oemDataTypeAllowableValues();
-                            auto& systemValues =
-                                oemAllowableValuesMap[DumpType::System];
-                            if (std::ranges::find(systemValues, diagTypeStr) ==
-                                systemValues.end())
+                            try
                             {
-                                systemValues.emplace_back(diagTypeStr);
-                                std::sort(systemValues.begin(),
-                                          systemValues.end());
-                                this->oemDataTypeAllowableValues(
-                                    oemAllowableValuesMap);
+                                auto path = msg.get_path();
+                                std::string dumpDebugInfoName =
+                                    sdbusplus::message::object_path(path)
+                                        .filename();
+                                std::string diagTypeStr =
+                                    "DiagnosticType=" + it->second +
+                                    ";DeviceType=" + dumpDebugInfoName;
+                                std::map<DumpType, std::vector<std::string>>
+                                    oemAllowableValuesMap =
+                                        this->oemDataTypeAllowableValues();
+                                auto& systemValues =
+                                    oemAllowableValuesMap[DumpType::System];
+                                if (std::ranges::find(systemValues,
+                                                      diagTypeStr) ==
+                                    systemValues.end())
+                                {
+                                    systemValues.emplace_back(diagTypeStr);
+                                    std::sort(systemValues.begin(),
+                                              systemValues.end());
+                                    this->oemDataTypeAllowableValues(
+                                        oemAllowableValuesMap);
+                                }
                             }
-                        }
-                        catch (const sdbusplus::exception_t& e)
-                        {
-                            lg2::error(
-                                "Failed to update OEM allowable values for System {TYPE} Dump: "
-                                "ERROR={ERROR}",
-                                "TYPE", it->second, "ERROR", e.what());
+                            catch (const sdbusplus::exception_t& e)
+                            {
+                                lg2::error(
+                                    "Failed to update OEM allowable values for System {TYPE} Dump: "
+                                    "ERROR={ERROR}",
+                                    "TYPE", it->second, "ERROR", e.what());
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
     }
 
     /** @brief Populate OEM allowable values for System dump */
