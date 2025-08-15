@@ -4,11 +4,11 @@
  */
 
 #include <fcntl.h>
-#include <stdio.h>
 #include <sys/stat.h> // for fstat
 #include <unistd.h>
 
 #include <chrono>
+#include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <format>
@@ -31,13 +31,15 @@ enum OperationStatus
 {
     Success,
     InProgress,
+    NoDataErased,
     Error,
 };
 
 enum class DataType
 {
     Dump,
-    Log
+    Log,
+    SavedInfo
 };
 
 // Dump type enumeration
@@ -61,7 +63,7 @@ DumpType getDumpType(const std::string& typeStr)
     return it != dumpTypeMap.end() ? it->second : DumpType::Unknown;
 }
 
-void log_msg(std::string msg)
+void logMsg(std::string msg)
 {
     std::fstream log_file;
     log_file.open(tempPath + "/Execution_Report.txt", std::ios::app);
@@ -136,30 +138,34 @@ OperationStatus getEraseStatus(std::string objectPath)
         {
             return InProgress;
         }
-        else if ("com.nvidia.Dump.Erase.OperationStatus.Success" == eraseReason)
+
+        if ("com.nvidia.Dump.Erase.OperationStatus.Success" == eraseReason)
         {
+            if ("com.nvidia.Dump.Erase.OperationStatus.Success" == eraseReason)
             {
                 if ("com.nvidia.Dump.Erase.EraseStatus.DataEraseInProgress" ==
                     eraseStatus)
                 {
                     return InProgress;
                 }
-                else
+
+                if ("com.nvidia.Dump.Erase.EraseStatus.DataErased" ==
+                    eraseStatus)
                 {
-                    if ("com.nvidia.Dump.Erase.EraseStatus.DataErased" ==
-                        eraseStatus)
-                    {
-                        return Success;
-                    }
-                    else
-                    {
-                        log<level::ERR>(eraseStatus.c_str());
-                        return Error;
-                    }
+                    return Success;
                 }
+
+                if ("com.nvidia.Dump.Erase.EraseStatus.NoDataErased" ==
+                    eraseStatus)
+                {
+                    return NoDataErased;
+                }
+
+                log<level::ERR>(eraseStatus.c_str());
+                return Error;
             }
         }
-        else
+
         {
             log<level::ERR>(eraseStatus.c_str());
             return Error;
@@ -168,7 +174,7 @@ OperationStatus getEraseStatus(std::string objectPath)
 
     catch (const sdbusplus::exception::SdBusError& e)
     {
-        std::string errorStr("Function getSwitchEraseStatus failed");
+        std::string errorStr("Function getEraseStatus failed");
         log<level::ERR>(errorStr.c_str());
         log<level::ERR>(e.what());
         return Error;
@@ -270,14 +276,15 @@ std::string generateTempFolderName(std::string dumpID)
     // Use ctime_r for thread safety
     struct tm time_info;
     char time_string[26]; // Buffer for ctime_r output
-    ctime_r(&time_now, time_string);
+    ctime_r(&time_now, static_cast<char*>(time_string));
 
     // Parse time string (format: "Day Mon DD HH:MM:SS YYYY\n")
-    strptime(time_string, "%a %b %d %H:%M:%S %Y", &time_info);
+    strptime(static_cast<const char*>(time_string), "%a %b %d %H:%M:%S %Y",
+             &time_info);
 
-    sprintf(time_string, "_%02d%02d%02d%02d%02d", time_info.tm_mon + 1,
-            time_info.tm_mday, time_info.tm_hour, time_info.tm_min,
-            time_info.tm_sec);
+    sprintf(static_cast<char*>(time_string), "_%02d%02d%02d%02d%02d",
+            time_info.tm_mon + 1, time_info.tm_mday, time_info.tm_hour,
+            time_info.tm_min, time_info.tm_sec);
 
     std::string folderName = std::format("{}{}{}", "obmcdump_", dumpID,
                                          time_string);
@@ -294,6 +301,7 @@ std::string startAsyncDump(std::string objectPath, DataType dataType,
     switch (dataType)
     {
         case DataType::Dump:
+        case DataType::SavedInfo:
             interf = "com.nvidia.Dump.DebugInfo";
             switch (dumpType)
             {
@@ -326,6 +334,11 @@ std::string startAsyncDump(std::string objectPath, DataType dataType,
         startAsyncDumpMethod.append(
             "com.nvidia.Dump.DebugInfo.DebugInformationType.DeviceInformation");
     }
+    if (dataType == DataType::SavedInfo)
+    {
+        startAsyncDumpMethod.append(
+            "com.nvidia.Dump.DebugInfo.DebugInformationType.FWSavedInfo");
+    }
     startAsyncDumpMethod.append(fd);
 
     sdbusplus::message::object_path path;
@@ -336,11 +349,14 @@ std::string startAsyncDump(std::string objectPath, DataType dataType,
     }
     catch (const sdbusplus::exception::SdBusError& e)
     {
-        throw std::runtime_error(
-            std::format("Function startAsyncDump failed: {}", e.what()));
+        std::string errorStr("Function startAsyncDump failed");
+        log<level::ERR>(errorStr.c_str());
+        log<level::ERR>(e.what());
+        return "";
     }
-
+    // NOLINTBEGIN
     return std::string(path);
+    // NOLINTEND
 }
 
 void eraseDump(std::string objectPath)
@@ -358,8 +374,10 @@ void eraseDump(std::string objectPath)
     }
     catch (const sdbusplus::exception::SdBusError& e)
     {
-        throw std::runtime_error(
-            std::format("Function eraseDump failed: {}", e.what()));
+        std::string errorStr("Function eraseDump failed");
+        log<level::ERR>(errorStr.c_str());
+        log<level::ERR>(e.what());
+        return;
     }
 
     OperationStatus status;
@@ -368,12 +386,19 @@ void eraseDump(std::string objectPath)
         sleep(SLEEP_DURING_WAIT_SECONDS);
         status = getEraseStatus(objectPath);
     } while (status == OperationStatus::InProgress);
-    if (status != OperationStatus::Success)
+    if (status == OperationStatus::Success)
     {
-        auto errorStr = std::format("Erase failed for {}", objectPath);
-        log<level::ERR>(errorStr.c_str());
-        log_msg(errorStr);
+        logMsg("Data erased successfully");
+        return;
     }
+    if (status == OperationStatus::NoDataErased)
+    {
+        logMsg("No Data to erase");
+        return;
+    }
+    auto errorStr = std::format("Erase failed for {}", objectPath);
+    log<level::ERR>(errorStr.c_str());
+    logMsg("Data erase command completed with errors");
 }
 
 void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
@@ -387,20 +412,24 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
         case DataType::Log:
             outputFileName = tempPath + "/" + targetDevice + "_log.bin";
             break;
+        case DataType::SavedInfo:
+            outputFileName = tempPath + "/" + targetDevice + "_saved_info.bin";
+            break;
         default:
-            throw std::runtime_error("Invalid data type in getDumpData");
+            logMsg(std::format("Invalid data type"));
+            return;
     }
     int fd = open(outputFileName.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd == -1)
     {
-        throw std::runtime_error("Failed to open output file: " +
-                                 outputFileName);
+        logMsg(std::format("Failed to open output file: {}", outputFileName));
+        return;
     }
     auto path = startAsyncDump(objectPath, dataType, dumpType, fd);
     if (path.empty())
     {
-        throw std::runtime_error("Failed to start async dump for " +
-                                 targetDevice);
+        logMsg(std::format("Failed to start async dump for: {}", targetDevice));
+        return;
     }
 
     OperationStatus status;
@@ -414,7 +443,7 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
     struct stat fileStat;
     if (fstat(fd, &fileStat) != 0)
     {
-        log_msg("Warning: Could not determine dump file size");
+        logMsg("Warning: Could not determine dump file size");
     }
     close(fd);
 
@@ -422,16 +451,39 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
     {
         if (fileStat.st_size > 0)
         {
-            log_msg(std::format(
-                "Finished getting {} data for {} - file '{}' size: {} bytes",
-                dataType == DataType::Dump ? "dump" : "log", targetDevice,
-                outputFileName, fileStat.st_size));
+            // Logs are optional, and they might not exist, so we declare that
+            // we started collecting data only if completion was successful.
+            if (dataType == DataType::Log)
+            {
+                logMsg(std::format("Started to get the {} log", targetDevice));
+            }
+            // Target device may not implement saved info data, so we declare
+            // that we started collecting data only if completion was
+            // successful.
+            if (dataType == DataType::SavedInfo)
+            {
+                logMsg(std::format("Started to get the {} saved info dump",
+                                   targetDevice));
+            }
+            logMsg(std::format("Output file size: {} bytes", fileStat.st_size));
+            logMsg(std::format("Getting the {} {} completed successfully",
+                               targetDevice,
+                               dataType == DataType::Log ? "log" : "dump"));
+            if (dataType == DataType::SavedInfo)
+            {
+                logMsg(std::format("Started to erase saved data"));
+                eraseDump(objectPath);
+            }
         }
         else
         {
-            log_msg(std::format("{} file '{}' is empty for {}",
-                                dataType == DataType::Dump ? "Dump" : "Log",
-                                outputFileName, targetDevice));
+            // Logs are optional, and they might not exist, so we don't issue
+            // errors for other than 'Dump' types
+            if (dataType == DataType::Dump)
+            {
+                logMsg(std::format("Dump file is empty for {}", targetDevice));
+            }
+            std::filesystem::remove(outputFileName);
         }
     }
     else
@@ -441,44 +493,57 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
                         dataType == DataType::Dump ? "dump" : "log",
                         targetDevice, response);
         log<level::ERR>(errorStr.c_str());
-        log_msg(errorStr);
+        // Logs are optional, and they might not exist, so we don't issue
+        // errors for other than 'Dump' types
+        if (dataType == DataType::Dump)
+        {
+            logMsg(std::format("Getting the {} dump completed with errors",
+                               targetDevice));
+        }
+        if (fileStat.st_size == 0)
+        {
+            std::filesystem::remove(outputFileName);
+        }
     }
 }
 
 void dumpData(DumpType dumpType)
 {
+    switch (dumpType)
+    {
+        case DumpType::Network:
+        case DumpType::Diagnostics:
+            break;
+        default:
+            logMsg(std::format("Invalid dump type"));
+            return;
+    }
     auto objectPath = getDBusObject(targetDevice, DataType::Dump, dumpType);
     if (objectPath.empty())
     {
-        throw std::runtime_error(
-            "D-Bus path with DebugInfo interface not found for " +
-            targetDevice);
+        logMsg(
+            std::format("D-Bus path with DebugInfo interface not found for {}",
+                        targetDevice));
+        return;
     }
 
-    log_msg(std::format("Starting getting dump data for target device: {}",
-                        targetDevice));
+    logMsg(objectPath);
+    logMsg(std::format("Started to get the {} debug dump", targetDevice));
     // Get the dump data for Network or Diagnostics
     getDumpData(objectPath, DataType::Dump, dumpType);
 
     if (dumpType == DumpType::Network)
     {
-        auto eraseDumpPath = objectPath;
-        eraseDump(eraseDumpPath);
+        getDumpData(objectPath, DataType::SavedInfo, dumpType);
         objectPath = getDBusObject(targetDevice, DataType::Log, dumpType);
         if (objectPath.empty())
         {
-            throw std::runtime_error(
-                "D-Bus path with LogInfo interface not found for " +
-                targetDevice);
+            logMsg(std::format(
+                "D-Bus path with LogInfo interface not found for {}",
+                targetDevice));
+            return;
         }
-
-        log_msg(std::format("Starting getting log data for target device: {}",
-                            targetDevice));
         getDumpData(objectPath, DataType::Log, dumpType);
-        if (objectPath != eraseDumpPath)
-        {
-            eraseDump(objectPath);
-        }
     }
 }
 
@@ -501,12 +566,6 @@ int main(int argc, char** argv)
         targetDevice = argv[8];
 
         auto dumpType = getDumpType(argv[10]);
-        if (dumpType == DumpType::Unknown)
-        {
-            log_msg(std::format("Dump Type {} not found", argv[10]));
-            // Return non-zero exit code to indicate error
-            return 1;
-        }
 
         using std::chrono::duration_cast;
         using std::chrono::high_resolution_clock;
@@ -524,7 +583,12 @@ int main(int argc, char** argv)
                 tempDir = tempPath + "/Diagnostics_dump/";
                 break;
             default:
-                throw std::runtime_error("Invalid dump type in dumpData");
+                // Let it continue so that the dump file is created. Will fail
+                // in the dumpData function later
+                std::string errorStr("Invalid dump type: ");
+                errorStr += argv[10];
+                log<level::ERR>(errorStr.c_str());
+                tempDir = tempPath + "/NetIR_dump/";
         }
 
         tempPath = tempDir + tempFolderName;
@@ -538,20 +602,21 @@ int main(int argc, char** argv)
             std::filesystem::create_directories(dumpPath);
         }
 
+        logMsg(targetDevice);
+
         try
         {
             dumpData(dumpType);
         }
         catch (const std::exception& e)
         {
-            log_msg(e.what());
             log<level::ERR>(e.what());
-            return 1;
+            // Don't return so that the dump file is created
         }
 
         auto t2 = high_resolution_clock::now();
         auto ms_int = duration_cast<milliseconds>(t2 - t1);
-        int msecs = ms_int.count();
+        int msecs = static_cast<int>(ms_int.count());
         int hours = msecs / (60 * 60 * 1000);
         msecs -= hours * (60 * 60 * 1000);
         int mins = msecs / (60 * 1000);
@@ -559,16 +624,20 @@ int main(int argc, char** argv)
         int seconds = msecs / 1000;
         msecs -= (seconds * 1000);
 
-        log_msg(std::format(
+        logMsg(std::format(
             "Execution time: {} hours, {} minutes, {} seconds, {} milliseconds",
             hours, mins, seconds, msecs));
 
         std::string command = "tar -Jcf " + dumpPath + '/' + tempFolderName +
                               ".tar.xz -C " + tempDir + " " + tempFolderName;
 
-        log_msg(std::format("Compressing dump to `{}`",
-                            dumpPath + '/' + tempFolderName + ".tar.xz"));
+        auto infoStr = std::format("Compressing dump to {}",
+                                   dumpPath + '/' + tempFolderName + ".tar.xz");
+        log<level::INFO>(infoStr.c_str());
+        // NOLINTBEGIN
         result = system(command.c_str());
+        // NOLINTEND
+        log<level::INFO>("Done.");
 
         if (result != 0)
         {
@@ -577,8 +646,12 @@ int main(int argc, char** argv)
             log<level::ERR>(errorStr.c_str());
         }
 
+        log<level::INFO>("Cleaning temp folder");
         std::filesystem::remove_all(tempDir);
+        log<level::INFO>("Done.");
     }
 
-    return result;
+    // Cannot return non-zero errors as Redfish will still deem it successful
+    // but yet it wont show in the entries path
+    return 0;
 }
