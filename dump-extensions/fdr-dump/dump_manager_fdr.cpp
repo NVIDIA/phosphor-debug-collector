@@ -63,7 +63,7 @@ void Manager::limitDumpEntries()
     size_t excessDumps = totalDumps - (FDR_DUMP_MAX_LIMIT - 1);
     // Delete the oldest dumps
     auto d = entries.begin();
-    while (d != entries.end() && excessDumps)
+    while (d != entries.end() && excessDumps != 0U)
     {
         auto& entry = d->second;
         d++;

@@ -77,7 +77,8 @@ void logMsg(std::string msg)
 OperationStatus getAsyncStatus(std::string path, std::string& response)
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
-    std::string interf, method;
+    std::string interf;
+    std::string method;
     interf = "org.freedesktop.DBus.Properties";
     method = "Get";
 
@@ -291,7 +292,8 @@ std::string startAsyncDump(std::string objectPath, DataType dataType,
                            DumpType dumpType, sdbusplus::message::unix_fd fd)
 {
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
-    std::string interf, method;
+    std::string interf;
+    std::string method;
 
     switch (dataType)
     {

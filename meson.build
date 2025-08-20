@@ -358,7 +358,7 @@ foreach yaml_file : dump_types_yaml_files
 endforeach
 
 concatenate_command += '> ' + meson.project_build_root() + '/' + combined_yaml_file
-run_command('sh', '-c', concatenate_command)
+run_command('sh', '-c', concatenate_command, check: true)
 
 python = find_program('python3')
 map_gen_file_loc = meson.project_source_root()
@@ -448,6 +448,8 @@ subdir('host-transport-extensions')
 #pick any architecture specific dumps
 subdir('dump-extensions')
 
+subdir('service_files')
+
 phosphor_dump_monitor_sources = [
     dump_types_hpp,
     'core_manager.cpp',
@@ -513,6 +515,7 @@ foreach executable : executables
         dependencies: executable[2],
         install: executable[3],
         include_directories: executable[4],
+        install_dir: get_option('libexecdir') / 'phosphor-debug-collector',
     )
 endforeach
 

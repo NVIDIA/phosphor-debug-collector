@@ -69,9 +69,12 @@ int main(int argc, char** argv)
                             {"type", required_argument, NULL, 't'},
                             {0, 0, 0, 0}};
 
-    int c, option_index = 0;
+    int c = 0;
+    int option_index = 0;
     bool serverMode = false;
-    std::string bmcPath, systemPath, type;
+    std::string bmcPath;
+    std::string systemPath;
+    std::string type;
     while ((c = getopt_long(argc, argv,
                             "hsp:q:t:", static_cast<struct option*>(opts),
                             &option_index)) != -1)

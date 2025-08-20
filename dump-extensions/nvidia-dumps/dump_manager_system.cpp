@@ -110,7 +110,7 @@ void Manager::limitDumpEntries()
     size_t excessDumps = totalDumps - (SYSTEM_DUMP_MAX_LIMIT - 1);
     // Delete the oldest dumps
     auto d = entries.begin();
-    while (d != entries.end() && excessDumps)
+    while (d != entries.end() && excessDumps != 0U)
     {
         auto& entry = d->second;
         d++;
@@ -652,7 +652,7 @@ void Manager::createEntry(const fs::path& file)
     {
         auto entryPtr = dynamic_cast<phosphor::dump::system::Entry*>(
             dumpEntry->second.get());
-        if (entryPtr)
+        if (entryPtr != nullptr)
         {
             entryPtr->update(timestamp, fs::file_size(file), file);
             auto dumpType = entryPtr->getDumpType();

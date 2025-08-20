@@ -61,7 +61,8 @@ bool State::debugMode() const
     mode. The second byte implies who has the arbitary, 0x01 means HMC, 0x02
     means HostBMC, 0x00 means none. */
     const char i2cBus[] = "/dev/i2c-2";
-    unsigned char outbuf = 0xe3, saddr = 0x60;
+    unsigned char outbuf = 0xe3;
+    unsigned char saddr = 0x60;
     unsigned char inbuf[2];
     struct i2c_rdwr_ioctl_data packets;
     struct i2c_msg messages[2];
