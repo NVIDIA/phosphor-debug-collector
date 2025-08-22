@@ -1,0 +1,22 @@
+#!/bin/bash
+#
+# config: 24 60
+# @brief: Collect the counter dump information per device.
+#
+
+. $DREPORT_INCLUDE/functions
+
+# Collecting counter data
+desc="Counter Dump - All Devices"
+file_name="counter-dump-all-devices.log"
+command="nsmProgressCountersReader"
+
+add_cmd_output "$command" "$file_name" "$desc"
+status=$?
+
+if [ $status -ne 0 ]; then
+    desc="Counter Dump - All Devices (Error)"
+    file_name="counter-dump-all-devices-error.log"
+    command_compact="nsmProgressCountersReader || echo 'Failed to read counter data for all devices'"
+    add_cmd_output "$command_compact" "$file_name" "$desc"
+fi
