@@ -9,7 +9,7 @@
 file_name="mctpdbusinfo.log"
 
 # Get the current MCTP Control D-Bus services
-array=(`busctl | grep MCTP.Control | awk '{print $1}' | tr "\n" " "`)
+array=(`busctl | grep au.com.codeconstruct.MCTP1 | awk '{print $1}' | tr "\n" " "`)
 
 if [ ${#array[@]} -eq 0 ]; then
     log_error "Failed to collect any mctp dbus information"
@@ -25,7 +25,7 @@ for i in "${array[@]}"; do
 
     desc="mctp $name dbus objects"
     command="busctl call --verbose --no-pager $i \
-                    /xyz/openbmc_project/mctp \
+                    /au/com/codeconstruct/mctp1 \
                     org.freedesktop.DBus.ObjectManager \
                     GetManagedObjects"
     add_cmd_output "$command" "$file_name" "$desc"

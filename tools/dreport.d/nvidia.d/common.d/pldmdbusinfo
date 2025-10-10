@@ -1,19 +1,50 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # config: 2 20
-# @brief: Get the pldm dbus information.
-#
+# @brief: Get the pldm dbus information with direct introspection output
 
-. $DREPORT_INCLUDE/functions
+. "$DREPORT_INCLUDE/functions"
 
-desc="pldm dbus objects"
+separator () {
+    printf '.%.s' {1..100}
+}
 
-command="busctl call --verbose --no-pager \
-                xyz.openbmc_project.PLDM \
-                / \
-                org.freedesktop.DBus.ObjectManager \
-                GetManagedObjects"
+introspect() {
+    object_path=$1
+    BUSCTL_ARGS="--full --no-pager"
+
+    printf '\nOBJECT_PATH: %s\n\n' $object_path
+    busctl introspect $service_name $object_path $BUSCTL_ARGS
+    printf $(separator)
+}
+
+# @brief: Collect a bus service's object tree with direct introspection output
+# @param $1: Bus service name
+dump() {
+    service_name=$1
+    ERR_EXIT=255
+
+    [[ $service_name == "" ]] && printf "\$service_name (\$1) can't be empty.\n" && return $ERR_EXIT
+
+    object_paths="$(busctl tree "$service_name"  --list)"
+    grep -E "^Failed to introspect.*" <<< "$object_paths" && return 0
+
+    separator
+    printf "\n\n%s's Object Tree: \n\n" $service_name
+    separator
+
+    # Process each object path sequentially and output directly
+    while IFS= read -r object_path; do
+        if [[ -n "$object_path" ]]; then
+            if ! introspect "$object_path"; then
+                # Log error to system journal
+                log_error "Failed to introspect object path: $object_path"
+            fi
+        fi
+    done <<< "$object_paths"
+}
 
 file_name="pldmdbusinfo.log"
+service="xyz.openbmc_project.PLDM"
+add_cmd_output "dump $service" $file_name "pldm dbus objects"
 
-add_cmd_output "$command" "$file_name" "$desc"

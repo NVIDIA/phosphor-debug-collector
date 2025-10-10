@@ -133,35 +133,28 @@ sdbusplus::message::object_path Manager::createDump(
 
     // Check whether there is same dump already running
     // Also ensure RetLTSSM and RetRegister will not run at the same time
-    if ((Manager::dumpInProgress.find(diagnosticTypeStr) !=
-         Manager::dumpInProgress.end()) ||
-        (Manager::dumpInProgress.find("RetLTSSM") !=
-             Manager::dumpInProgress.end() &&
+    if ((Manager::dumpInProgress.contains(diagnosticTypeStr)) ||
+        (Manager::dumpInProgress.contains("RetLTSSM") &&
          diagnosticType == DiagnosticType::RetRegister) ||
-        (Manager::dumpInProgress.find("RetRegister") !=
-             Manager::dumpInProgress.end() &&
+        (Manager::dumpInProgress.contains("RetRegister") &&
          diagnosticType == DiagnosticType::RetLTSSM))
     {
         elog<Unavailable>();
     }
 
     // Ensure NetIR and GPUDeviceDiagnostics will not run at the same time
-    if ((Manager::dumpInProgress.find("NetIR") !=
-             Manager::dumpInProgress.end() &&
+    if ((Manager::dumpInProgress.contains("NetIR") &&
          diagnosticType == DiagnosticType::GPUDeviceDiagnostics) ||
-        (Manager::dumpInProgress.find("GPUDeviceDiagnostics") !=
-             Manager::dumpInProgress.end() &&
+        (Manager::dumpInProgress.contains("GPUDeviceDiagnostics") &&
          diagnosticType == DiagnosticType::NetIR))
     {
         elog<Unavailable>();
     }
 
     // Ensure Net_GPU_SXM and GPUDeviceDiagnostics will not run at the same time
-    if ((Manager::dumpInProgress.find("Net_GPU_SXM") !=
-             Manager::dumpInProgress.end() &&
+    if ((Manager::dumpInProgress.contains("Net_GPU_SXM") &&
          diagnosticType == DiagnosticType::GPUDeviceDiagnostics) ||
-        (Manager::dumpInProgress.find("GPUDeviceDiagnostics") !=
-             Manager::dumpInProgress.end() &&
+        (Manager::dumpInProgress.contains("GPUDeviceDiagnostics") &&
          diagnosticType == DiagnosticType::GPU_SXM))
     {
         elog<Unavailable>();
