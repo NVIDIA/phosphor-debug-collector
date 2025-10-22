@@ -63,6 +63,7 @@ enum class DiagnosticType
     RetRegister,
     FirmwareAttributes,
     HardwareCheckout,
+    CPLD,
     Unknown
 };
 
@@ -81,7 +82,8 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"RetLTSSM", DiagnosticType::RetLTSSM},
     {"RetRegister", DiagnosticType::RetRegister},
     {"FirmwareAttributes", DiagnosticType::FirmwareAttributes},
-    {"HardwareCheckout", DiagnosticType::HardwareCheckout}};
+    {"HardwareCheckout", DiagnosticType::HardwareCheckout},
+    {"CPLD", DiagnosticType::CPLD}};
 
 // Helper function to get DiagnosticType from string
 DiagnosticType getDiagnosticType(const std::string& typeStr)
@@ -344,6 +346,13 @@ uint32_t hwCheckoutDump(const std::string& dumpId, const std::string& dumpPath)
         "System dump: Error occurred during hardware checkout dump execution");
 }
 
+uint32_t cpldRegDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    return executeDumpCommand(
+        CPLD_DUMP_BIN_PATH, dumpId, dumpPath, {},
+        "System dump: Error occurred during CPLD register dump execution");
+}
+
 // NOLINTEND
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
@@ -550,6 +559,9 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                 break;
             case DiagnosticType::HardwareCheckout:
                 hwCheckoutDump(id, dumpPath);
+                break;
+            case DiagnosticType::CPLD:
+                cpldRegDump(id, dumpPath);
                 break;
             default:
                 log<level::ERR>("System dump: Invalid DiagnosticType");

@@ -28,3 +28,4 @@ constexpr auto HWCHECKOUT_DUMP_BIN_PATH = "/usr/bin/hw_checkout_dump.sh";
 constexpr auto NSM_DUMP_BIN_PATH = "/usr/bin/nsm-dump-tool";
 constexpr auto NSM_DUMP_TEMP_PATH = "/var/emmc/user-logs";
 constexpr auto SMA_DUMP_BIN_PATH = "/usr/bin/sma_dump.sh";
+constexpr auto CPLD_DUMP_BIN_PATH = "/usr/bin/cpld_dump.sh";
