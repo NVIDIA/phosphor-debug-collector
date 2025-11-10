@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# config: 123 20
+# @brief: Collect command collector logs
+#
+
+. $DREPORT_INCLUDE/functions
+
+dir="/var/lib/logging/bmc_cmd_metrics"
+desc="Command Metrics Logs"
+# Only collect if directory exists and contains non-empty files
+if [ -d "$dir" ] && find "$dir" -type f ! -size 0 2>/dev/null | grep -q .; then
+    add_copy_file "$dir" "$desc"
+fi
