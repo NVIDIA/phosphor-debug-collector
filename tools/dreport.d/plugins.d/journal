@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# @brief: Collect plain journal log - used for fallback only
+#         Not linked to any dump type, only called from fallback
+#
+
+. $DREPORT_INCLUDE/functions
+
+desc="Journal log"
+file_name="journal.log"
+command="journalctl --namespace=*"
+
+add_cmd_output "$command" "$file_name" "$desc"
+

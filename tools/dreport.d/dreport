@@ -59,6 +59,13 @@ declare -rx TIME_STAMP="date -u"
 declare -rx PLUGIN="pl_"
 declare -rx DREPORT_SOURCE="/usr/share/dreport.d"
 declare -rx DREPORT_INCLUDE="$DREPORT_SOURCE/include.d"
+
+# Total dump timeout in seconds
+# Default to 2700 if not provided
+BMC_DUMP_MAX_TIME_SEC=2700
+# Per-plugin timeout will be calculated as half of total timeout
+BMC_DUMP_PER_PLUGIN_TIMEOUT_SEC=""
+
 declare -rx ZERO="0"
 declare -rx JOURNAL_LINE_LIMIT="500"
 declare -rx HEADER_EXTENSION="$DREPORT_INCLUDE/gendumpheader"
@@ -88,6 +95,7 @@ declare -x elog_id=""
 
 #Source dreport common functions
 . $DREPORT_INCLUDE/functions
+. $DREPORT_INCLUDE/functions_fallback_dump
 
 function cleanup_on_termination()
 {
@@ -149,12 +157,24 @@ function collect_data()
         return 0
     fi
 
+    local per_plugin_timeout=$BMC_DUMP_PER_PLUGIN_TIMEOUT_SEC
+    
     #Executes plugins based on the type.
     for i in $plugin_path/* ; do
+        # Execute plugin with timeout
         if [ ${#plugin_args[@]} -ne 0 ]; then
-            $i ${plugin_args[@]}
+            timeout $per_plugin_timeout $i ${plugin_args[@]}
         else
-            $i
+            timeout $per_plugin_timeout $i
+        fi
+        
+        # Capture exit code
+        local exit_code=$?
+        
+        # Handle timeout (exit 143 = SIGTERM from timeout) - trigger fallback
+        if [ $exit_code -eq 143 ]; then
+            generate_fallback_dump "${i##*/}" "$per_plugin_timeout"
+            break
         fi
     done
 }
@@ -357,8 +377,8 @@ function main()
     fi
 }
 
-TEMP=`getopt -o n:d:i:t:s:p:a:c:vqh \
-    --long name:,dir:,dumpid:,type:,size:,path:,args:,compression:,verbose,quiet,help \
+TEMP=`getopt -o n:d:i:t:s:p:a:c:T:vqh \
+    --long name:,dir:,dumpid:,type:,size:,path:,args:,compression:,timeout:,verbose,quiet,help \
     -- "$@"`
 
 if [ $? -ne 0 ]
@@ -400,6 +420,9 @@ while [[ $# -gt 1 ]]; do
         -c|--compression)
             compression_type=$2
             shift 2 ;;
+        -T|--timeout)
+            BMC_DUMP_MAX_TIME_SEC=$2
+            shift 2 ;;
         -v|--verbose)
             verbose=$TRUE
             shift ;;
@@ -415,6 +438,9 @@ while [[ $# -gt 1 ]]; do
             exit 1 ;;
     esac
 done
+
+# Calculate per-plugin timeout as half of total timeout
+BMC_DUMP_PER_PLUGIN_TIMEOUT_SEC=$((BMC_DUMP_MAX_TIME_SEC / 2))
 
 main #main program
 exit $?
