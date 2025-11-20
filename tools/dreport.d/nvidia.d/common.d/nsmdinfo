@@ -1,0 +1,27 @@
+#!/bin/bash
+#
+# config: 24 60
+# @brief: Collect the nsmd dump information.
+#
+
+. $DREPORT_INCLUDE/functions
+
+# Collecting nsmd dump (MRDs)
+if [ -e "/usr/bin/nsmDump" ]; then
+    command="nsmDump"
+    file_name="nsmd-mrds-dump.log"
+    desc="NSMD MRDs Dump"
+    add_cmd_output "$command" "$file_name" "$desc"
+else
+    log_warning "Skipping NSMD MRDs Dump: nsmDump binary not found"
+fi
+
+# Collecting nsmd progress counter data
+if [ -e "/usr/bin/nsmProgressCountersReader" ]; then
+    command="nsmProgressCountersReader"
+    file_name="nsmd-progress-counter-dump.log"
+    desc="NSMD Progress Counter Dump"
+    add_cmd_output "$command" "$file_name" "$desc"
+else
+    log_warning "Skipping NSMD Progress Counter Dump: nsmProgressCountersReader binary not found"
+fi
