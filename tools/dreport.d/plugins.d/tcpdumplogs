@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#
+# config: 26 45
+# @brief: Collect captured tcpdump logs into HMC dumps
+#
+
+# shellcheck disable=SC1091
+. "$DREPORT_INCLUDE"/functions
+
+desc="TCPDUMP Logs Collection"
+DUMP_DIR="/tmp/logs/tcpdump"
+
+if [ -d "$DUMP_DIR" ]; then
+    add_copy_file "$DUMP_DIR" "$desc"
+fi
