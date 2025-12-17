@@ -230,7 +230,7 @@ uint32_t executeDumpCommand(
     // If we get here, execution failed
     auto error = errno;
     log<level::ERR>(errorMsg.c_str(), entry("ERRNO=%d", error));
-    elog<InternalFailure>();
+    _exit(EXIT_FAILURE);
 }
 
 uint32_t executeDreport(const std::string& dumpType, const std::string& dumpId,
