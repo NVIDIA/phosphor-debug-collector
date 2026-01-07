@@ -15,3 +15,20 @@ add_cmd_output "$command" "$out_file_name" "$desc"
 add_cmd_output "mctp link" "$out_file_name" "mctp link"
 add_cmd_output "mctp addr" "$out_file_name" "mctp addr"
 add_cmd_output "mctp route" "$out_file_name" "mctp route"
+
+# Global MCTP Core Stats
+add_cmd_output "cat /proc/net/mctp/stats || true" "$out_file_name" "MCTP Core Statistics"
+add_cmd_output "cat /proc/net/mctp/sockets || true" "$out_file_name" "MCTP Socket Statistics"
+
+# Get list of MCTP interfaces dynamically from 'mctp link'
+mctp_interfaces=$(mctp link show | grep -v "dev lo" | awk '{print $2}')
+
+# Driver-level Stats (Ethtool)
+for iface in $mctp_interfaces; do
+    add_cmd_output "echo '=== Driver Stats: $iface ===' && ethtool -S $iface || true" "$out_file_name" "Driver Stats: $iface"
+done
+
+# Traffic Control Stats
+for iface in $mctp_interfaces; do
+    add_cmd_output "echo '=== TC Stats: $iface ===' && tc -s qdisc show dev $iface || true" "$out_file_name" "TC Stats: $iface"
+done
