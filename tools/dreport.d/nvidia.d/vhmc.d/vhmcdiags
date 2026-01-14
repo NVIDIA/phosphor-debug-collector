@@ -1,0 +1,58 @@
+#!/bin/bash
+#
+# config: 2 30
+# @brief: vHMC-specific diagnostics (unique data not in standard BMC dump)
+#
+
+. $DREPORT_INCLUDE/functions
+
+file_name="vhmc-diagnostics.log"
+
+desc="network interface symlinks"
+command="ls -l /sys/class/net"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="entity manager dbus tree"
+command="busctl tree xyz.openbmc_project.EntityManager"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="fru device dbus tree"
+command="busctl tree xyz.openbmc_project.FruDevice"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="device list"
+command="ls -l /dev/"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="i2c devices"
+command="ls /dev/ | grep i2c"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+for bus in $(ls /dev/ 2>/dev/null | grep "^i2c-" | sed 's/i2c-//'); do
+    desc="i2c bus $bus detection"
+    command="i2cdetect -y $bus"
+
+    add_cmd_output "$command" "$file_name" "$desc"
+done
+
+desc="mctp endpoints"
+command="mctp-list-eps"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="mctp netlinkd status"
+command="systemctl status mctp-netlinkd.service --no-pager"
+
+add_cmd_output "$command" "$file_name" "$desc"
+
+for svc in $(systemctl list-units --type=service --all 2>/dev/null | grep mctp-usb-ctrl | awk '{print $1}'); do
+    desc="$svc status"
+    command="systemctl status $svc --no-pager"
+
+    add_cmd_output "$command" "$file_name" "$desc"
+done
