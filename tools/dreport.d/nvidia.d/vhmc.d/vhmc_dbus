@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# config: 2 30
+# @brief: vHMC D-Bus diagnostics
+#
+
+. $DREPORT_INCLUDE/functions
+
+file_name="vhmc-dbus.log"
+
+desc="entity manager dbus tree"
+command="busctl tree xyz.openbmc_project.EntityManager"
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="fru device dbus tree"
+command="busctl tree xyz.openbmc_project.FruDevice"
+add_cmd_output "$command" "$file_name" "$desc"
