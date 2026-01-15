@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# config: 2 30
+# @brief: vHMC network diagnostics
+#
+
+. $DREPORT_INCLUDE/functions
+
+file_name="vhmc-network.log"
+
+if [ -d "/sys/class/net" ]; then
+    desc="network interface symlinks"
+    command="ls -l /sys/class/net"
+    add_cmd_output "$command" "$file_name" "$desc"
+else
+    log_info "No network interface symlinks data"
+fi
