@@ -8,10 +8,7 @@
 
 file_name="vhmc-mctp.log"
 
-if [ -e "/usr/bin/mctp-list-eps" ]; then
-    desc="mctp endpoints"
-    command="mctp-list-eps"
-    add_cmd_output "$command" "$file_name" "$desc"
-else
-    log_info "mctp-list-eps not available"
-fi
+desc="mctp endpoints"
+command="mctp-list-eps"
+add_cmd_output "$command" "$file_name" "$desc"
+
