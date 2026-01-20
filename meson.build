@@ -525,6 +525,10 @@ if get_option('nsm-dump-tool').allowed()
     subdir('nsm-dump-tool')
 endif
 
+if get_option('cpu-diagnostic-dump').allowed()
+    subdir('cpu-diagnostic-dump')
+endif
+
 unit_subs = configuration_data()
 unit_subs.set('bindir', join_paths(get_option('prefix'), get_option('bindir')))
 systemd_system_unit_dir = dependency('systemd').get_variable(

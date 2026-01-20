@@ -64,6 +64,7 @@ enum class DiagnosticType
     FirmwareAttributes,
     HardwareCheckout,
     CPLD,
+    CPUDiagnosticDump,
     Unknown
 };
 
@@ -83,7 +84,8 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"RetRegister", DiagnosticType::RetRegister},
     {"FirmwareAttributes", DiagnosticType::FirmwareAttributes},
     {"HardwareCheckout", DiagnosticType::HardwareCheckout},
-    {"CPLD", DiagnosticType::CPLD}};
+    {"CPLD", DiagnosticType::CPLD},
+    {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump}};
 
 // Helper function to get DiagnosticType from string
 DiagnosticType getDiagnosticType(const std::string& typeStr)
@@ -353,6 +355,17 @@ uint32_t cpldRegDump(const std::string& dumpId, const std::string& dumpPath)
         "System dump: Error occurred during CPLD register dump execution");
 }
 
+uint32_t cpuDiagnosticDump(const std::string& dumpId,
+                           const std::string& dumpPath,
+                           const std::string& tempPath,
+                           const std::string& deviceType)
+{
+    return executeDumpCommand(
+        CPU_DIAGNOSTIC_DUMP_BIN_PATH, dumpId, dumpPath,
+        {{"-t", tempPath}, {"-d", deviceType}},
+        "System dump: Error occurred during CPU diagnostic dump execution");
+}
+
 // NOLINTEND
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 {
@@ -562,6 +575,20 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                 break;
             case DiagnosticType::CPLD:
                 cpldRegDump(id, dumpPath);
+                break;
+            case DiagnosticType::CPUDiagnosticDump:
+                if (deviceType.empty())
+                {
+                    log<level::ERR>(
+                        "System dump: missing DeviceType parameter for CPUDiagnosticsData");
+                    elog<InternalFailure>();
+                }
+                else
+                {
+                    cpuDiagnosticDump(id, dumpPath,
+                                      CPU_DIAGNOSTIC_DUMP_TEMP_PATH,
+                                      deviceType);
+                }
                 break;
             default:
                 log<level::ERR>("System dump: Invalid DiagnosticType");

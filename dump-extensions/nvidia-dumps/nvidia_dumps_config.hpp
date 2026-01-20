@@ -29,3 +29,5 @@ constexpr auto NSM_DUMP_BIN_PATH = "/usr/bin/nsm-dump-tool";
 constexpr auto NSM_DUMP_TEMP_PATH = "/var/emmc/user-logs";
 constexpr auto SMA_DUMP_BIN_PATH = "/usr/bin/sma_dump.sh";
 constexpr auto CPLD_DUMP_BIN_PATH = "/usr/bin/cpld_dump.sh";
+constexpr auto CPU_DIAGNOSTIC_DUMP_BIN_PATH = "/usr/bin/cpu-diagnostic-dump";
+constexpr auto CPU_DIAGNOSTIC_DUMP_TEMP_PATH = "/tmp/cpu_diagnostic_dump";

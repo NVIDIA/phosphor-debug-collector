@@ -17,6 +17,13 @@ option(
 )
 
 option(
+    'cpu-diagnostic-dump',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Tool for collecting CPU diagnostic events from SatMC (CPER Error Counters, PCIe RP Static/Performance Data)',
+)
+
+option(
     'jffs-workaround',
     type: 'feature',
     description: 'Turn on jffs workaround for core file',
