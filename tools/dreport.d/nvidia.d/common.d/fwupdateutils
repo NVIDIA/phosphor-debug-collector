@@ -10,14 +10,6 @@ desc="fw update utils"
 file_name="fwupdateutils.log"
 
 command="busctl call --verbose --no-pager \
-                com.Nvidia.Software.RT.Updater \
-                /xyz/openbmc_project/software/other \
-                org.freedesktop.DBus.ObjectManager \
-                GetManagedObjects"
-
-add_cmd_output "$command" "$file_name" "$desc"
-
-command="busctl call --verbose --no-pager \
                 xyz.openbmc_project.State.BMC \
                 /xyz/openbmc_project/state/bmc0 \
                 org.freedesktop.DBus.ObjectManager \

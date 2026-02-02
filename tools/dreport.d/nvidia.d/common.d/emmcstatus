@@ -14,14 +14,6 @@ file_name="fdisk.log"
 
 add_cmd_output "$command" "$file_name" "$desc"
 
-desc="mounts of emmc"
-
-command="mount"
-
-file_name="mount.log"
-
-add_cmd_output "$command" "$file_name" "$desc"
-
 desc="emmc regs"
 
 file_name="emmcregs.log"
