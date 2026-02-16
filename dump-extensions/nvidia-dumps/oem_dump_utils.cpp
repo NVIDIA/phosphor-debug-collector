@@ -219,34 +219,6 @@ void OEMTypeAllowableValuesIf::populateSystemOEMDataTypeAllowableValues(
     {
         populateDebugInfoDumpTypes(iface);
     }
-
-    // Add CPUDiagnosticsData allowable values for CPU_0 and CPU_1
-    // This supports PLDM OEM diagnostic event collection (PCIe LTSSM History,
-    // Error Counters, PCIe Telemetry)
-    try
-    {
-        auto oemAllowableValuesMap = iface.oemDataTypeAllowableValues();
-        auto& systemValues = oemAllowableValuesMap[DumpType::System];
-        std::vector<std::string> cpuDiagTypes = {
-            "DiagnosticType=CPUDiagnosticsData;DeviceType=CPU_0",
-            "DiagnosticType=CPUDiagnosticsData;DeviceType=CPU_1"};
-        for (const auto& diagTypeStr : cpuDiagTypes)
-        {
-            if (std::ranges::find(systemValues, diagTypeStr) ==
-                systemValues.end())
-            {
-                systemValues.emplace_back(diagTypeStr);
-            }
-        }
-        std::sort(systemValues.begin(), systemValues.end());
-        iface.oemDataTypeAllowableValues(oemAllowableValuesMap);
-    }
-    catch (const sdbusplus::exception_t& e)
-    {
-        lg2::error("Failed to set OEM allowable values for CPUDiagnosticsData: "
-                   "ERROR={ERROR}",
-                   "ERROR", e.what());
-    }
 }
 
 #ifdef FDR_DUMP_EXTENSION
