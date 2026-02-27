@@ -269,23 +269,7 @@ std::string generateTempFolderName(std::string dumpID)
     auto now = std::chrono::system_clock::now();
     std::time_t time_now = std::chrono::system_clock::to_time_t(now);
 
-    // Use ctime_r for thread safety
-    struct tm time_info;
-    char time_string[26]; // Buffer for ctime_r output
-    ctime_r(&time_now, static_cast<char*>(time_string));
-
-    // Parse time string (format: "Day Mon DD HH:MM:SS YYYY\n")
-    strptime(static_cast<const char*>(time_string), "%a %b %d %H:%M:%S %Y",
-             &time_info);
-
-    sprintf(static_cast<char*>(time_string), "_%02d%02d%02d%02d%02d",
-            time_info.tm_mon + 1, time_info.tm_mday, time_info.tm_hour,
-            time_info.tm_min, time_info.tm_sec);
-
-    std::string folderName =
-        std::format("{}{}{}", "obmcdump_", dumpID, time_string);
-
-    return folderName;
+    return std::format("obmcdump_{}_{}", dumpID, time_now);
 }
 
 std::string startAsyncDump(std::string objectPath, DataType dataType,
