@@ -295,7 +295,14 @@ uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
 {
     return executeDumpCommand(
         EROT_DUMP_BIN_PATH, dumpId, dumpPath, {},
-        "System dump: Error occurred during dreport function execution");
+        "System dump: Error occurred during EROT dump execution");
+}
+
+uint32_t rotDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    return executeDumpCommand(
+        ROT_DUMP_BIN_PATH, dumpId, dumpPath, {},
+        "System dump: Error occurred during ROT dump execution");
 }
 
 uint32_t retimerLtssmDump(const std::string& dumpId,
@@ -511,8 +518,10 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                 smaRegDump(id, dumpPath);
                 break;
             case DiagnosticType::EROT:
-            case DiagnosticType::ROT:
                 erotDump(id, dumpPath);
+                break;
+            case DiagnosticType::ROT:
+                rotDump(id, dumpPath);
                 break;
             case DiagnosticType::NVSwitch:
             case DiagnosticType::NVLinkManagementNIC:

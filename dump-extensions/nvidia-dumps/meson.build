@@ -5,3 +5,5 @@ phosphor_dump_manager_sources += [
     'dump-extensions/nvidia-dumps/system_dump_entry.cpp',
     'dump-extensions/nvidia-dumps/oem_dump_utils.cpp',
 ]
+
+subdir('rot_dump')
