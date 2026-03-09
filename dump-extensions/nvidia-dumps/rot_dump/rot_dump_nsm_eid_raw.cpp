@@ -148,17 +148,16 @@ static int sendRecvInKernelMctp(uint8_t eid, const std::vector<uint8_t>& req,
         return -errno;
     }
 
-    struct sockaddr_mctp addr
-    {};
+    struct sockaddr_mctp addr{};
     addr.smctp_family = AF_MCTP;
     addr.smctp_network = MCTP_NET_ANY;
     addr.smctp_addr.s_addr = eid;
     addr.smctp_tag = MCTP_TAG_OWNER;
     addr.smctp_type = MCTP_MSG_TYPE_PCI_VDM;
 
-    const ssize_t sent = sendto(
-        fd, req.data(), req.size(), 0, reinterpret_cast<struct sockaddr*>(&addr),
-        sizeof(addr));
+    const ssize_t sent =
+        sendto(fd, req.data(), req.size(), 0,
+               reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
     if (sent < 0 || static_cast<size_t>(sent) != req.size())
     {
         const int err = (sent < 0) ? errno : EIO;
@@ -166,8 +165,7 @@ static int sendRecvInKernelMctp(uint8_t eid, const std::vector<uint8_t>& req,
         return -err;
     }
 
-    struct pollfd pfd
-    {};
+    struct pollfd pfd{};
     pfd.fd = fd;
     pfd.events = POLLIN;
     pfd.revents = 0;
@@ -230,19 +228,20 @@ static int sendRecvInKernelMctp(uint8_t eid, const std::vector<uint8_t>& req,
         }
 
         std::vector<uint8_t> packet(static_cast<size_t>(pktLen));
-        struct sockaddr_mctp src
-        {};
+        struct sockaddr_mctp src{};
         socklen_t srcLen = sizeof(src);
-        const ssize_t got = recvfrom(
-            fd, packet.data(), packet.size(), 0,
-            reinterpret_cast<struct sockaddr*>(&src), &srcLen);
+        const ssize_t got =
+            recvfrom(fd, packet.data(), packet.size(), 0,
+                     reinterpret_cast<struct sockaddr*>(&src), &srcLen);
         if (got != pktLen)
         {
             continue;
         }
 
-        // Ensure this is the expected response (same EID, same instance, response bit).
-        if (src.smctp_addr.s_addr != eid || src.smctp_type != MCTP_MSG_TYPE_PCI_VDM)
+        // Ensure this is the expected response (same EID, same instance,
+        // response bit).
+        if (src.smctp_addr.s_addr != eid ||
+            src.smctp_type != MCTP_MSG_TYPE_PCI_VDM)
         {
             if (++nonmatchingPackets > maxNonmatchingPackets)
             {
@@ -338,9 +337,9 @@ int main(int argc, char** argv)
         }
     }
 
-    if (eid < 0 || eid > 255 || instance < 0 || instance > 31 || messageType < 0 ||
-        messageType > 255 || commandCode < 0 || commandCode > 255 ||
-        payloadHexArg == nullptr)
+    if (eid < 0 || eid > 255 || instance < 0 || instance > 31 ||
+        messageType < 0 || messageType > 255 || commandCode < 0 ||
+        commandCode > 255 || payloadHexArg == nullptr)
     {
         usage(argv[0]);
         return 2;
@@ -368,9 +367,9 @@ int main(int argc, char** argv)
     }
 
     std::vector<uint8_t> resp;
-    const int rc = sendRecvInKernelMctp(static_cast<uint8_t>(eid), req,
-                                        static_cast<uint8_t>(instance), resp,
-                                        timeoutMs);
+    const int rc =
+        sendRecvInKernelMctp(static_cast<uint8_t>(eid), req,
+                             static_cast<uint8_t>(instance), resp, timeoutMs);
     if (rc < 0)
     {
         fprintf(stderr, "AF_MCTP transport failed for EID %d: %s\n", eid,
