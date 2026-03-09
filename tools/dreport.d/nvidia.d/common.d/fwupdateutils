@@ -41,17 +41,18 @@ services=()
 paths=()
 
 tempfile=$(mktemp)
-echo "$json_output" | grep -oE '"/xyz/openbmc_project/mctp/[0-9]+/[0-9]+":[^{]*\{"[^"]+"' > "$tempfile"
+echo "$json_output" | grep -oE '"/au/com/codeconstruct/mctp1/networks/[0-9]+/endpoints/[0-9]+"' > "$tempfile"
 
 while read -r entry
 do
-    path=$(echo "$entry" | grep -oE '/xyz/openbmc_project/mctp/[0-9]+/[0-9]+')
+    path=$(echo "$entry" | tr -d '"')
     mctp_EID="${path##*/}"
-    service=$(echo "$entry" | grep -oE '"xyz\.openbmc_project\.MCTP\.Control\.[^"]+' | tr -d '"')
+    service="au.com.codeconstruct.MCTP1"
 
     mctp_EIDs+=("$mctp_EID")
     services+=("$service")
     paths+=("$path")
+
 done < "$tempfile"
 rm -f "$tempfile"
 
@@ -65,7 +66,7 @@ do
     service="${services[$i]}"
     path="${paths[$i]}"
 
-    enabled=$(busctl get-property "$service" "$path" xyz.openbmc_project.Object.Enable Enabled 2>/dev/null | awk '{print $2}')
+    connectivity=$(busctl get-property "$service" "$path" au.com.codeconstruct.MCTP.Endpoint1 Connectivity 2>/dev/null | awk '{print $2}' | tr -d '"')
 
     smt_raw=$(busctl get-property "$service" "$path" xyz.openbmc_project.MCTP.Endpoint SupportedMessageTypes 2>/dev/null)
     smt_clean=$(echo "$smt_raw" | sed 's/.*ay //' | cut -d' ' -f2-)
@@ -88,7 +89,7 @@ do
         pldm_type_5_supported="false"
     fi
 
-    if [[ "$enabled" == "true" && "$pldm_supported" == "true" && "$pldm_type_5_supported" == "true" ]]; then
+    if [[ "$connectivity" == "Available" && "$pldm_supported" == "true" && "$pldm_type_5_supported" == "true" ]]; then
 
         echo "--- pldmtool fw_update GetStatus for eid $mctp_EID ----" >> "$op"
         if ! timeout 15 pldmtool fw_update GetStatus -m $mctp_EID &>> "$op"; then
@@ -108,8 +109,8 @@ do
             continue 
         fi
     else
-        if [[ "$enabled" != "true" ]]; then
-            echo "--- MCTP endpoint not enabled eid $mctp_EID ----" >> "$op"
+        if [[ "$connectivity" != "Available" ]]; then
+            echo "--- MCTP endpoint not available eid $mctp_EID ----" >> "$op"
         elif [[ "$pldm_supported" != "true" ]]; then
             echo "--- MCTP endpoint doesn't support PLDM eid $mctp_EID ----" >> "$op"
         elif [[ "$pldm_type_5_supported" != "true" ]]; then
