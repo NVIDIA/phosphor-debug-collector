@@ -7,6 +7,7 @@
  * (NSM via rot_dump_nsm_eid_raw).
  */
 
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <sdbusplus/bus.hpp>
@@ -52,12 +53,25 @@ constexpr int PROBE_TIMEOUT_MS = 1000;
 
 static int runCommand(const std::string& cmd)
 {
-    // NOLINTNEXTLINE(cert-env33-c): existing design invokes helper shell
-    // commands.
-    int ret = std::system(cmd.c_str());
-    if (ret >= 0 && WIFEXITED(ret))
+    const pid_t pid = fork();
+    if (pid < 0)
     {
-        return WEXITSTATUS(ret);
+        return -1;
+    }
+    if (pid == 0)
+    {
+        execl("/bin/sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
+        _exit(127);
+    }
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0)
+    {
+        return -1;
+    }
+    if (WIFEXITED(status))
+    {
+        return WEXITSTATUS(status);
     }
     return -1;
 }
@@ -498,7 +512,7 @@ static bool nsmDiagDumpEid(const std::string& name, uint32_t eid,
 
     for (int i = 0; i < 256; ++i)
     {
-        if (seen.count(segmentId))
+        if (seen.contains(segmentId))
         {
             return true;
         }
@@ -535,7 +549,7 @@ static bool nsmDiagDumpEid(const std::string& name, uint32_t eid,
         if (segmentLen > 0)
         {
             out.write(reinterpret_cast<const char*>(bytes.data() + 6),
-                      segmentLen);
+                      static_cast<std::streamsize>(segmentLen));
         }
 
         if (nextSegmentId == 255 || nextSegmentId == segmentId)

@@ -278,7 +278,7 @@ int main(int argc, char** argv)
     int timeoutMs = DEFAULT_TIMEOUT_MS;
     const char* payloadHexArg = nullptr;
 
-    static struct option longOptions[] = {
+    std::array<option, 7> longOptions{{
         {"eid", required_argument, nullptr, 'e'},
         {"instance", required_argument, nullptr, 'i'},
         {"message-type", required_argument, nullptr, 'm'},
@@ -286,10 +286,11 @@ int main(int argc, char** argv)
         {"payload-hex", required_argument, nullptr, 'p'},
         {"timeout-ms", required_argument, nullptr, 't'},
         {nullptr, 0, nullptr, 0},
-    };
+    }};
 
     int opt = 0;
-    while ((opt = getopt_long(argc, argv, "", longOptions, nullptr)) != -1)
+    while ((opt = getopt_long(argc, argv, "", longOptions.data(), nullptr)) !=
+           -1)
     {
         switch (opt)
         {
