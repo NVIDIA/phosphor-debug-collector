@@ -17,6 +17,7 @@
 
 #include "dump_manager_system.hpp"
 
+#include "diagnostic_type.hpp"
 #include "dump_utils.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
@@ -34,8 +35,6 @@
 #include <chrono>
 #include <iostream>
 #include <regex>
-#include <unordered_map>
-
 namespace phosphor
 {
 namespace dump
@@ -45,54 +44,6 @@ namespace system
 
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using namespace phosphor::logging;
-
-// Diagnostic type enumeration
-enum class DiagnosticType
-{
-    SelfTest,
-    FPGA,
-    EROT,
-    ROT,
-    SMA,
-    NVSwitch,
-    NVLinkManagementNIC,
-    GPU_SXM,
-    NetIR,
-    GPUDeviceDiagnostics,
-    RetLTSSM,
-    RetRegister,
-    FirmwareAttributes,
-    HardwareCheckout,
-    CPLD,
-    CPUDiagnosticDump,
-    Unknown
-};
-
-// String to enum mapping
-const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
-    {"SelfTest", DiagnosticType::SelfTest},
-    {"FPGA", DiagnosticType::FPGA},
-    {"EROT", DiagnosticType::EROT},
-    {"ROT", DiagnosticType::ROT},
-    {"SMA", DiagnosticType::SMA},
-    {"Net_NVSwitch", DiagnosticType::NVSwitch},
-    {"Net_NVLinkManagementNIC", DiagnosticType::NVLinkManagementNIC},
-    {"Net_GPU_SXM", DiagnosticType::GPU_SXM},
-    {"NetIR", DiagnosticType::NetIR},
-    {"GPUDeviceDiagnostics", DiagnosticType::GPUDeviceDiagnostics},
-    {"RetLTSSM", DiagnosticType::RetLTSSM},
-    {"RetRegister", DiagnosticType::RetRegister},
-    {"FirmwareAttributes", DiagnosticType::FirmwareAttributes},
-    {"HardwareCheckout", DiagnosticType::HardwareCheckout},
-    {"CPLD", DiagnosticType::CPLD},
-    {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump}};
-
-// Helper function to get DiagnosticType from string
-DiagnosticType getDiagnosticType(const std::string& typeStr)
-{
-    auto it = diagnosticTypeMap.find(typeStr);
-    return it != diagnosticTypeMap.end() ? it->second : DiagnosticType::Unknown;
-}
 
 // TODO: Merge system dump with bmc dump to avoid code duplication.
 

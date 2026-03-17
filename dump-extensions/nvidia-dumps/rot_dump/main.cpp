@@ -4,9 +4,11 @@
  *
  * ROT dump collector. Invoked by phosphor-dump-manager for
  * DiagnosticType ROT. Collects discovery-based IROT/VROT entries
- * (NSM via rot_dump_nsm_eid_raw).
+ * (NSM via nsmd D-Bus Raw API).
  */
 
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -24,18 +26,28 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <tuple>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
 namespace fs = std::filesystem;
 
 // Paths and constants
-constexpr const char* NSM_EID_RAW_TOOL = "/usr/bin/rot_dump_nsm_eid_raw";
 constexpr const char* LEGACY_EROT_DUMP_TOOL = "/usr/bin/erot_dump.sh";
 constexpr const char* TMP_DIR = "/tmp";
+constexpr const char* NSM_DBUS_SERVICE = "xyz.openbmc_project.NSM";
+constexpr const char* NSM_DBUS_RAW_PATH = "/xyz/openbmc_project/NSM/Raw";
+constexpr const char* NSM_DBUS_RAW_INTF = "com.nvidia.Protocol.NSM.Raw";
+constexpr const char* DBUS_PROP_INTF = "org.freedesktop.DBus.Properties";
+constexpr const char* NSM_FRU_INTF = "xyz.openbmc_project.FruDevice";
+constexpr const char* ASYNC_STATUS_INTF = "com.nvidia.Async.Status";
+constexpr const char* ASYNC_VALUE_INTF = "com.nvidia.Async.Value";
 
 constexpr uint8_t NSM_DEVICE_EROT_ID = 4;
 constexpr uint8_t NSM_MESSAGE_TYPE_DIAG = 4;
@@ -47,9 +59,347 @@ constexpr uint8_t NSM_CMD_GET_ROT_STATE_INFO = 1;
 constexpr uint8_t NSM_CMD_QUERY_FW_COMP_ID = 7;
 constexpr uint16_t NSM_FW_COMPONENT_CLASS = 10;
 constexpr uint8_t PCI_VDM_MSG_TYPE = 0x7E;
+constexpr uint8_t NSM_MSG_FORMAT_VERSION = 1;
+constexpr uint8_t NSM_DEVICE_ROLE = 0;
 
-// Shorter timeout for probe/bruteforce to avoid long blocks (MR feedback)
 constexpr int PROBE_TIMEOUT_MS = 1000;
+
+struct NsmDeviceInfo
+{
+    uint8_t deviceType{};
+    uint8_t deviceRole{};
+    uint8_t instanceId{};
+};
+
+class NsmDbusClient
+{
+  public:
+    explicit NsmDbusClient(sdbusplus::bus_t& busRef) : bus(busRef) {}
+
+    bool executeCommand(uint8_t eid, uint8_t messageType, uint8_t commandCode,
+                        const std::vector<uint8_t>& payload,
+                        std::vector<uint8_t>& response, int timeoutMs,
+                        bool isLongRunning = false)
+    {
+        auto deviceInfo = getDeviceInfoByEid(eid);
+        if (!deviceInfo)
+        {
+            if (lastError.empty())
+            {
+                setError("No device info found for EID " + std::to_string(eid));
+            }
+            return false;
+        }
+
+        const int reqFd = createRequestFd(payload);
+        if (reqFd < 0)
+        {
+            setError("Failed to create request FD for EID " +
+                     std::to_string(eid));
+            return false;
+        }
+        sdbusplus::message::unix_fd requestFd(reqFd);
+
+        sdbusplus::message::object_path asyncPath;
+        try
+        {
+            auto method =
+                bus.new_method_call(NSM_DBUS_SERVICE, NSM_DBUS_RAW_PATH,
+                                    NSM_DBUS_RAW_INTF, "SendRequest");
+            method.append(deviceInfo->deviceType, deviceInfo->deviceRole,
+                          deviceInfo->instanceId, isLongRunning, messageType,
+                          commandCode, requestFd, NSM_MSG_FORMAT_VERSION);
+            auto reply = bus.call(method);
+            reply.read(asyncPath);
+        }
+        catch (const std::exception& e)
+        {
+            setError("SendRequest failed for EID " + std::to_string(eid) +
+                     ", type=" + std::to_string(messageType) +
+                     ", cmd=" + std::to_string(commandCode) + ": " + e.what());
+            close(reqFd);
+            return false;
+        }
+        const std::string asyncPathStr = static_cast<std::string>(asyncPath);
+
+        if (!waitForCompletion(asyncPathStr, timeoutMs))
+        {
+            close(reqFd);
+            if (lastError.empty())
+            {
+                setError("Async completion failed for EID " +
+                         std::to_string(eid) + " async_path=" + asyncPathStr);
+            }
+            return false;
+        }
+        if (!readAsyncValue(asyncPathStr, reqFd, response))
+        {
+            close(reqFd);
+            if (lastError.empty())
+            {
+                setError("Failed to read async value for EID " +
+                         std::to_string(eid) + " async_path=" + asyncPathStr);
+            }
+            return false;
+        }
+        close(reqFd);
+        if (response.empty())
+        {
+            setError("Async value is empty for EID " + std::to_string(eid) +
+                     " async_path=" + asyncPathStr +
+                     " status=" + lastAsyncStatus);
+            return false;
+        }
+        lastError.clear();
+        return true;
+    }
+
+  private:
+    std::optional<NsmDeviceInfo> getDeviceInfoByEid(uint8_t eid)
+    {
+        auto cacheIt = deviceInfoCache.find(eid);
+        if (cacheIt != deviceInfoCache.end())
+        {
+            return cacheIt->second;
+        }
+
+        // Common inventory shape in nsmd is
+        // /xyz/openbmc_project/FruDevice/<eid>.
+        const std::string fruPath =
+            std::string("/xyz/openbmc_project/FruDevice/") +
+            std::to_string(eid);
+        auto info = queryDeviceInfoByPath(fruPath);
+        if (info)
+        {
+            deviceInfoCache.emplace(eid, *info);
+            return info;
+        }
+        if (lastError.empty())
+        {
+            setError("No FruDevice object for EID " + std::to_string(eid) +
+                     " at path " + fruPath);
+        }
+        return std::nullopt;
+    }
+
+    std::optional<NsmDeviceInfo> queryDeviceInfoByPath(const std::string& path)
+    {
+        auto method = bus.new_method_call(NSM_DBUS_SERVICE, path.c_str(),
+                                          DBUS_PROP_INTF, "GetAll");
+        method.append(NSM_FRU_INTF);
+
+        using FruProp = std::variant<uint8_t, uint16_t, uint32_t, std::string>;
+        std::map<std::string, FruProp> props;
+        try
+        {
+            auto reply = bus.call(method);
+            reply.read(props);
+        }
+        catch (const std::exception& e)
+        {
+            setError("FruDevice GetAll failed at " + path + ": " + e.what());
+            return std::nullopt;
+        }
+
+        const auto typeIt = props.find("DEVICE_TYPE");
+        const auto instIt = props.find("INSTANCE_NUMBER");
+        if (typeIt == props.end() || instIt == props.end())
+        {
+            setError("Missing DEVICE_TYPE or INSTANCE_NUMBER at " + path);
+            return std::nullopt;
+        }
+
+        auto toByte = [](const FruProp& v) -> std::optional<uint8_t> {
+            if (std::holds_alternative<uint8_t>(v))
+            {
+                return std::get<uint8_t>(v);
+            }
+            if (std::holds_alternative<uint16_t>(v))
+            {
+                return static_cast<uint8_t>(std::get<uint16_t>(v) & 0xFF);
+            }
+            if (std::holds_alternative<uint32_t>(v))
+            {
+                return static_cast<uint8_t>(std::get<uint32_t>(v) & 0xFF);
+            }
+            return std::nullopt;
+        };
+
+        auto dtype = toByte(typeIt->second);
+        auto inst = toByte(instIt->second);
+        if (!dtype || !inst)
+        {
+            setError("Invalid DEVICE_TYPE or INSTANCE_NUMBER type at " + path);
+            return std::nullopt;
+        }
+
+        uint8_t role = NSM_DEVICE_ROLE;
+        const auto roleIt = props.find("DEVICE_ROLE");
+        if (roleIt != props.end())
+        {
+            auto maybeRole = toByte(roleIt->second);
+            if (maybeRole)
+            {
+                role = *maybeRole;
+            }
+        }
+        return NsmDeviceInfo{*dtype, role, *inst};
+    }
+
+    static int createRequestFd(const std::vector<uint8_t>& payload)
+    {
+        int flags = MFD_CLOEXEC;
+#ifdef MFD_NOEXEC_SEAL
+        flags |= MFD_NOEXEC_SEAL;
+#endif
+        // NOLINTNEXTLINE(cert-env33-c)
+        int fd = memfd_create("rot_dump_nsm_req", flags);
+        if (fd < 0)
+        {
+            return -1;
+        }
+        if (!payload.empty())
+        {
+            const ssize_t written = write(fd, payload.data(), payload.size());
+            if (written < 0 || static_cast<size_t>(written) != payload.size())
+            {
+                close(fd);
+                return -1;
+            }
+        }
+        lseek(fd, 0, SEEK_SET);
+        return fd;
+    }
+
+    bool waitForCompletion(const std::string& asyncPath, int timeoutMs)
+    {
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(timeoutMs);
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            auto method = bus.new_method_call(
+                NSM_DBUS_SERVICE, asyncPath.c_str(), DBUS_PROP_INTF, "Get");
+            method.append(ASYNC_STATUS_INTF, "Status");
+            try
+            {
+                auto reply = bus.call(method);
+                std::variant<std::string> status;
+                reply.read(status);
+                const std::string& statusStr = std::get<std::string>(status);
+                lastAsyncStatus = statusStr;
+                if (statusStr ==
+                    "com.nvidia.Async.Status.AsyncOperationStatus.Success")
+                {
+                    return true;
+                }
+                if (statusStr !=
+                    "com.nvidia.Async.Status.AsyncOperationStatus.InProgress")
+                {
+                    setError("Async status terminal failure at " + asyncPath +
+                             " status=" + statusStr);
+                    return false;
+                }
+            }
+            catch (const std::exception& e)
+            {
+                setError("Async status read failed at " + asyncPath + ": " +
+                         e.what());
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        setError("Async wait timeout at " + asyncPath);
+        return false;
+    }
+
+    static bool readAllFromFd(int fd, std::vector<uint8_t>& out)
+    {
+        if (lseek(fd, 0, SEEK_SET) < 0)
+        {
+            return false;
+        }
+        out.clear();
+        std::array<uint8_t, 4096> buf{};
+        while (true)
+        {
+            const ssize_t got = read(fd, buf.data(), buf.size());
+            if (got < 0)
+            {
+                return false;
+            }
+            if (got == 0)
+            {
+                break;
+            }
+            out.insert(out.end(), buf.begin(), buf.begin() + got);
+        }
+        return true;
+    }
+
+    bool readAsyncValue(const std::string& asyncPath, int requestFd,
+                        std::vector<uint8_t>& out)
+    {
+        try
+        {
+            auto method = bus.new_method_call(
+                NSM_DBUS_SERVICE, asyncPath.c_str(), DBUS_PROP_INTF, "Get");
+            method.append(ASYNC_VALUE_INTF, "Value");
+            auto reply = bus.call(method);
+            std::variant<uint8_t, bool, std::vector<uint8_t>> wrapped;
+            reply.read(wrapped);
+
+            if (std::holds_alternative<uint8_t>(wrapped))
+            {
+                // nsmd Raw API can return completion-code in Value and write
+                // response payload to the provided request FD.
+                const uint8_t cc = std::get<uint8_t>(wrapped);
+                if (cc != 0)
+                {
+                    setError("Async value completion-code failure at " +
+                             asyncPath + " cc=" + std::to_string(cc));
+                    return false;
+                }
+
+                std::vector<uint8_t> payload;
+                if (!readAllFromFd(requestFd, payload))
+                {
+                    setError("Async completion-code success but failed to read "
+                             "response fd at " +
+                             asyncPath);
+                    return false;
+                }
+                // ([cc, reason, data_size_l, data_size_h, payload...]).
+                out = std::move(payload);
+                return true;
+            }
+
+            if (std::holds_alternative<bool>(wrapped))
+            {
+                setError("Async value bool result at " + asyncPath);
+                return false;
+            }
+
+            out = std::get<std::vector<uint8_t>>(wrapped);
+            return !out.empty();
+        }
+        catch (const std::exception& e)
+        {
+            setError("Async value read failed at " + asyncPath + ": " +
+                     e.what());
+            return false;
+        }
+    }
+
+    sdbusplus::bus_t& bus;
+    std::unordered_map<uint8_t, NsmDeviceInfo> deviceInfoCache;
+    std::string lastError;
+    std::string lastAsyncStatus;
+
+    void setError(const std::string& msg)
+    {
+        lastError = msg;
+    }
+};
 
 static int runCommand(const std::string& cmd)
 {
@@ -74,17 +424,6 @@ static int runCommand(const std::string& cmd)
         return WEXITSTATUS(status);
     }
     return -1;
-}
-
-static std::vector<uint8_t> readBinaryFile(const fs::path& path)
-{
-    std::ifstream f(path, std::ios::binary);
-    if (!f)
-    {
-        return {};
-    }
-    return {std::istreambuf_iterator<char>(f),
-            std::istreambuf_iterator<char>()};
 }
 
 static bool writeFile(const fs::path& path, const std::string& content)
@@ -187,6 +526,47 @@ static std::string toHexByte(uint8_t value)
     return os.str();
 }
 
+struct NsmResponseMeta
+{
+    bool valid = false;
+    uint8_t completionCode = 0xFF;
+    uint16_t dataSize = 0;
+    size_t payloadOffset = 0;
+    std::string layout;
+};
+
+static std::string bytesToHex(const std::vector<uint8_t>& bytes)
+{
+    std::ostringstream os;
+    for (size_t i = 0; i < bytes.size(); ++i)
+    {
+        if (i != 0)
+        {
+            os << " ";
+        }
+        os << toHexByte(bytes[i]);
+    }
+    return os.str();
+}
+
+static NsmResponseMeta parseNsmResponseMeta(const std::vector<uint8_t>& bytes)
+{
+    // [cc, rsvd, rsvd, data_size_l, data_size_h, payload...]
+    if (bytes.size() >= 5)
+    {
+        const uint16_t dataSize = static_cast<uint16_t>(
+            bytes[3] + (static_cast<uint16_t>(bytes[4]) << 8));
+        const size_t payloadOffset = 5;
+        if (bytes.size() >= payloadOffset + dataSize)
+        {
+            return NsmResponseMeta{true, bytes[0], dataSize, payloadOffset,
+                                   "compact"};
+        }
+    }
+
+    return {};
+}
+
 static std::string makeRotStatePayloadHex(
     uint16_t componentClass, uint16_t componentId, uint8_t componentIndex)
 {
@@ -210,18 +590,6 @@ static void pruneIntermediateArtifacts(const fs::path& tmpDir)
 
         const std::string name = entry.path().filename().string();
 
-        // Drop raw transport/probe files that are mainly implementation detail.
-        if (endsWith(name, "_dcd_probe.bin") ||
-            endsWith(name, "_dcd_probe.err") ||
-            endsWith(name, "_fw_comp_id_resp.bin") ||
-            endsWith(name, "_fw_comp_id.err") ||
-            endsWith(name, "_rot_eid_resp.bin") ||
-            endsWith(name, "_rot_query_boot_status_resp.bin"))
-        {
-            fs::remove(entry.path());
-            continue;
-        }
-
         // Keep error logs only when non-empty to reduce archive clutter.
         if ((endsWith(name, ".err") || endsWith(name, "_rot_error.log")) &&
             entry.file_size() == 0)
@@ -236,12 +604,14 @@ static void writeBootStatusTextLog(
     uint16_t componentClass, uint16_t componentId, uint8_t componentIndex,
     const std::vector<uint8_t>& resp)
 {
+    const NsmResponseMeta meta = parseNsmResponseMeta(resp);
     std::ostringstream os;
     size_t byteCount = resp.size();
-    unsigned cc = byteCount >= 1 ? resp[0] : 0;
-    unsigned dataSize =
-        byteCount >= 5 ? (resp[3] + (static_cast<unsigned>(resp[4]) << 8)) : 0;
-    size_t payloadAvailable = byteCount > 5 ? byteCount - 5 : 0;
+    unsigned cc = meta.valid ? meta.completionCode : 0;
+    unsigned dataSize = meta.valid ? meta.dataSize : 0;
+    size_t payloadAvailable = (meta.valid && byteCount > meta.payloadOffset)
+                                  ? (byteCount - meta.payloadOffset)
+                                  : 0;
 
     os << "source=nsm_get_rot_state_info\n";
     os << "eid=" << eid << "\n";
@@ -256,20 +626,14 @@ static void writeBootStatusTextLog(
     os << "payload_bytes_available=" << payloadAvailable << "\n";
     os << "payload_bytes_expected=" << dataSize << "\n";
 
-    std::string rawHex;
+    const std::string rawHex = bytesToHex(resp);
     std::string payloadHex;
-    for (size_t i = 0; i < byteCount; ++i)
+    if (meta.valid && meta.payloadOffset < byteCount)
     {
-        const std::string byteHex = toHexByte(resp[i]);
-        rawHex += byteHex + " ";
-        if (i >= 5)
+        for (size_t i = meta.payloadOffset; i < byteCount; ++i)
         {
-            payloadHex += byteHex + " ";
+            payloadHex += toHexByte(resp[i]) + " ";
         }
-    }
-    if (!rawHex.empty())
-    {
-        rawHex.pop_back();
     }
     if (!payloadHex.empty())
     {
@@ -282,46 +646,34 @@ static void writeBootStatusTextLog(
 }
 
 // Return component_class, component_id, component_index for first component
-// with component_class == NSM_FW_COMPONENT_CLASS (MR: scan list, not just
-// index 0).
-static bool queryFwComponentForEid(uint32_t eid, const fs::path& tmpDir,
+// with component_class == NSM_FW_COMPONENT_CLASS.
+static bool queryFwComponentForEid(NsmDbusClient& client, uint32_t eid,
                                    uint16_t& outClass, uint16_t& outId,
                                    uint8_t& outIndex)
 {
-    std::string probePath =
-        (tmpDir / ("eid_" + std::to_string(eid) + "_fw_comp_id_resp.bin"))
-            .string();
-    std::string errPath =
-        (tmpDir / ("eid_" + std::to_string(eid) + "_fw_comp_id.err")).string();
-
-    std::string cmd =
-        std::string(NSM_EID_RAW_TOOL) + " --eid " + std::to_string(eid) +
-        " --instance 0 --message-type " + std::to_string(NSM_MESSAGE_TYPE_FW) +
-        " --command-code " + std::to_string(NSM_CMD_QUERY_FW_COMP_ID) +
-        " --payload-hex \"\" --timeout-ms " + std::to_string(PROBE_TIMEOUT_MS) +
-        " > \"" + probePath + "\" 2>>\"" + errPath + "\"";
-    if (runCommand(cmd) != 0)
+    std::vector<uint8_t> bytes;
+    if (!client.executeCommand(static_cast<uint8_t>(eid), NSM_MESSAGE_TYPE_FW,
+                               NSM_CMD_QUERY_FW_COMP_ID, {}, bytes,
+                               PROBE_TIMEOUT_MS))
+    {
+        return false;
+    }
+    const NsmResponseMeta meta = parseNsmResponseMeta(bytes);
+    if (!meta.valid)
+    {
+        return false;
+    }
+    if (meta.completionCode != 0 || meta.dataSize < 6)
+    {
+        return false;
+    }
+    if (bytes.size() < meta.payloadOffset + meta.dataSize)
     {
         return false;
     }
 
-    std::vector<uint8_t> bytes = readBinaryFile(probePath);
-    if (bytes.size() < 11)
-    {
-        return false;
-    }
-    if (bytes[0] != 0)
-    {
-        return false;
-    }
-
-    unsigned dataSize = bytes[3] + (static_cast<unsigned>(bytes[4]) << 8);
-    if (dataSize < 6 || bytes.size() < 5 + dataSize)
-    {
-        return false;
-    }
-
-    unsigned componentCount = bytes[5];
+    const size_t payloadBase = meta.payloadOffset;
+    unsigned componentCount = bytes[payloadBase];
     if (componentCount == 0)
     {
         return false;
@@ -329,8 +681,9 @@ static bool queryFwComponentForEid(uint32_t eid, const fs::path& tmpDir,
 
     // Scan for component with class == NSM_FW_COMPONENT_CLASS (per-component
     // record: class(2), id(2), index(1) = 5 bytes each)
-    size_t offset = 6;
-    for (unsigned i = 0; i < componentCount && offset + 5 <= bytes.size(); ++i)
+    size_t offset = payloadBase + 1;
+    const size_t payloadEnd = payloadBase + meta.dataSize;
+    for (unsigned i = 0; i < componentCount && offset + 5 <= payloadEnd; ++i)
     {
         uint16_t cclass =
             bytes[offset] + (static_cast<uint16_t>(bytes[offset + 1]) << 8);
@@ -347,55 +700,80 @@ static bool queryFwComponentForEid(uint32_t eid, const fs::path& tmpDir,
     return false;
 }
 
-// Run NSM helper with given args; response written to outPath. Returns exit
-// code. Optional timeoutMs (0 = default).
-static int runNsmHelper(uint32_t eid, uint8_t msgType, uint8_t cmdCode,
-                        const std::string& payloadHex, const fs::path& outPath,
-                        const fs::path& errPath,
-                        int timeoutMs = PROBE_TIMEOUT_MS)
+static std::vector<uint8_t> payloadFromHex(const std::string& payloadHex)
 {
-    std::string cmd =
-        std::string(NSM_EID_RAW_TOOL) + " --eid " + std::to_string(eid) +
-        " --instance 0 --message-type " +
-        std::to_string(static_cast<unsigned>(msgType)) + " --command-code " +
-        std::to_string(static_cast<unsigned>(cmdCode)) + " --payload-hex \"" +
-        payloadHex + "\" --timeout-ms " + std::to_string(timeoutMs) + " > \"" +
-        outPath.string() + "\" 2>>\"" + errPath.string() + "\"";
-    return runCommand(cmd);
+    std::vector<uint8_t> payload;
+    if ((payloadHex.size() % 2) != 0)
+    {
+        return payload;
+    }
+    payload.reserve(payloadHex.size() / 2);
+    for (size_t i = 0; i < payloadHex.size(); i += 2)
+    {
+        auto hi = payloadHex[i];
+        auto lo = payloadHex[i + 1];
+        auto hexToNibble = [](char c) -> int {
+            if (c >= '0' && c <= '9')
+            {
+                return c - '0';
+            }
+            if (c >= 'a' && c <= 'f')
+            {
+                return c - 'a' + 10;
+            }
+            if (c >= 'A' && c <= 'F')
+            {
+                return c - 'A' + 10;
+            }
+            return -1;
+        };
+        int upper = hexToNibble(hi);
+        int lower = hexToNibble(lo);
+        if (upper < 0 || lower < 0)
+        {
+            payload.clear();
+            return payload;
+        }
+        payload.push_back(static_cast<uint8_t>((upper << 4) | lower));
+    }
+    return payload;
 }
 
-static bool isRotDeviceEid(uint32_t eid, const fs::path& tmpDir)
+static bool isRotDeviceEid(NsmDbusClient& client, uint32_t eid)
 {
-    fs::path probeFile =
-        tmpDir / ("eid_" + std::to_string(eid) + "_dcd_probe.bin");
-    fs::path errFile =
-        tmpDir / ("eid_" + std::to_string(eid) + "_dcd_probe.err");
-    writeFile(errFile, "");
-
-    if (runNsmHelper(eid, NSM_MESSAGE_TYPE_DCD,
-                     NSM_CMD_QUERY_DEVICE_IDENTIFICATION, "", probeFile,
-                     errFile) != 0)
+    std::vector<uint8_t> bytes;
+    if (!client.executeCommand(static_cast<uint8_t>(eid), NSM_MESSAGE_TYPE_DCD,
+                               NSM_CMD_QUERY_DEVICE_IDENTIFICATION, {}, bytes,
+                               PROBE_TIMEOUT_MS))
     {
         return false;
     }
 
-    std::vector<uint8_t> bytes = readBinaryFile(probeFile);
-    if (bytes.size() < 6 || bytes[0] != 0)
+    const NsmResponseMeta meta = parseNsmResponseMeta(bytes);
+    if (!meta.valid)
     {
         return false;
     }
-    unsigned dataSize = bytes[3] + (static_cast<unsigned>(bytes[4]) << 8);
-    if (dataSize < 1)
+    if (meta.completionCode != 0 || meta.dataSize < 1 ||
+        bytes.size() < meta.payloadOffset + meta.dataSize)
     {
         return false;
     }
-    return bytes[5] == NSM_DEVICE_EROT_ID;
+
+    const uint8_t deviceId = bytes[meta.payloadOffset];
+
+    // NSM device_id=4 identifies RoT-class endpoints, including IROT and VROT.
+    if (deviceId != NSM_DEVICE_EROT_ID)
+    {
+        return false;
+    }
+    return true;
 }
 
 // Discover ROT targets via D-Bus (MCTP endpoints with PCI VDM + DCD probe).
 using EidNamePair = std::pair<uint32_t, std::string>;
 static std::vector<EidNamePair> discoverRotTargets(sdbusplus::bus_t& bus,
-                                                   const fs::path& tmpDir)
+                                                   NsmDbusClient& client)
 {
     std::vector<EidNamePair> targets;
     const char* mapperService = "xyz.openbmc_project.ObjectMapper";
@@ -476,7 +854,7 @@ static std::vector<EidNamePair> discoverRotTargets(sdbusplus::bus_t& bus,
             continue;
         }
 
-        if (!isRotDeviceEid(eid, tmpDir))
+        if (!isRotDeviceEid(client, eid))
         {
             continue;
         }
@@ -492,11 +870,10 @@ static std::vector<EidNamePair> discoverRotTargets(sdbusplus::bus_t& bus,
     return targets;
 }
 
-static bool nsmDiagDumpEid(const std::string& name, uint32_t eid,
-                           const fs::path& tmpDir)
+static bool nsmDiagDumpEid(NsmDbusClient& client, const std::string& name,
+                           uint32_t eid, const fs::path& tmpDir)
 {
     fs::path outputFile = tmpDir / (name + "_rot_dump.bin");
-    fs::path respFile = tmpDir / (name + "_rot_eid_resp.bin");
     fs::path errFile = tmpDir / (name + "_rot_error.log");
     writeFile(errFile, "");
 
@@ -518,37 +895,38 @@ static bool nsmDiagDumpEid(const std::string& name, uint32_t eid,
         }
         seen.insert(segmentId);
 
-        const std::string payloadHex = toHexByte(segmentId);
-
-        if (runNsmHelper(eid, NSM_MESSAGE_TYPE_DIAG,
-                         NSM_CMD_GET_DEVICE_DIAGNOSTICS, payloadHex, respFile,
-                         errFile, timeoutMs) != 0)
+        std::vector<uint8_t> bytes;
+        if (!client.executeCommand(
+                static_cast<uint8_t>(eid), NSM_MESSAGE_TYPE_DIAG,
+                NSM_CMD_GET_DEVICE_DIAGNOSTICS, {segmentId}, bytes, timeoutMs))
         {
             std::ofstream err(errFile, std::ios::app);
-            err << name << ": rot_dump_nsm_eid_raw failed for segment "
+            err << name << ": nsmd D-Bus command failed for segment "
                 << static_cast<unsigned>(segmentId) << "\n";
             return false;
         }
 
-        std::vector<uint8_t> bytes = readBinaryFile(respFile);
         if (bytes.size() < 6 || bytes[0] != 0)
         {
             std::ofstream err(errFile, std::ios::app);
             err << name << ": short or error response\n";
             return false;
         }
-        unsigned dataSize = bytes[3] + (static_cast<unsigned>(bytes[4]) << 8);
-        if (dataSize < 1 || bytes.size() < 5 + dataSize)
+        const NsmResponseMeta meta = parseNsmResponseMeta(bytes);
+        if (!meta.valid || meta.completionCode != 0 || meta.dataSize < 1 ||
+            bytes.size() < meta.payloadOffset + meta.dataSize)
         {
             std::ofstream err(errFile, std::ios::app);
-            err << name << ": invalid diagnostics response\n";
+            err << name << ": invalid diagnostics response (hex="
+                << bytesToHex(bytes) << ")\n";
             return false;
         }
-        uint8_t nextSegmentId = bytes[5];
-        size_t segmentLen = dataSize - 1;
+        uint8_t nextSegmentId = bytes[meta.payloadOffset];
+        size_t segmentLen = meta.dataSize - 1;
         if (segmentLen > 0)
         {
-            out.write(reinterpret_cast<const char*>(bytes.data() + 6),
+            out.write(reinterpret_cast<const char*>(
+                          bytes.data() + meta.payloadOffset + 1),
                       static_cast<std::streamsize>(segmentLen));
         }
 
@@ -564,87 +942,42 @@ static bool nsmDiagDumpEid(const std::string& name, uint32_t eid,
     return false;
 }
 
-static void collectBootStatusForEid(const std::string& name, uint32_t eid,
+static bool collectBootStatusForEid(NsmDbusClient& client,
+                                    const std::string& name, uint32_t eid,
                                     const fs::path& tmpDir)
 {
     fs::path outFile = tmpDir / (name + "_rot_query_boot_status.log");
-    fs::path respFile = tmpDir / (name + "_rot_query_boot_status_resp.bin");
-    fs::path errFile = tmpDir / (name + "_rot_query_boot_status.err");
-    writeFile(errFile, "");
-
-    if (!fs::exists(NSM_EID_RAW_TOOL) || !fs::is_regular_file(NSM_EID_RAW_TOOL))
-    {
-        writeFile(outFile,
-                  "source=nsm_get_rot_state_info\neid=" + std::to_string(eid) +
-                      "\nstatus=failed\nreason=missing_raw_tool\n");
-        return;
-    }
 
     uint16_t componentClass = NSM_FW_COMPONENT_CLASS;
     uint16_t componentId = 0;
     uint8_t componentIndex = 0;
-    bool triedDiscovery = false;
-    bool success = false;
-
-    if (queryFwComponentForEid(eid, tmpDir, componentClass, componentId,
-                               componentIndex))
+    if (!queryFwComponentForEid(client, eid, componentClass, componentId,
+                                componentIndex))
     {
-        triedDiscovery = true;
-        const std::string payloadHex =
-            makeRotStatePayloadHex(componentClass, componentId, componentIndex);
-
-        if (runNsmHelper(eid, NSM_MESSAGE_TYPE_FW, NSM_CMD_GET_ROT_STATE_INFO,
-                         payloadHex, respFile, errFile, 5000) == 0)
-        {
-            std::vector<uint8_t> resp = readBinaryFile(respFile);
-            if (resp.size() >= 1 && resp[0] == 0)
-            {
-                writeBootStatusTextLog(outFile, eid, "query_fw_comp_id",
-                                       componentClass, componentId,
-                                       componentIndex, resp);
-                success = true;
-            }
-        }
+        return false;
     }
 
-    if (!success)
+    const std::string payloadHex =
+        makeRotStatePayloadHex(componentClass, componentId, componentIndex);
+    const std::vector<uint8_t> payload = payloadFromHex(payloadHex);
+    std::vector<uint8_t> resp;
+    if (payload.empty() ||
+        !client.executeCommand(static_cast<uint8_t>(eid), NSM_MESSAGE_TYPE_FW,
+                               NSM_CMD_GET_ROT_STATE_INFO, payload, resp, 5000))
     {
-        for (int cid = 0; cid <= 255; ++cid)
-        {
-            const std::string payloadHex = makeRotStatePayloadHex(
-                NSM_FW_COMPONENT_CLASS, static_cast<uint16_t>(cid), 0);
-
-            if (runNsmHelper(eid, NSM_MESSAGE_TYPE_FW,
-                             NSM_CMD_GET_ROT_STATE_INFO, payloadHex, respFile,
-                             errFile, PROBE_TIMEOUT_MS) != 0)
-            {
-                continue;
-            }
-
-            std::vector<uint8_t> resp = readBinaryFile(respFile);
-            if (resp.size() < 1 || resp[0] != 0)
-            {
-                continue;
-            }
-
-            writeBootStatusTextLog(outFile, eid, "bruteforce",
-                                   NSM_FW_COMPONENT_CLASS,
-                                   static_cast<uint16_t>(cid), 0, resp);
-            success = true;
-            break;
-        }
+        return false;
+    }
+    const NsmResponseMeta meta = parseNsmResponseMeta(resp);
+    if (meta.valid && meta.completionCode != 0)
+    {
+        return false;
     }
 
-    if (!success)
-    {
-        std::string msg =
-            "source=nsm_get_rot_state_info\neid=" + std::to_string(eid) +
-            "\nstatus=failed\nattempt=" +
-            (triedDiscovery ? "query_fw_comp_id_then_bruteforce"
-                            : "bruteforce_only") +
-            "\nreason=no_successful_completion_code\n";
-        writeFile(outFile, msg);
-    }
+    // For GET_ROT_STATE_INFO, downstream decoder expects raw response body
+    // bytes (starting with completion code and telemetry count)
+    writeBootStatusTextLog(outFile, eid, "query_fw_comp_id", componentClass,
+                           componentId, componentIndex, resp);
+    return true;
 }
 
 int main(int argc, char* argv[])
@@ -707,24 +1040,21 @@ int main(int argc, char* argv[])
     }
 
     sdbusplus::bus_t bus = sdbusplus::bus::new_default();
-    std::vector<EidNamePair> rotTargets = discoverRotTargets(bus, tmpDirPath);
+    NsmDbusClient nsmClient(bus);
+    std::vector<EidNamePair> rotTargets = discoverRotTargets(bus, nsmClient);
 
-    if (fs::exists(NSM_EID_RAW_TOOL) && fs::is_regular_file(NSM_EID_RAW_TOOL))
+    for (const auto& [eid, name] : rotTargets)
     {
-        for (const auto& [eid, name] : rotTargets)
+        bool targetProducedOutput = false;
+        if (nsmDiagDumpEid(nsmClient, name, eid, tmpDirPath))
         {
-            if (!nsmDiagDumpEid(name, eid, tmpDirPath))
-            {
-                fs::path touchFile = tmpDirPath / (name + "_rot_dump.bin");
-                std::ofstream(touchFile).flush();
-            }
-            collectBootStatusForEid(name, eid, tmpDirPath);
-            anyOutput = true;
+            targetProducedOutput = true;
         }
-    }
-    else if (!rotTargets.empty())
-    {
-        std::cerr << "Error: " << NSM_EID_RAW_TOOL << " not found" << std::endl;
+        if (collectBootStatusForEid(nsmClient, name, eid, tmpDirPath))
+        {
+            targetProducedOutput = true;
+        }
+        anyOutput = anyOutput || targetProducedOutput;
     }
 
     if (!anyOutput)

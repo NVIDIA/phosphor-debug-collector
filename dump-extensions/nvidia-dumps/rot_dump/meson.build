@@ -9,10 +9,3 @@ executable(
     install: true,
     install_dir: get_option('bindir'),
 )
-
-executable(
-    'rot_dump_nsm_eid_raw',
-    ['rot_dump_nsm_eid_raw.cpp'],
-    install: true,
-    install_dir: get_option('bindir'),
-)
