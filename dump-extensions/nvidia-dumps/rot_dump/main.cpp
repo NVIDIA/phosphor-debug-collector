@@ -295,20 +295,28 @@ class NsmDbusClient
                 if (statusStr !=
                     "com.nvidia.Async.Status.AsyncOperationStatus.InProgress")
                 {
-                    setError("Async status terminal failure at " + asyncPath +
-                             " status=" + statusStr);
+                    std::string errMsg = "Async status terminal failure at ";
+                    errMsg += asyncPath;
+                    errMsg += " status=";
+                    errMsg += statusStr;
+                    setError(errMsg);
                     return false;
                 }
             }
             catch (const std::exception& e)
             {
-                setError("Async status read failed at " + asyncPath + ": " +
-                         e.what());
+                std::string errMsg = "Async status read failed at ";
+                errMsg += asyncPath;
+                errMsg += ": ";
+                errMsg += e.what();
+                setError(errMsg);
                 return false;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
-        setError("Async wait timeout at " + asyncPath);
+        std::string errMsg = "Async wait timeout at ";
+        errMsg += asyncPath;
+        setError(errMsg);
         return false;
     }
 
