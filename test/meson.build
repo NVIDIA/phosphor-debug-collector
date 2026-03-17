@@ -21,10 +21,7 @@ endif
 
 dump = declare_dependency(sources: ['../dump_serialize.cpp'])
 
-tests = [
-    'debug_inif_test',
-    'diagnostic_type_routing_test',
-]
+tests = ['debug_inif_test', 'diagnostic_type_routing_test']
 
 foreach t : tests
     test(
