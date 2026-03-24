@@ -939,8 +939,7 @@ int main(int argc, char* argv[])
 
     if (!anyOutput)
     {
-        std::cerr << "No ROT data collected from NSM discovery"
-                  << std::endl;
+        std::cerr << "No ROT data collected from NSM discovery" << std::endl;
         return 1;
     }
 
