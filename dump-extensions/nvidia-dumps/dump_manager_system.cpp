@@ -17,7 +17,6 @@
 
 #include "dump_manager_system.hpp"
 
-#include "diagnostic_type.hpp"
 #include "dump_utils.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
@@ -35,6 +34,7 @@
 #include <chrono>
 #include <iostream>
 #include <regex>
+#include <unordered_map>
 namespace phosphor
 {
 namespace dump
@@ -44,6 +44,52 @@ namespace system
 
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using namespace phosphor::logging;
+
+enum class DiagnosticType
+{
+    SelfTest,
+    FPGA,
+    EROT,
+    ROT,
+    SMA,
+    NVSwitch,
+    NVLinkManagementNIC,
+    GPU_SXM,
+    NetIR,
+    GPUDeviceDiagnostics,
+    RetLTSSM,
+    RetRegister,
+    FirmwareAttributes,
+    HardwareCheckout,
+    CPLD,
+    CPUDiagnosticDump,
+    Unknown
+};
+
+const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
+    {"SelfTest", DiagnosticType::SelfTest},
+    {"FPGA", DiagnosticType::FPGA},
+    {"EROT", DiagnosticType::EROT},
+    {"ROT", DiagnosticType::ROT},
+    {"SMA", DiagnosticType::SMA},
+    {"Net_NVSwitch", DiagnosticType::NVSwitch},
+    {"Net_NVLinkManagementNIC", DiagnosticType::NVLinkManagementNIC},
+    {"Net_GPU_SXM", DiagnosticType::GPU_SXM},
+    {"NetIR", DiagnosticType::NetIR},
+    {"GPUDeviceDiagnostics", DiagnosticType::GPUDeviceDiagnostics},
+    {"RetLTSSM", DiagnosticType::RetLTSSM},
+    {"RetRegister", DiagnosticType::RetRegister},
+    {"FirmwareAttributes", DiagnosticType::FirmwareAttributes},
+    {"HardwareCheckout", DiagnosticType::HardwareCheckout},
+    {"CPLD", DiagnosticType::CPLD},
+    {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump},
+};
+
+DiagnosticType getDiagnosticType(const std::string& typeStr)
+{
+    auto it = diagnosticTypeMap.find(typeStr);
+    return it != diagnosticTypeMap.end() ? it->second : DiagnosticType::Unknown;
+}
 
 // TODO: Merge system dump with bmc dump to avoid code duplication.
 
@@ -154,18 +200,21 @@ uint32_t executeDumpCommand(
     const std::string& binPath, const std::string& dumpId,
     const std::string& dumpPath,
     const std::vector<std::pair<std::string, std::string>>& options,
-    const std::string& errorMsg)
+    const std::string& errorMsg, bool includePathAndId = true)
 {
     std::vector<char*> arg_v;
 
     // Add binary path
     arg_v.push_back(const_cast<char*>(binPath.c_str()));
 
-    // Add path and id options which are common to all dumps
-    arg_v.push_back(const_cast<char*>("-p"));
-    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-    arg_v.push_back(const_cast<char*>("-i"));
-    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    if (includePathAndId)
+    {
+        // Add path and id options which are common to most dumps
+        arg_v.push_back(const_cast<char*>("-p"));
+        arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+        arg_v.push_back(const_cast<char*>("-i"));
+        arg_v.push_back(const_cast<char*>(dumpId.c_str()));
+    }
 
     // Add additional options
     for (const auto& opt : options)
@@ -247,13 +296,6 @@ uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
     return executeDumpCommand(
         EROT_DUMP_BIN_PATH, dumpId, dumpPath, {},
         "System dump: Error occurred during EROT dump execution");
-}
-
-uint32_t rotDump(const std::string& dumpId, const std::string& dumpPath)
-{
-    return executeDumpCommand(
-        ROT_DUMP_BIN_PATH, dumpId, dumpPath, {},
-        "System dump: Error occurred during ROT dump execution");
 }
 
 uint32_t retimerLtssmDump(const std::string& dumpId,
@@ -469,10 +511,10 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                 smaRegDump(id, dumpPath);
                 break;
             case DiagnosticType::EROT:
-                erotDump(id, dumpPath);
-                break;
             case DiagnosticType::ROT:
-                rotDump(id, dumpPath);
+                // erot_dump.sh orchestrates both legacy EROT and
+                // optional IROT/VROT collection.
+                erotDump(id, dumpPath);
                 break;
             case DiagnosticType::NVSwitch:
             case DiagnosticType::NVLinkManagementNIC:

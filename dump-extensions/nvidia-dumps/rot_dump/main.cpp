@@ -2,9 +2,9 @@
  * SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
- * ROT dump collector. Invoked by phosphor-dump-manager for
- * DiagnosticType ROT. Collects discovery-based IROT/VROT entries
- * (NSM via nsmd D-Bus Raw API).
+ * ROT dump collector. Invoked by erot_dump.sh with -o <dir>
+ * to collect discovery-based IROT/VROT entries (NSM via nsmd
+ * D-Bus Raw API) into an existing workspace directory.
  */
 
 #include <fcntl.h>
@@ -39,8 +39,6 @@
 namespace fs = std::filesystem;
 
 // Paths and constants
-constexpr const char* LEGACY_EROT_DUMP_TOOL = "/usr/bin/erot_dump.sh";
-constexpr const char* TMP_DIR = "/tmp";
 constexpr const char* NSM_DBUS_SERVICE = "xyz.openbmc_project.NSM";
 constexpr const char* NSM_DBUS_RAW_PATH = "/xyz/openbmc_project/NSM/Raw";
 constexpr const char* NSM_DBUS_RAW_INTF = "com.nvidia.Protocol.NSM.Raw";
@@ -409,31 +407,6 @@ class NsmDbusClient
     }
 };
 
-static int runCommand(const std::string& cmd)
-{
-    const pid_t pid = fork();
-    if (pid < 0)
-    {
-        return -1;
-    }
-    if (pid == 0)
-    {
-        execl("/bin/sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
-        _exit(127);
-    }
-
-    int status = 0;
-    if (waitpid(pid, &status, 0) < 0)
-    {
-        return -1;
-    }
-    if (WIFEXITED(status))
-    {
-        return WEXITSTATUS(status);
-    }
-    return -1;
-}
-
 static bool writeFile(const fs::path& path, const std::string& content)
 {
     std::ofstream f(path);
@@ -443,81 +416,6 @@ static bool writeFile(const fs::path& path, const std::string& content)
     }
     f << content;
     return f.good();
-}
-
-static bool startsWith(const std::string& value, const std::string& prefix)
-{
-    return value.size() >= prefix.size() &&
-           std::equal(prefix.begin(), prefix.end(), value.begin());
-}
-
-static fs::path findLegacyArchive(const fs::path& dir,
-                                  const std::string& dumpId)
-{
-    const std::string prefix = "obmcdump_" + dumpId + "_";
-    const std::string suffix = ".tar.xz";
-    fs::path best;
-    std::filesystem::file_time_type bestTime{};
-
-    for (const auto& entry : fs::directory_iterator(dir))
-    {
-        if (!entry.is_regular_file())
-        {
-            continue;
-        }
-        const auto name = entry.path().filename().string();
-        if (!startsWith(name, prefix) || name.size() < suffix.size() ||
-            name.substr(name.size() - suffix.size()) != suffix)
-        {
-            continue;
-        }
-
-        auto t = entry.last_write_time();
-        if (best.empty() || t > bestTime)
-        {
-            best = entry.path();
-            bestTime = t;
-        }
-    }
-    return best;
-}
-
-static bool mergeLegacyErotIntoTmp(const fs::path& tmpDir,
-                                   const std::string& dumpId)
-{
-    if (!fs::exists(LEGACY_EROT_DUMP_TOOL) ||
-        !fs::is_regular_file(LEGACY_EROT_DUMP_TOOL))
-    {
-        return false;
-    }
-
-    fs::path legacyOutDir =
-        tmpDir.parent_path() / (tmpDir.filename().string() + "_legacy");
-    fs::remove_all(legacyOutDir);
-    fs::create_directories(legacyOutDir);
-
-    std::string cmd = std::string(LEGACY_EROT_DUMP_TOOL) + " -p \"" +
-                      legacyOutDir.string() + "\" -i " + dumpId;
-    if (runCommand(cmd) != 0)
-    {
-        fs::remove_all(legacyOutDir);
-        return false;
-    }
-
-    fs::path legacyArchive = findLegacyArchive(legacyOutDir, dumpId);
-    if (legacyArchive.empty())
-    {
-        fs::remove_all(legacyOutDir);
-        return false;
-    }
-
-    // legacy archive has top-level obmcdump_<id>_<epoch>/..., strip it
-    std::string extractCmd =
-        "tar -Jxf \"" + legacyArchive.string() + "\" -C \"" + tmpDir.string() +
-        "\" --strip-components=1";
-    bool ok = runCommand(extractCmd) == 0;
-    fs::remove_all(legacyOutDir);
-    return ok;
 }
 
 static bool endsWith(const std::string& value, const std::string& suffix)
@@ -990,62 +888,36 @@ static bool collectBootStatusForEid(NsmDbusClient& client,
 
 int main(int argc, char* argv[])
 {
-    std::string dumpPathArg;
-    std::string dumpIdArg = "00000000";
+    std::string outputDirArg;
 
     int c;
-    while ((c = getopt(argc, argv, "hp:i:D")) != -1)
+    while ((c = getopt(argc, argv, "ho:")) != -1)
     {
         switch (c)
         {
             case 'h':
                 std::cout
-                    << "Usage: rot_dump [-h] -p <file_path> -i <dump_id>\n"
-                       "  -p  (required) path to put compressed dump to\n"
-                       "  -i  dump id, default 00000000\n"
-                       "  -D  debug (preserve temp)\n";
+                    << "Usage: rot_dump [-h] -o <output_dir>\n"
+                       "  -o  (required) directory to place IROT/VROT files\n";
                 return 0;
-            case 'p':
-                dumpPathArg = optarg;
-                break;
-            case 'i':
-                dumpIdArg = optarg;
-                break;
-            case 'D':
-                setenv("ROT_DUMP_KEEP_TMP", "1", 1);
+            case 'o':
+                outputDirArg = optarg;
                 break;
             default:
                 return 1;
         }
     }
 
-    if (dumpPathArg.empty())
+    if (outputDirArg.empty())
     {
-        std::cerr << "argument -p is required" << std::endl;
+        std::cerr << "argument -o is required" << std::endl;
         return 1;
     }
 
-    auto now = std::chrono::system_clock::now();
-    auto epoch =
-        std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())
-            .count();
-    std::string templateName =
-        "obmcdump_" + dumpIdArg + "_" + std::to_string(epoch);
-    fs::path tmpDirPath = fs::path(TMP_DIR) / templateName;
-    fs::path archivePath = fs::path(TMP_DIR) / (templateName + ".tar.xz");
-
-    fs::create_directories(dumpPathArg);
-    fs::create_directories(tmpDirPath);
+    fs::path outputDir(outputDirArg);
+    fs::create_directories(outputDir);
 
     bool anyOutput = false;
-
-    // Use a distinct legacy dump-id so erot_dump.sh does not reuse/remove
-    // this process's tmp workspace when both run in the same second.
-    const std::string legacyDumpId = dumpIdArg + "_legacy";
-    if (mergeLegacyErotIntoTmp(tmpDirPath, legacyDumpId))
-    {
-        anyOutput = true;
-    }
 
     sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     NsmDbusClient nsmClient(bus);
@@ -1054,11 +926,11 @@ int main(int argc, char* argv[])
     for (const auto& [eid, name] : rotTargets)
     {
         bool targetProducedOutput = false;
-        if (nsmDiagDumpEid(nsmClient, name, eid, tmpDirPath))
+        if (nsmDiagDumpEid(nsmClient, name, eid, outputDir))
         {
             targetProducedOutput = true;
         }
-        if (collectBootStatusForEid(nsmClient, name, eid, tmpDirPath))
+        if (collectBootStatusForEid(nsmClient, name, eid, outputDir))
         {
             targetProducedOutput = true;
         }
@@ -1067,34 +939,11 @@ int main(int argc, char* argv[])
 
     if (!anyOutput)
     {
-        std::cerr << "No ROT data collected from legacy EROT or NSM discovery"
+        std::cerr << "No ROT data collected from NSM discovery"
                   << std::endl;
         return 1;
     }
 
-    pruneIntermediateArtifacts(tmpDirPath);
-
-    std::string tarCmd = "tar -Jcf \"" + archivePath.string() + "\" -C \"" +
-                         tmpDirPath.parent_path().string() + "\" " +
-                         tmpDirPath.filename().string();
-    if (runCommand(tarCmd) != 0)
-    {
-        std::cerr << "Compression failed: " << archivePath << std::endl;
-        return 1;
-    }
-
-    fs::path destArchive = fs::path(dumpPathArg) / archivePath.filename();
-    if (archivePath != destArchive)
-    {
-        fs::copy(archivePath, destArchive,
-                 fs::copy_options::overwrite_existing);
-    }
-
-    if (std::getenv("ROT_DUMP_KEEP_TMP") == nullptr)
-    {
-        fs::remove_all(tmpDirPath);
-        fs::remove(archivePath);
-    }
-
+    pruneIntermediateArtifacts(outputDir);
     return 0;
 }
