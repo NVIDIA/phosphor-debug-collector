@@ -82,7 +82,7 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"FirmwareAttributes", DiagnosticType::FirmwareAttributes},
     {"HardwareCheckout", DiagnosticType::HardwareCheckout},
     {"CPLD", DiagnosticType::CPLD},
-    {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump}
+    {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump},
 };
 
 DiagnosticType getDiagnosticType(const std::string& typeStr)
