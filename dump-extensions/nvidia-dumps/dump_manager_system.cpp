@@ -82,7 +82,7 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"FirmwareAttributes", DiagnosticType::FirmwareAttributes},
     {"HardwareCheckout", DiagnosticType::HardwareCheckout},
     {"CPLD", DiagnosticType::CPLD},
-    {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump},
+    {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump}
 };
 
 DiagnosticType getDiagnosticType(const std::string& typeStr)
@@ -200,21 +200,18 @@ uint32_t executeDumpCommand(
     const std::string& binPath, const std::string& dumpId,
     const std::string& dumpPath,
     const std::vector<std::pair<std::string, std::string>>& options,
-    const std::string& errorMsg, bool includePathAndId = true)
+    const std::string& errorMsg)
 {
     std::vector<char*> arg_v;
 
     // Add binary path
     arg_v.push_back(const_cast<char*>(binPath.c_str()));
 
-    if (includePathAndId)
-    {
-        // Add path and id options which are common to most dumps
-        arg_v.push_back(const_cast<char*>("-p"));
-        arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
-        arg_v.push_back(const_cast<char*>("-i"));
-        arg_v.push_back(const_cast<char*>(dumpId.c_str()));
-    }
+    // Add path and id options which are common to dumps
+    arg_v.push_back(const_cast<char*>("-p"));
+    arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
+    arg_v.push_back(const_cast<char*>("-i"));
+    arg_v.push_back(const_cast<char*>(dumpId.c_str()));
 
     // Add additional options
     for (const auto& opt : options)
@@ -512,8 +509,6 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                 break;
             case DiagnosticType::EROT:
             case DiagnosticType::ROT:
-                // erot_dump.sh orchestrates both legacy EROT and
-                // optional IROT/VROT collection.
                 erotDump(id, dumpPath);
                 break;
             case DiagnosticType::NVSwitch:

@@ -152,6 +152,11 @@ class NsmDbusClient
         return true;
     }
 
+    const std::string& getLastError() const
+    {
+        return lastError;
+    }
+
   private:
     std::optional<NsmDeviceInfo> getDeviceInfoByEid(uint8_t eid)
     {
@@ -473,16 +478,16 @@ static NsmResponseMeta parseNsmResponseMeta(const std::vector<uint8_t>& bytes)
     return {};
 }
 
-static std::string makeRotStatePayloadHex(
+static std::vector<uint8_t> makeRotStatePayload(
     uint16_t componentClass, uint16_t componentId, uint8_t componentIndex)
 {
-    std::ostringstream payload;
-    payload << toHexByte(static_cast<uint8_t>(componentClass & 0xFF))
-            << toHexByte(static_cast<uint8_t>((componentClass >> 8) & 0xFF))
-            << toHexByte(static_cast<uint8_t>(componentId & 0xFF))
-            << toHexByte(static_cast<uint8_t>((componentId >> 8) & 0xFF))
-            << toHexByte(componentIndex);
-    return payload.str();
+    return {
+        static_cast<uint8_t>(componentClass & 0xFF),
+        static_cast<uint8_t>((componentClass >> 8) & 0xFF),
+        static_cast<uint8_t>(componentId & 0xFF),
+        static_cast<uint8_t>((componentId >> 8) & 0xFF),
+        componentIndex,
+    };
 }
 
 static void pruneIntermediateArtifacts(const fs::path& tmpDir)
@@ -604,45 +609,6 @@ static bool queryFwComponentForEid(NsmDbusClient& client, uint32_t eid,
         offset += 5;
     }
     return false;
-}
-
-static std::vector<uint8_t> payloadFromHex(const std::string& payloadHex)
-{
-    std::vector<uint8_t> payload;
-    if ((payloadHex.size() % 2) != 0)
-    {
-        return payload;
-    }
-    payload.reserve(payloadHex.size() / 2);
-    for (size_t i = 0; i < payloadHex.size(); i += 2)
-    {
-        auto hi = payloadHex[i];
-        auto lo = payloadHex[i + 1];
-        auto hexToNibble = [](char c) -> int {
-            if (c >= '0' && c <= '9')
-            {
-                return c - '0';
-            }
-            if (c >= 'a' && c <= 'f')
-            {
-                return c - 'a' + 10;
-            }
-            if (c >= 'A' && c <= 'F')
-            {
-                return c - 'A' + 10;
-            }
-            return -1;
-        };
-        int upper = hexToNibble(hi);
-        int lower = hexToNibble(lo);
-        if (upper < 0 || lower < 0)
-        {
-            payload.clear();
-            return payload;
-        }
-        payload.push_back(static_cast<uint8_t>((upper << 4) | lower));
-    }
-    return payload;
 }
 
 static bool isRotDeviceEid(NsmDbusClient& client, uint32_t eid)
@@ -808,7 +774,12 @@ static bool nsmDiagDumpEid(NsmDbusClient& client, const std::string& name,
         {
             std::ofstream err(errFile, std::ios::app);
             err << name << ": nsmd D-Bus command failed for segment "
-                << static_cast<unsigned>(segmentId) << "\n";
+                << static_cast<unsigned>(segmentId);
+            if (!client.getLastError().empty())
+            {
+                err << ": " << client.getLastError();
+            }
+            err << "\n";
             return false;
         }
 
@@ -860,17 +831,31 @@ static bool collectBootStatusForEid(NsmDbusClient& client,
     if (!queryFwComponentForEid(client, eid, componentClass, componentId,
                                 componentIndex))
     {
+        std::ofstream out(outFile, std::ios::app);
+        out << "source=query_fw_component\n";
+        out << "eid=" << eid << "\n";
+        out << "error=query_fw_component_failed\n";
+        if (!client.getLastError().empty())
+        {
+            out << "details=" << client.getLastError() << "\n";
+        }
         return false;
     }
 
-    const std::string payloadHex =
-        makeRotStatePayloadHex(componentClass, componentId, componentIndex);
-    const std::vector<uint8_t> payload = payloadFromHex(payloadHex);
+    const std::vector<uint8_t> payload =
+        makeRotStatePayload(componentClass, componentId, componentIndex);
     std::vector<uint8_t> resp;
-    if (payload.empty() ||
-        !client.executeCommand(static_cast<uint8_t>(eid), NSM_MESSAGE_TYPE_FW,
+    if (!client.executeCommand(static_cast<uint8_t>(eid), NSM_MESSAGE_TYPE_FW,
                                NSM_CMD_GET_ROT_STATE_INFO, payload, resp, 5000))
     {
+        std::ofstream out(outFile, std::ios::app);
+        out << "source=nsm_get_rot_state_info\n";
+        out << "eid=" << eid << "\n";
+        out << "error=send_request_failed\n";
+        if (!client.getLastError().empty())
+        {
+            out << "details=" << client.getLastError() << "\n";
+        }
         return false;
     }
     const NsmResponseMeta meta = parseNsmResponseMeta(resp);
