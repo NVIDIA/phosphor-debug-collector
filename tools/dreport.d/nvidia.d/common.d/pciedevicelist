@@ -12,4 +12,9 @@ command="ls /sys/bus/pci/devices"
 
 file_name="pciedevicelist.log"
 
-add_cmd_output "$command" "$file_name" "$desc"
+if [ -z "$($command 2>/dev/null)" ]; then
+    echo "No PCIe devices present on this platform" >> "$name_dir/$file_name"
+    log_info "No PCIe devices found, skipping $desc"
+else
+    add_cmd_output "$command" "$file_name" "$desc"
+fi
