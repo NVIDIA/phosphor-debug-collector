@@ -37,6 +37,7 @@
 #define CMET_CHANNEL_COUNT 64
 #define MAX_HOST_BRIDGES 8
 #define MAX_ROOT_PORTS_PER_HB 16
+#define PCIE_MAX_LANES_PER_RP 16
 
 using json = nlohmann::json;
 using namespace phosphor::logging;
@@ -92,27 +93,24 @@ struct ErrorCounterPayload
     uint32_t otherSocCorrectedErrors;
     uint32_t cmetCount[CMET_CHANNEL_COUNT];
     uint32_t cmetStatus[CMET_CHANNEL_COUNT];
+    uint32_t cmetSpareCount;
 };
 
 // LTSSM History data structure (per root port)
-// Based on spec: hb_num(1) + rp_num(1) + ltssm_history(512) + padding(2) = 516
-// bytes
+// hb_num(1) + rp_num(1) + ltssm_history(128 * 4 = 512) = 514 bytes
 constexpr size_t LTSSM_HISTORY_SIZE = 128; // 128 uint32_t entries
 struct PcieLtssmData
 {
     uint8_t hbNum;                             // Host bridge number
     uint8_t rpNum;                             // Root port number
     uint32_t ltssmHistory[LTSSM_HISTORY_SIZE]; // LTSSM state history array
-    uint16_t reserved;                         // Padding to align
 };
 
 // PCIe Telemetry payload header
-// Based on spec: timestamp(8) + vendor_id(2) + device_id(2) + ssid(2) +
-// ssvid(2) = 16 bytes
 struct PcieTelemetryHeader
 {
     uint64_t timestamp; // Timestamp when telemetry was collected (nanoseconds)
-    uint16_t vendorId;  // PCI Vendor ID (e.g., 0x10de for NVIDIA)
+    uint16_t vendorId;  // PCI Vendor ID
     uint16_t deviceId;  // PCI Device ID
     uint16_t ssid;      // Subsystem ID
     uint16_t ssvid;     // Subsystem Vendor ID
@@ -120,8 +118,6 @@ struct PcieTelemetryHeader
 constexpr size_t PCIE_TELEMETRY_HEADER_SIZE = sizeof(PcieTelemetryHeader);
 
 // PCIe Root Port Telemetry Data structure (per root port)
-// Based on spec: is_enabled + rp_num + sbdf + link info + eq_values + perf_data
-// Note: eq_values and perf_data are TBD in spec, using observed size
 struct PcieRpTelemetryData
 {
     uint8_t isEnabled;    // Whether root port is enabled
@@ -132,11 +128,28 @@ struct PcieRpTelemetryData
     uint8_t linkSpeed;    // Current negotiated link speed (GT/s)
     uint8_t maxLinkSpeed; // Maximum supported link speed
     uint8_t maxLinkWidth; // Maximum supported link width
-    // Additional fields based on observed data size
-    uint32_t txThroughput;
-    uint32_t rxThroughput;
-    uint32_t correctedErrors;
-    uint32_t uncorrectedErrors;
+    // EQ values
+    uint16_t laneEom[PCIE_MAX_LANES_PER_RP];     // Per-lane EOM (SLRG)
+    uint8_t laneTxPreset[PCIE_MAX_LANES_PER_RP]; // Per-lane TX EQ preset
+    uint8_t numLanes;                            // Number of valid lane entries
+    uint8_t eomStatus; // pcie_eq_status_t: EOM (SLRG) collection status
+    uint8_t txStatus;  // pcie_eq_status_t: TX preset (SLTP) collection status
+    uint8_t reserved2; // Padding
+    // Per-RP error counts since boot
+    uint32_t ceCount;
+    uint32_t ueFatalCount;
+    uint32_t ueNonfatalCount;
+    uint32_t urCount;
+};
+
+// PCIe Host Bridge Telemetry Data structure (per host bridge)
+struct PcieHbTelemetryData
+{
+    uint8_t isEnabled;  // Whether host bridge is enabled
+    uint32_t hbNum;     // Host bridge number
+    uint64_t egressBw;  // Egress bandwidth (bytes/s)
+    uint64_t ingressBw; // Ingress bandwidth (bytes/s)
+    PcieRpTelemetryData rootPorts[MAX_ROOT_PORTS_PER_HB];
 };
 
 #pragma pack(pop)
@@ -329,19 +342,29 @@ json parseErrorCounterPayload(const std::vector<uint8_t>& data)
     coreErrors["other_soc_corrected"] = payload->otherSocCorrectedErrors;
     result["core_errors"] = coreErrors;
 
+    static const std::array<const char*, 4> disableReasons = {
+        "alias_checker", "training_at_por_frequency_failed",
+        "training_at_boot_frequency_failed", "threshold_of_bad_pages_exceeded"};
+
     json cmetChannels = json::array();
     for (int i = 0; i < CMET_CHANNEL_COUNT; i++)
     {
+        const uint32_t st = payload->cmetStatus[i];
         json channel;
         channel["channel"] = i;
         channel["errors"] = payload->cmetCount[i];
-        channel["status"] = std::format("0x{:02X}", payload->cmetStatus[i]);
-        channel["enabled"] = (payload->cmetStatus[i] & 0x01) != 0;
-        channel["spare"] = (payload->cmetStatus[i] & 0x02) != 0;
-        channel["disabled"] = (payload->cmetStatus[i] & 0x04) != 0;
+        channel["status"] = std::format("0x{:08X}", st);
+        channel["enabled"] = (st & 0x01) != 0;
+        channel["spare"] = (st & 0x02) != 0;
+        channel["disabled"] = (st & 0x04) != 0;
+        // Bits 3-4: disable reason (valid when channel is disabled)
+        channel["disable_reason"] = disableReasons[(st >> 3) & 0x03];
+        // Bits 5-7: SOCAMM module index [0-7]
+        channel["socamm_module_index"] = (st >> 5) & 0x07;
         cmetChannels.push_back(channel);
     }
     result["cmet_channels"] = cmetChannels;
+    result["cmet_spare_count"] = payload->cmetSpareCount;
 
     return result;
 }
@@ -391,58 +414,91 @@ json parsePcieTelemetryPayload(const std::vector<uint8_t>& data)
     result["event_received_timestamp"] = pcieTelemetryReceivedTime;
     result["data_valid"] = true;
 
-    // Validate minimum size for header
     if (data.size() < PCIE_TELEMETRY_HEADER_SIZE)
     {
         result["data_valid"] = false;
-        result["root_ports"] = json::array();
+        result["host_bridges"] = json::array();
         return result;
     }
 
-    // Parse header
     const auto* header =
         reinterpret_cast<const PcieTelemetryHeader*>(data.data());
 
-    // Add header info to result
     result["timestamp_ns"] = header->timestamp;
     result["vendor_id"] = std::format("0x{:04X}", header->vendorId);
     result["device_id"] = std::format("0x{:04X}", header->deviceId);
     result["subsystem_id"] = std::format("0x{:04X}", header->ssid);
     result["subsystem_vendor_id"] = std::format("0x{:04X}", header->ssvid);
 
-    json rootPorts = json::array();
-    // Skip the 16-byte header
+    static const std::array<const char*, 4> eqStatusNames = {
+        "valid", "speed_too_low", "link_down", "mnoc_fail"};
+
+    json hostBridges = json::array();
     size_t offset = PCIE_TELEMETRY_HEADER_SIZE;
 
-    while (offset + sizeof(PcieRpTelemetryData) <= data.size())
+    for (int h = 0; h < MAX_HOST_BRIDGES; h++)
     {
-        const auto* rpData =
-            reinterpret_cast<const PcieRpTelemetryData*>(data.data() + offset);
-
-        // Check for end marker
-        if (rpData->isEnabled == 0xFF && rpData->rpNum == 0xFF)
+        if (offset + sizeof(PcieHbTelemetryData) > data.size())
         {
             break;
         }
 
-        json rp;
-        rp["enabled"] = rpData->isEnabled != 0;
-        rp["root_port"] = rpData->rpNum;
-        rp["sbdf"] = formatSbdf(rpData->sbdf);
-        rp["current_link_speed"] = getLinkSpeedName(rpData->linkSpeed);
-        rp["current_link_width"] = std::format("x{}", rpData->linkWidth);
-        rp["max_link_speed"] = getLinkSpeedName(rpData->maxLinkSpeed);
-        rp["max_link_width"] = std::format("x{}", rpData->maxLinkWidth);
-        rp["tx_throughput"] = rpData->txThroughput;
-        rp["rx_throughput"] = rpData->rxThroughput;
-        rp["corrected_errors"] = rpData->correctedErrors;
-        rp["uncorrected_errors"] = rpData->uncorrectedErrors;
+        const auto* hbData =
+            reinterpret_cast<const PcieHbTelemetryData*>(data.data() + offset);
 
-        rootPorts.push_back(rp);
-        offset += sizeof(PcieRpTelemetryData);
+        json hb;
+        hb["enabled"] = hbData->isEnabled != 0;
+        hb["host_bridge"] = hbData->hbNum;
+        hb["egress_bw"] = hbData->egressBw;
+        hb["ingress_bw"] = hbData->ingressBw;
+
+        json rootPorts = json::array();
+        for (int r = 0; r < MAX_ROOT_PORTS_PER_HB; r++)
+        {
+            const auto& rpData = hbData->rootPorts[r];
+
+            json rp;
+            rp["enabled"] = rpData.isEnabled != 0;
+            rp["root_port"] = rpData.rpNum;
+            rp["sbdf"] = formatSbdf(rpData.sbdf);
+            rp["current_link_speed"] = getLinkSpeedName(rpData.linkSpeed);
+            rp["current_link_width"] = std::format("x{}", rpData.linkWidth);
+            rp["max_link_speed"] = getLinkSpeedName(rpData.maxLinkSpeed);
+            rp["max_link_width"] = std::format("x{}", rpData.maxLinkWidth);
+
+            // EQ values: only emit lanes in [0, numLanes)
+            const uint8_t nLanes = std::min(
+                rpData.numLanes, static_cast<uint8_t>(PCIE_MAX_LANES_PER_RP));
+            json laneEom = json::array();
+            json laneTxPreset = json::array();
+            for (int l = 0; l < nLanes; l++)
+            {
+                laneEom.push_back(rpData.laneEom[l]);
+                laneTxPreset.push_back(rpData.laneTxPreset[l]);
+            }
+            json eq;
+            eq["num_lanes"] = rpData.numLanes;
+            eq["lane_eom"] = laneEom;
+            eq["lane_tx_preset"] = laneTxPreset;
+            const uint8_t eomIdx = rpData.eomStatus < 4 ? rpData.eomStatus : 3;
+            const uint8_t txIdx = rpData.txStatus < 4 ? rpData.txStatus : 3;
+            eq["eom_status"] = eqStatusNames[eomIdx];
+            eq["tx_status"] = eqStatusNames[txIdx];
+            rp["eq_values"] = eq;
+
+            rp["ce_count"] = rpData.ceCount;
+            rp["ue_fatal_count"] = rpData.ueFatalCount;
+            rp["ue_nonfatal_count"] = rpData.ueNonfatalCount;
+            rp["ur_count"] = rpData.urCount;
+
+            rootPorts.push_back(rp);
+        }
+        hb["root_ports"] = rootPorts;
+        hostBridges.push_back(hb);
+        offset += sizeof(PcieHbTelemetryData);
     }
 
-    result["root_ports"] = rootPorts;
+    result["host_bridges"] = hostBridges;
     return result;
 }
 
