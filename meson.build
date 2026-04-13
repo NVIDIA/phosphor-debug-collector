@@ -235,7 +235,7 @@ conf_data.set_quoted(
 )
 conf_data.set(
     'BMC_DUMP_ROTATE_CONFIG',
-    get_option('dump_rotate_config').allowed(),
+    get_option('dump-rotate-config').allowed(),
     description: 'Turn on rotate config for bmc dump',
 )
 conf_data.set(
@@ -243,12 +243,6 @@ conf_data.set(
     get_option('fdr-dump-extension').enabled(),
     description: 'FDR dump extension',
 )
-conf_data.set_quoted(
-    'CompressionType',
-    get_option('COMPRESSION_TYPE'),
-    description: 'compression type flag',
-)
-
 # Add FDR dump configuration values to main config.h
 conf_data.set_quoted(
     'FDR_DUMP_BIN_PATH',
@@ -333,6 +327,19 @@ if cpp.has_header('poll.h')
 endif
 
 configure_file(configuration: conf_data, output: 'config.h')
+
+# Dreport configuration file (dreport.conf) generation
+
+dreport_conf = configuration_data()
+dreport_conf.set('DUMP_COMPRESSION', get_option('dump-compression-algorithm'))
+
+configure_file(
+    input: 'tools/dreport.d/dreport.conf.in',
+    output: 'dreport.conf',
+    configuration: dreport_conf,
+    install: true,
+    install_dir: get_option('datadir') / 'dreport.d',
+)
 
 dump_types_yaml_files = []
 
@@ -532,7 +539,7 @@ endif
 unit_subs = configuration_data()
 unit_subs.set('bindir', join_paths(get_option('prefix'), get_option('bindir')))
 systemd_system_unit_dir = dependency('systemd').get_variable(
-    'systemdsystemunitdir',
+    'systemd_system_unit_dir',
     pkgconfig_define: ['prefix', get_option('prefix')],
 )
 foreach u : unit_files

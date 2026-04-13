@@ -1,7 +1,7 @@
 #! /bin/bash
 
 help=$(cat << EOF
-        dreport creates an archive(xz compressed) consisting of the following:
+        dreport creates an archive consisting of the following:
                 * Configuration information
                 * Debug information
                 * A summary report
@@ -31,9 +31,6 @@ Options:
                               this limit. Default size is unlimited.
         -a, --args <args>     Additional <key>=<value> pair argument for
                               dump plugins.
-        -c, --compression     you can select the compression type either zstd
-                              or xz. xz is size efficient and zstd is time
-                              eficient.
         -v, —-verbose         Increase logging verbosity.
         -q, —-quiet           Only log fatal errors to stderr
         -h, —-help            Display this help and exit.
@@ -54,7 +51,8 @@ declare -rx TYPE_SYSTEM="system"
 declare -rx SUMMARY_LOG="summary.log"
 declare -rx DREPORT_LOG="dreport.log"
 declare -rx TMP_DIR="/tmp"
-declare -rx EPOCHTIME=$(date +"%s")
+EPOCHTIME=$(date +"%s")
+declare -rx EPOCHTIME
 declare -rx TIME_STAMP="date -u"
 declare -rx PLUGIN="pl_"
 declare -rx DREPORT_SOURCE="/usr/share/dreport.d"
@@ -81,7 +79,6 @@ declare -x dump_dir="/tmp"
 declare -x dump_id="00000000"
 declare -x dump_type=$TYPE_USER
 declare -x verbose=$FALSE
-declare -x compression_type="xz"
 declare -x quiet=$FALSE
 declare -x dump_size="unlimited"
 declare -x name_dir=""
@@ -94,21 +91,16 @@ declare -x pid=$ZERO
 declare -x elog_id=""
 
 #Source dreport common functions
-. $DREPORT_INCLUDE/functions
-. $DREPORT_INCLUDE/functions_fallback_dump
+# shellcheck source=tools/dreport.d/include.d/functions
+. "$DREPORT_INCLUDE"/functions
+. "$DREPORT_INCLUDE"/functions_fallback_dump
 
 function cleanup_on_termination()
 {
-    if [ "$compression_type" = "xz" ]; then
-        echo "SIGTERM captured - cleanup $name_dir and $name_dir.tar.xz leftovers"
-        rm -r "$name_dir"
-        rm -r "$name_dir.tar.xz"
-    else
-        echo "SIGTERM captured - cleanup $name_dir and $name_dir.zst leftovers"
-        rm -r "$name_dir"
-        rm -r "$name_dir.zst"
-    fi
-    exit -1
+    echo "SIGTERM captured - cleanup $name_dir and ${name_dir}.${ARCHIVE_EXT} leftovers"
+    rm -rf "$name_dir"
+    rm -f "${name_dir}.${ARCHIVE_EXT}"
+    exit 1
 }
 
 trap 'cleanup_on_termination' SIGTERM
@@ -118,28 +110,28 @@ trap 'cleanup_on_termination' SIGTERM
 function collect_data()
 {
     case $dump_type in
-        $TYPE_USER)
+        "$TYPE_USER")
             ;;
-        $TYPE_CORE)
+        "$TYPE_CORE")
             log_summary "Core: $optional_path"
             set_core_pid
             ;;
-        $TYPE_RAMOOPS)
+        "$TYPE_RAMOOPS")
             log_summary "Ramoops: $optional_path"
             ;;
-        $TYPE_ELOG)
+        "$TYPE_ELOG")
             log_summary "ELOG: $optional_path"
             elog_id=$(basename "$optional_path")
             set_elog_pid
             ;;
-        $TYPE_CHECKSTOP)
+        "$TYPE_CHECKSTOP")
             log_summary "CHECKSTOP: $optional_path"
             elog_id=$(basename "$optional_path")
             set_elog_pid
             ;;
-        $TYPE_SYSTEM)
+        "$TYPE_SYSTEM")
             ;;
-        $SUMMARY_DUMP)
+        "$SUMMARY_DUMP")
             #No data collection is required.
             return
             ;;
@@ -152,7 +144,7 @@ function collect_data()
     plugin_path=$DREPORT_SOURCE/$PLUGIN$dump_type.d
 
     # check plugin directory for this dump type?
-    if [ ! -d $plugin_path ]; then
+    if [ ! -d "$plugin_path" ]; then
         log_error "$plugin_path does not exist, skipping dump collection"
         return 0
     fi
@@ -160,19 +152,19 @@ function collect_data()
     local per_plugin_timeout=$BMC_DUMP_PER_PLUGIN_TIMEOUT_SEC
     
     #Executes plugins based on the type.
-    for i in $plugin_path/* ; do
+    for i in "$plugin_path"/* ; do
         # Execute plugin with timeout
         if [ ${#plugin_args[@]} -ne 0 ]; then
-            timeout $per_plugin_timeout $i ${plugin_args[@]}
+            timeout "$per_plugin_timeout" "$i" "${plugin_args[@]}"
         else
-            timeout $per_plugin_timeout $i
+            timeout "$per_plugin_timeout" "$i"
         fi
-        
+
         # Capture exit code
         local exit_code=$?
-        
+
         # Handle timeout (exit 143 = SIGTERM from timeout) - trigger fallback
-        if [ $exit_code -eq 143 ]; then
+        if [ "$exit_code" -eq 143 ]; then
             generate_fallback_dump "${i##*/}" "$per_plugin_timeout"
             break
         fi
@@ -191,7 +183,7 @@ function set_core_pid()
     file=$(printf %q "$optional_path")
 
     #matching systemd-coredump core file format.
-    pid=$(echo $file | awk -F . '{ print $5}')
+    pid=$(echo "$file" | awk -F . '{ print $5}')
 }
 
 # @brief set elog pid by reading _PID information from the elog d-bus object.
@@ -200,13 +192,13 @@ function set_core_pid()
 function set_elog_pid()
 {
     additional_data=$(busctl get-property xyz.openbmc_project.Logging \
-            $optional_path \
+            "$optional_path" \
             xyz.openbmc_project.Logging.Entry \
         AdditionalData)
 
     #read _PID data.
-    if [ ! -z "$additional_data" ]; then
-        pid=$(echo $additional_data | \
+    if [ -n "$additional_data" ]; then
+        pid=$(echo "$additional_data" | \
             awk -F _PID= '{ print ($2+0)}')
     fi
 }
@@ -214,11 +206,7 @@ function set_elog_pid()
 # @brief Initial version of the summary log
 function init_summary()
 {
-    if [ "$compression_type" = "xz" ]; then
-        log_summary "Name:          $name.tar.xz"
-    else
-        log_summary "Name:          $name.zst"
-    fi
+    log_summary "Name:          $name.$ARCHIVE_EXT"
     log_summary "Epochtime:     $EPOCHTIME"
     log_summary "ID:            $dump_id"
     log_summary "Type:          $dump_type"
@@ -231,13 +219,12 @@ function init_summary()
 function initialize()
 {
     #Dump file name
-    if [ -z $name ]; then
+    if [ -z "$name" ]; then
         name=$"obmcdump_"$dump_id"_$EPOCHTIME"
     fi
 
     #Create temporary data directory.
-    mkdir -p "$TMP_DIR/$name"
-    if [ $? -ne 0 ]; then
+    if ! mkdir -p "$TMP_DIR/$name"; then
         echo "Error: Failed to create the temporary directory."
         return $RESOURCE_UNAVAILABLE;
     fi
@@ -277,39 +264,30 @@ function initialize()
 # @brief Packaging the dump and transferring to dump location.
 function package()
 {
-    mkdir -p "$dump_dir"
-    if [ $? -ne 0 ]; then
+    if ! mkdir -p "$dump_dir"; then
         log_error "Could not create the destination directory $dump_dir"
-        dest_dir=$TMP_DIR
+        dump_dir=$TMP_DIR
     fi
 
     #tar and compress the files.
+    create_archive "$name_dir" "$(dirname "$name_dir")" "$(basename "$name_dir")"
+
     if [ -f "$HEADER_EXTENSION" ]; then
-        if [ "$compression_type" = "xz" ]; then
-            tar -Jcf "$name_dir.tar.xz" -C \
-                $(dirname "$name_dir") $(basename "$name_dir")
-            echo "Adding Dump Header :"$HEADER_EXTENSION
-            ("$HEADER_EXTENSION")
-            cat "$name_dir.tar.xz" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
-            mv "/tmp/dumpheader_$EPOCHTIME" "$name_dir.tar.xz"
-        else
-            tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
-            echo "Adding Dump Header :"$HEADER_EXTENSION
-            ("$HEADER_EXTENSION")
-            cat "$name_dir.zst" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
-            mv "/tmp/dumpheader_$EPOCHTIME" "$name_dir.zst"
-        fi
-    else
-        if [ "$compression_type" = "xz" ]; then
-            tar -Jcf "$name_dir.tar.xz" -C \
-                $(dirname "$name_dir") $(basename "$name_dir")
-        else
-            tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
-        fi
+        echo "Adding Dump Header :"$HEADER_EXTENSION
+        ("$HEADER_EXTENSION")
+        # shellcheck disable=SC2002
+        # gendumpheader was moved to openpower-debug-collector (commit 94bc05fc).
+        # It is unclear if this code path is still used.
+        cat "$ARCHIVE_PATH" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
+        mv "/tmp/dumpheader_$EPOCHTIME" "$ARCHIVE_PATH"
     fi
 
+    # shellcheck disable=SC2181
+    # TODO: Refactor needed, create_archive is executed in both branches.
+    # This check captures the exit status of whichever branch ran.
+    # To be fixed in a separate patch.
     if [ $? -ne 0 ]; then
-        echo $($TIME_STAMP) "Could not create the compressed tar file"
+        echo "$($TIME_STAMP)" "Could not create the compressed tar file"
         rm -r "$name_dir"
         return $INTERNAL_FAILURE
     fi
@@ -317,35 +295,21 @@ function package()
     #remove the temporary name specific directory
     rm -r "$name_dir"
 
-    echo $($TIME_STAMP) "Report is available in $dump_dir"
+    echo "$($TIME_STAMP)" "Report is available in $dump_dir"
 
     if [ "$TMP_DIR" == "$dump_dir" ] || [ "$TMP_DIR/" == "$dump_dir" ]; then
         return $SUCCESS
     fi
 
     #copy the compressed tar file into the destination
-    if [ "$compression_type" = "xz" ]; then
-        cp "$name_dir.tar.xz" "$dump_dir"
-    else
-        cp "$name_dir.zst" "$dump_dir"
-    fi
-    if [ $? -ne 0 ]; then
-        if [ "$compression_type" = "xz" ]; then
-            echo "Failed to copy the $name_dir.tar.xz to $dump_dir"
-            rm "$name_dir.tar.xz"
-        else
-            echo "Failed to copy the $name_dir.zst to $dump_dir"
-            rm "$name_dir.zst"
-        fi
+    if ! cp "$ARCHIVE_PATH" "$dump_dir"; then
+        echo "Failed to copy the $ARCHIVE_PATH to $dump_dir"
+        rm "$ARCHIVE_PATH"
         return $INTERNAL_FAILURE
     fi
 
     #Remove the temporary copy of the file
-    if [ "$compression_type" = "xz" ]; then
-        rm "$name_dir.tar.xz"
-    else
-        rm "$name_dir.zst"
-    fi
+    rm "$ARCHIVE_PATH"
 }
 
 # @brief Main function
@@ -356,7 +320,7 @@ function main()
     initialize
     result=$?
     if [[ ${result} -ne $SUCCESS ]]; then
-        echo $($TIME_STAMP) "Error: Failed to initialize, Exiting"
+        echo "$($TIME_STAMP)" "Error: Failed to initialize, Exiting"
         exit;
     fi
 
@@ -369,18 +333,20 @@ function main()
     package  #package the dump
     result=$?
     if [[ ${result} -ne $SUCCESS ]]; then
-        echo $($TIME_STAMP) "Error: Failed to package, Exiting"
+        echo "$($TIME_STAMP)" "Error: Failed to package, Exiting"
         return 1
     else
-        echo $($TIME_STAMP) "Successfully completed"
+        echo "$($TIME_STAMP)" "Successfully completed"
         exit;
     fi
 }
 
-TEMP=`getopt -o n:d:i:t:s:p:a:c:T:vqh \
-    --long name:,dir:,dumpid:,type:,size:,path:,args:,compression:,timeout:,verbose,quiet,help \
-    -- "$@"`
+TEMP=$(getopt -o n:d:i:t:s:p:a:T:vqh \
+        --long name:,dir:,dumpid:,type:,size:,path:,args:,timeout:,verbose,quiet,help \
+    -- "$@")
 
+# shellcheck disable=SC2181
+# Common getopt usage, check exit status after capturing output
 if [ $? -ne 0 ]
 then
     echo "Error: Invalid options"
@@ -417,9 +383,6 @@ while [[ $# -gt 1 ]]; do
                 plugin_args=( "${plugin_args[@]}" "$v" )
             fi
             shift 2;;
-        -c|--compression)
-            compression_type=$2
-            shift 2 ;;
         -T|--timeout)
             BMC_DUMP_MAX_TIME_SEC=$2
             shift 2 ;;

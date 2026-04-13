@@ -1,5 +1,63 @@
 #!/usr/bin/env bash
 
+# Variables declared in dreport, expected to be set before sourcing this file
+declare -x name_dir
+declare -x dump_size
+declare -x dreport_log
+declare -x summary_log
+declare -x quiet
+declare -x verbose
+
+# Source dreport configuration (generated at build time)
+if [ -f /usr/share/dreport.d/dreport.conf ]; then
+    # shellcheck source=/dev/null
+    source /usr/share/dreport.d/dreport.conf
+fi
+
+# Set compression flags based on algorithm
+case "${DUMP_COMPRESSION:-xz}" in
+    xz)
+        TAR_COMPRESS_FLAG="-J"
+        ARCHIVE_EXT="tar.xz"
+        ;;
+    gzip)
+        TAR_COMPRESS_FLAG="-z"
+        ARCHIVE_EXT="tar.gz"
+        ;;
+    zstd)
+        TAR_COMPRESS_FLAG=""
+        ARCHIVE_EXT="tar.zst"
+        ;;
+    *)
+        TAR_COMPRESS_FLAG="-J"
+        ARCHIVE_EXT="tar.xz"
+        ;;
+esac
+
+# @brief Create a compressed tar archive
+# @param $1 Output file path (without extension)
+# @param $2 Source directory (parent dir for -C)
+# @param $3 Base name to archive
+# @return Sets ARCHIVE_PATH to the created archive path
+function create_archive()
+{
+    local output_base="$1"
+    local src_dir="$2"
+    local base_name="$3"
+    local archive_file="${output_base}.${ARCHIVE_EXT}"
+
+    case "${DUMP_COMPRESSION:-xz}" in
+        zstd)
+            tar -cf - -C "$src_dir" "$base_name" | zstd > "$archive_file"
+            ;;
+        *)
+            tar ${TAR_COMPRESS_FLAG} -cf "$archive_file" -C "$src_dir" "$base_name"
+            ;;
+    esac
+
+    ARCHIVE_PATH="$archive_file"
+}
+
 # @brief Execute the command and save the output into the dreport
 #        packaging, if it is in the user allowed dump size limit.
 # @param $1 Command to be executed.
@@ -11,8 +69,7 @@ function add_cmd_output()
     file_name="$2"
     desc="$3"
 
-    eval $command >> "$name_dir/$file_name"
-    if [ $? -ne 0 ]; then
+    if ! eval "$command" >> "$name_dir/$file_name"; then
         log_error "Failed to collect $desc"
         rm -f "$name_dir/$file_name"
         return 1
@@ -35,18 +92,18 @@ function add_copy_file()
     file_name="$1"
     desc="$2"
 
-    cp -Lr $file_name $name_dir
-    if [ $? -ne 0 ]; then
+    if ! cp -Lr "$file_name" "$name_dir"; then
         log_error "Failed to copy $desc $file_name"
-        rm -fr "$name_dir/$file_name"
-        return $RESOURCE_UNAVAILABLE
+        # file_name is not empty, otherwise cp would have failed
+        rm -fr "${name_dir:?}/$file_name"
+        return "$RESOURCE_UNAVAILABLE"
     fi
     if check_size "$name_dir/$(basename "$file_name")"; then
         log_info "Copied $desc $file_name"
-        return $SUCCESS
+        return "$SUCCESS"
     else
         log_warning "Skipping copy $desc $file_name"
-        return $RESOURCE_UNAVAILABLE
+        return "$RESOURCE_UNAVAILABLE"
     fi
 }
 
@@ -59,18 +116,18 @@ function add_copy_sym_link_file()
     file_name="$1"
     desc="$2"
 
-    cp $file_name $name_dir
-    if [ $? -ne 0 ]; then
+    if ! cp "$file_name" "$name_dir"; then
         log_error "Failed to copy $desc $file_name"
-        rm -fr "$name_dir/$file_name"
-        return $RESOURCE_UNAVAILABLE
+        # file_name is not empty, otherwise cp would have failed
+        rm -fr "${name_dir:?}/$file_name"
+        return "$RESOURCE_UNAVAILABLE"
     fi
     if check_size "$name_dir/$(basename "$file_name")"; then
         log_info "Copied $desc $file_name"
-        return $SUCCESS
+        return "$SUCCESS"
     else
         log_warning "Skipping copy $desc $file_name"
-        return $RESOURCE_UNAVAILABLE
+        return "$RESOURCE_UNAVAILABLE"
     fi
 }
 
@@ -86,69 +143,50 @@ function check_size()
     source=$1
 
     #No size check required in case dump_size is set to unlimited
-    if [ $dump_size = $UNLIMITED ]; then
+    if [ "$dump_size" = "$UNLIMITED" ]; then
         return 0
     fi
 
     #get the file or directory size
     if [[ -d $source ]] && [[ -n $source ]]; then
         tar -cf "$source.tar" -C \
-           $(dirname "$source") $(basename "$source")
+            "$(dirname "$source")" "$(basename "$source")"
         size=$(stat -c%s "$source.tar")
         rm "$source.tar"
     else
         size=$(stat -c%s "$source")
     fi
 
-    if [ $((size + cur_dump_size)) -gt $dump_size ]; then
+    if [ $((size + cur_dump_size)) -gt "$dump_size" ]; then
         #Exceed the allowed limit,
         #tar and compress the files and check the size
-        if [ "$compression_type" = "xz" ]; then
-            tar -Jcf "$name_dir.tar.xz" -C \
-                $(dirname "$name_dir") $(basename "$name_dir")
-            if [ $? -ne 0 ]; then
-                log_error "Compression failed for the xz"
-                rm -f "$source"
-                return 2  # Return special code for space issues
-            fi
-            size=$(stat -c%s "$name_dir.tar.xz")
-        else
-            tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
-            if [ $? -ne 0 ]; then
-                log_error "Compression failed for the zstd"
-                rm -f "$source"
-                return 2  # Return special code for space issues
-            fi
-            size=$(stat -c%s "$name_dir.zst")
+        create_archive "$name_dir" "$(dirname "$name_dir")" "$(basename "$name_dir")"
+        if [ $? -ne 0 ]; then
+            log_error "Compression failed"
+            rm -f "$source"
+            return 2  # Return special code for space issues
         fi
-        if [ $size -gt $dump_size ]; then
+        size=$(stat -c%s "$ARCHIVE_PATH")
+        if [ "$size" -gt "$dump_size" ]; then
             #Remove the the specific data from the name_dir and continue
-            if [ "$compression_type" = "xz" ]; then
-                rm "$source" "$name_dir.tar.xz"
-            else
-                rm "$source" "$name_dir.zst"
-            fi
-            return $RESOURCE_UNAVAILABLE
+            rm "$source" "$ARCHIVE_PATH"
+            return "$RESOURCE_UNAVAILABLE"
         else
-            if [ "$compression_type" = "xz" ]; then
-                rm "$name_dir.tar.xz"
-            else
-                rm "$name_dir.zst"
-            fi
+            rm "$ARCHIVE_PATH"
         fi
     fi
 
     cur_dump_size=$((size + cur_dump_size))
-    return $SUCCESS
+    return "$SUCCESS"
 }
 
 # @brief log the error message
 # @param error message
 function log_error()
 {
-    echo $($TIME_STAMP) "ERROR: $*" >> $dreport_log
+    echo "$($TIME_STAMP)" "ERROR: $*" >> "$dreport_log"
     if ((quiet != TRUE)); then
-        echo $($TIME_STAMP) "ERROR: $*" >&2
+        echo "$($TIME_STAMP)" "ERROR: $*" >&2
     fi
 }
 
@@ -157,9 +195,9 @@ function log_error()
 function log_warning()
 {
     if ((verbose == TRUE)); then
-        echo $($TIME_STAMP) "WARNING: $*" >> $dreport_log
+        echo "$($TIME_STAMP)" "WARNING: $*" >> "$dreport_log"
         if ((quiet != TRUE)); then
-            echo $($TIME_STAMP) "WARNING: $*" >&2
+            echo "$($TIME_STAMP)" "WARNING: $*" >&2
         fi
     fi
 }
@@ -169,9 +207,9 @@ function log_warning()
 function log_info()
 {
     if ((verbose == TRUE)); then
-        echo $($TIME_STAMP) "INFO: $*" >> $dreport_log
+        echo "$($TIME_STAMP)" "INFO: $*" >> "$dreport_log"
         if ((quiet != TRUE)); then
-            echo $($TIME_STAMP) "INFO: $*" >&1
+            echo "$($TIME_STAMP)" "INFO: $*" >&1
         fi
     fi
 }
@@ -180,8 +218,8 @@ function log_info()
 # @param message
 function log_summary()
 {
-    echo $($TIME_STAMP) "$*" >> $summary_log
+    echo "$($TIME_STAMP)" "$*" >> "$summary_log"
     if ((quiet != TRUE)); then
-        echo $($TIME_STAMP) "$*" >&1
+        echo "$($TIME_STAMP)" "$*" >&1
     fi
 }

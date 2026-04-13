@@ -200,7 +200,7 @@ option(
 )
 
 option(
-    'dump_rotate_config',
+    'dump-rotate-config',
     type: 'feature',
     value: 'disabled',
     description: 'Enable rotate config for bmc dump',
@@ -409,8 +409,9 @@ option(
 )
 
 option(
-    'COMPRESSION_TYPE',
-    type: 'string',
+    'dump-compression-algorithm',
+    type: 'combo',
+    choices: ['xz', 'gzip', 'zstd'],
     value: 'xz',
-    description: 'compression type for the bmc dump it can be xz or zstd',
+    description: 'Compression algorithm for dump archives',
 )
