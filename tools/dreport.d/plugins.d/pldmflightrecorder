@@ -11,8 +11,11 @@ desc="pldm flight recorder"
 
 # collect data only if pldmd is enabled
 if [ -e "/usr/bin/pldmd" ]; then
+    # Signal pldmd to flush the flight recorder, then poll for the file
+    # instead of a fixed 5-second sleep.
     command="rm -rf /tmp/pldm_flight_recorder; killall -s SIGUSR1 pldmd; \
-           sleep 5; cat /tmp/pldm_flight_recorder"
+           for i in \$(seq 1 10); do [ -s /tmp/pldm_flight_recorder ] && break; sleep 0.5; done; \
+           cat /tmp/pldm_flight_recorder"
 
     file_name="pldmflightrecorder.log"
 

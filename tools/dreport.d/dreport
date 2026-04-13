@@ -154,24 +154,45 @@ function collect_data()
     fi
 
     local per_plugin_timeout=$BMC_DUMP_PER_PLUGIN_TIMEOUT_SEC
-    
-    #Executes plugins based on the type.
+
+    # Maximum number of plugins to run concurrently.
+    # Keeps memory and CPU usage bounded on the BMC.
+    # wait -n exists only in bash 5.1+; without it, parallel scheduling breaks
+    # (wait -n fails every time) and would spawn every plugin at once.
+    local max_parallel=4
+    if ((BASH_VERSINFO[0] < 5 ||
+        (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1))); then
+        max_parallel=1
+    fi
+    local running=0
+    local pids=()
+    local plugin_names=()
+
+    #Executes plugins based on the type, with bounded parallelism.
     for i in "$plugin_path"/* ; do
-        # Execute plugin with timeout
+        # Execute plugin with timeout in background
         if [ ${#plugin_args[@]} -ne 0 ]; then
-            timeout "$per_plugin_timeout" "$i" "${plugin_args[@]}"
+            timeout "$per_plugin_timeout" "$i" "${plugin_args[@]}" &
         else
-            timeout "$per_plugin_timeout" "$i"
+            timeout "$per_plugin_timeout" "$i" &
         fi
+        pids+=($!)
+        plugin_names+=("${i##*/}")
+        running=$((running + 1))
 
-        # Capture exit code
+        # When we hit the parallel limit, wait for any one to finish
+        if [ $running -ge $max_parallel ]; then
+            wait -n 2>/dev/null || true
+            running=$((running - 1))
+        fi
+    done
+
+    # Wait for all remaining plugins
+    for idx in "${!pids[@]}"; do
+        wait "${pids[$idx]}" 2>/dev/null
         local exit_code=$?
-
-        # Handle timeout (exit 143 = SIGTERM from timeout) - trigger fallback
-        if [ "$exit_code" -eq 143 ]; then
-            echo "Plugin ${i##*/} exceeded ${per_plugin_timeout}s timeout, collecting fallback data" >&2
-            generate_fallback_dump "${i##*/}" "$per_plugin_timeout"
-            break
+        if [ $exit_code -eq 143 ]; then
+            generate_fallback_dump "${plugin_names[$idx]}" "$per_plugin_timeout"
         fi
     done
 }
@@ -275,23 +296,38 @@ function package()
         dump_dir=$TMP_DIR
     fi
 
-    #tar and compress the files.
-    create_archive "$name_dir" "$(dirname "$name_dir")" "$(basename "$name_dir")"
-
+    #Generate dump header first (if needed) so it can be prepended
+    #without re-reading the entire compressed archive.
+    local header_file=""
     if [ -f "$HEADER_EXTENSION" ]; then
-        echo "Adding Dump Header :"$HEADER_EXTENSION
+        echo "Adding Dump Header: $HEADER_EXTENSION"
         ("$HEADER_EXTENSION")
-        # shellcheck disable=SC2002
-        # gendumpheader was moved to openpower-debug-collector (commit 94bc05fc).
-        # It is unclear if this code path is still used.
-        cat "$ARCHIVE_PATH" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
-        mv "/tmp/dumpheader_$EPOCHTIME" "$ARCHIVE_PATH"
+        header_file="/tmp/dumpheader_$EPOCHTIME"
+    fi
+
+    #tar and compress the files.
+    if [ -n "$header_file" ] && [ -f "$header_file" ]; then
+        # Stream header + compressed data in one pass, avoiding a re-read
+        # of the entire compressed archive that prepending would otherwise
+        # require.
+        local archive="${name_dir}.${ARCHIVE_EXT}"
+        case "${DUMP_COMPRESSION:-xz}" in
+            zstd)
+                { cat "$header_file"; tar -cf - -C \
+                    "$(dirname "$name_dir")" "$(basename "$name_dir")" | zstd; } > "$archive"
+                ;;
+            *)
+                { cat "$header_file"; tar ${TAR_COMPRESS_FLAG} -cf - -C \
+                    "$(dirname "$name_dir")" "$(basename "$name_dir")"; } > "$archive"
+                ;;
+        esac
+        rm -f "$header_file"
+        ARCHIVE_PATH="$archive"
+    else
+        create_archive "$name_dir" "$(dirname "$name_dir")" "$(basename "$name_dir")"
     fi
 
     # shellcheck disable=SC2181
-    # TODO: Refactor needed, create_archive is executed in both branches.
-    # This check captures the exit status of whichever branch ran.
-    # To be fixed in a separate patch.
     if [ $? -ne 0 ]; then
         echo "$($TIME_STAMP)" "Could not create the compressed tar file"
         rm -r "$name_dir"

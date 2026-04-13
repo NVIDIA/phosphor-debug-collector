@@ -1,28 +1,35 @@
 #!/bin/bash
 #
 # config: 24 60
-# @brief: Collect Journal pretty log information.
+# @brief: Collect Journal log information.
 #
+# Uses compact single-line JSON format and limits collection to the last
+# 24 hours to reduce output size and collection time on busy systems.
+# The json format preserves all structured fields (same as json-pretty)
+# but without the multi-line formatting overhead.
 
 # shellcheck source=tools/dreport.d/include.d/functions
 . "$DREPORT_INCLUDE"/functions
 
-desc="Journal pretty log"
-file_name="journal-pretty.log"
-command="journalctl --namespace=* -o json-pretty"
+# Collect recent journal in compact JSON (single-line per entry).
+# --since=-24h limits to last 24 hours to avoid dumping the entire
+# journal history on long-running systems.
+desc="Journal log (json, last 24h)"
+file_name="journal.json"
+command="journalctl --namespace=* -o json --since=-24h"
 
 add_cmd_output "$command" "$file_name" "$desc"
 status=$?  # Capture exit status of journalctl
 
 if [ $status -eq 1 ]; then
     desc="Journal log at error"
-    file_name="journal-pretty-error.log"
-    command_compact="journalctl || true"
+    file_name="journal-error.log"
+    command_compact="journalctl --since=-24h || true"
     add_cmd_output "$command_compact" "$file_name" "$desc"
 
 elif [ $status -eq 2 ]; then
     desc="Journal log"
     file_name="journal.log"
-    command_compact="journalctl"
+    command_compact="journalctl --since=-24h"
     add_cmd_output "$command_compact" "$file_name" "$desc"
 fi
