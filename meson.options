@@ -17,6 +17,13 @@ option(
 )
 
 option(
+    'rot-dump-collector',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Build ROT NSM collector binary used by erot_dump.sh',
+)
+
+option(
     'cpu-diagnostic-dump',
     type: 'feature',
     value: 'disabled',
