@@ -167,12 +167,13 @@ function collect_data()
         else
             timeout $per_plugin_timeout $i
         fi
-        
+
         # Capture exit code
         local exit_code=$?
-        
+
         # Handle timeout (exit 143 = SIGTERM from timeout) - trigger fallback
         if [ $exit_code -eq 143 ]; then
+            echo "Plugin ${i##*/} exceeded ${per_plugin_timeout}s timeout, collecting fallback data" >&2
             generate_fallback_dump "${i##*/}" "$per_plugin_timeout"
             break
         fi
