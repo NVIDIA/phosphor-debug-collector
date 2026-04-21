@@ -160,9 +160,11 @@ function collect_data()
     # wait -n exists only in bash 5.1+; without it, parallel scheduling breaks
     # (wait -n fails every time) and would spawn every plugin at once.
     local max_parallel=4
+    local have_wait_n=1
     if ((BASH_VERSINFO[0] < 5 ||
         (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1))); then
         max_parallel=1
+        have_wait_n=0
     fi
     local running=0
     local pids=()
@@ -182,8 +184,15 @@ function collect_data()
 
         # When we hit the parallel limit, wait for any one to finish
         if [ $running -ge $max_parallel ]; then
-            wait -n 2>/dev/null || true
-            running=$((running - 1))
+            if [ "$have_wait_n" -eq 1 ]; then
+                if wait -n 2>/dev/null; then
+                    running=$((running - 1))
+                fi
+            else
+                # Bash < 5.1: no wait -n; wait for the job we just started
+                wait "$!" 2>/dev/null || true
+                running=$((running - 1))
+            fi
         fi
     done
 
@@ -301,8 +310,17 @@ function package()
     local header_file=""
     if [ -f "$HEADER_EXTENSION" ]; then
         echo "Adding Dump Header: $HEADER_EXTENSION"
-        ("$HEADER_EXTENSION")
-        header_file="/tmp/dumpheader_$EPOCHTIME"
+        if ! "$HEADER_EXTENSION"; then
+            log_error "Dump header script failed: $HEADER_EXTENSION"
+        else
+            header_file="/tmp/dumpheader_$EPOCHTIME"
+            if [ ! -f "$header_file" ] || [ ! -r "$header_file" ] ||
+                [ ! -s "$header_file" ]; then
+                log_error "Dump header missing, unreadable, or empty: $header_file"
+                rm -f "$header_file"
+                header_file=""
+            fi
+        fi
     fi
 
     #tar and compress the files.
