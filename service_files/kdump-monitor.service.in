@@ -1,0 +1,14 @@
+[Unit]
+Description=kdump capture monitor — copies vmcore-dmesg to BMC dump
+After=xyz.openbmc_project.Dump.Manager.service xyz.openbmc_project.Logging.service
+Requires=xyz.openbmc_project.Dump.Manager.service
+ConditionPathExistsGlob=@KDUMP_DUMP_PATH@/vmcore-dmesg*
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/phosphor-debug-collector/phosphor-kdump-monitor
+RemainAfterExit=yes
+SyslogIdentifier=kdump-monitor
+
+[Install]
+WantedBy=multi-user.target
