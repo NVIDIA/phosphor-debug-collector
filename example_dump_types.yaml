@@ -7,6 +7,9 @@
 - xyz.openbmc_project.Dump.Create.DumpType.Ramoops:
       - ramoops
       - BMC_DUMP
+- xyz.openbmc_project.Dump.Create.DumpType.Kdump:
+      - kdump
+      - BMC_DUMP
 - xyz.openbmc_project.Dump.Create.DumpType.ErrorLog:
       - elog
       - BMC_DUMP

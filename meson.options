@@ -61,6 +61,16 @@ option('SYSTEM_DUMP_PATH', type : 'string',
         description : 'Directory where system dumps are placed'
 )
 
+option('KDUMP_DUMP_PATH', type : 'string',
+        value : '/var/emmc/user-logs/logging/dumps/kdump',
+        description : 'Directory where kdump vmcore-dmesg captures are written by the capture /init'
+)
+
+option('KDUMP_MAX_ENTRIES_PER_BOOT', type : 'integer',
+        value : 1,
+        description : 'Defensive cap on kdump artifacts processed per boot; capture is single-slot so 1 is the production value'
+)
+
 option('BMC_DUMP_MAX_SIZE', type : 'integer',
         value : 200,
         description : 'Maximum size of one bmc dump in kilo bytes'
