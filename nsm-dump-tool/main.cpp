@@ -170,30 +170,35 @@ OperationStatus getEraseStatus(std::string objectPath)
         }
         else if ("com.nvidia.Dump.Erase.OperationStatus.Success" == eraseReason)
         {
+            if ("com.nvidia.Dump.Erase.EraseStatus.DataEraseInProgress" ==
+                eraseStatus)
             {
-                if ("com.nvidia.Dump.Erase.EraseStatus.DataEraseInProgress" ==
-                    eraseStatus)
-                {
-                    return InProgress;
-                }
-                else
-                {
-                    if ("com.nvidia.Dump.Erase.EraseStatus.DataErased" ==
-                        eraseStatus)
-                    {
-                        return Success;
-                    }
-                    else
-                    {
-                        log<level::ERR>(eraseStatus.c_str());
-                        return Error;
-                    }
-                }
+                return InProgress;
+            }
+            // OperationStatus.Success pairs with two terminal EraseStatus
+            // values that both mean the operation completed successfully:
+            //   - DataErased: device flash was cleared.
+            //   - NoDataErased: device had nothing to clear (e.g. the
+            //     preceding GetDebugInfo already drained the FW saved-dump
+            //     buffer). NSM publishes this state from
+            //     nsmd/nsmDumpCollection/nsmEraseTrace.cpp on
+            //     ERASE_TRACE_NO_DATA_ERASED.
+            else if ("com.nvidia.Dump.Erase.EraseStatus.DataErased" ==
+                         eraseStatus ||
+                     "com.nvidia.Dump.Erase.EraseStatus.NoDataErased" ==
+                         eraseStatus)
+            {
+                return Success;
+            }
+            else
+            {
+                log<level::ERR>(eraseStatus.c_str());
+                return Error;
             }
         }
         else
         {
-            log<level::ERR>(eraseStatus.c_str());
+            log<level::ERR>(eraseReason.c_str());
             return Error;
         }
     }
