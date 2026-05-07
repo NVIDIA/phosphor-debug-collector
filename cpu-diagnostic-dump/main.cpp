@@ -122,7 +122,6 @@ struct PcieRpTelemetryData
 {
     uint8_t isEnabled;    // Whether root port is enabled
     uint8_t rpNum;        // Root port number (link number)
-    uint16_t reserved1;   // Padding
     uint32_t sbdf;        // Segment/Bus/Device/Function address
     uint8_t linkWidth;    // Current negotiated link width (lanes)
     uint8_t linkSpeed;    // Current negotiated link speed (GT/s)
@@ -134,10 +133,16 @@ struct PcieRpTelemetryData
     uint8_t numLanes;                            // Number of valid lane entries
     uint8_t eomStatus; // pcie_eq_status_t: EOM (SLRG) collection status
     uint8_t txStatus;  // pcie_eq_status_t: TX preset (SLTP) collection status
-    uint8_t reserved2; // Padding
     // Per-RP error counts since boot
     uint32_t ceCount;
     uint32_t ueFatalCount;
+    uint32_t ueFatalDlpCount;      // AER UE bit 4
+    uint32_t ueFatalSdeCount;      // AER UE bit 5
+    uint32_t ueFatalFcpCount;      // AER UE bit 13
+    uint32_t ueFatalRcvrOvflCount; // AER UE bit 17
+    uint32_t ueFatalMalfTlpCount;  // AER UE bit 18
+    uint32_t ueFatalUieCount;      // AER UE bit 22
+    uint32_t ueFatalIdeCount;      // AER UE bit 28
     uint32_t ueNonfatalCount;
     uint32_t urCount;
 };
@@ -488,6 +493,13 @@ json parsePcieTelemetryPayload(const std::vector<uint8_t>& data)
 
             rp["ce_count"] = rpData.ceCount;
             rp["ue_fatal_count"] = rpData.ueFatalCount;
+            rp["ue_fatal_dlp_count"] = rpData.ueFatalDlpCount;
+            rp["ue_fatal_sde_count"] = rpData.ueFatalSdeCount;
+            rp["ue_fatal_fcp_count"] = rpData.ueFatalFcpCount;
+            rp["ue_fatal_rcvr_ovfl_count"] = rpData.ueFatalRcvrOvflCount;
+            rp["ue_fatal_malf_tlp_count"] = rpData.ueFatalMalfTlpCount;
+            rp["ue_fatal_uie_count"] = rpData.ueFatalUieCount;
+            rp["ue_fatal_ide_count"] = rpData.ueFatalIdeCount;
             rp["ue_nonfatal_count"] = rpData.ueNonfatalCount;
             rp["ur_count"] = rpData.urCount;
 
