@@ -95,13 +95,6 @@ option(
 )
 
 option(
-    'KDUMP_DUMP_PATH',
-    type: 'string',
-    value: '/var/emmc/user-logs/logging/dumps/kdump',
-    description: 'Directory where kdump vmcore-dmesg captures are written by the capture /init',
-)
-
-option(
     'SYSTEM_DUMP_PATH',
     type: 'string',
     value: '/var/lib/logging/dumps/system/',
@@ -141,13 +134,6 @@ option(
     type: 'integer',
     value: 5,
     description: 'Total core dumps to be retained on bmc, 0 represents unlimited dumps',
-)
-
-option(
-    'KDUMP_MAX_ENTRIES_PER_BOOT',
-    type: 'integer',
-    value: 1,
-    description: 'Defensive cap on kdump artifacts processed per boot; capture is single-slot so 1 is the production value',
 )
 
 option(

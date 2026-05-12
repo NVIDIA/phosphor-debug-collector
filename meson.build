@@ -103,11 +103,6 @@ conf_data.set_quoted(
     get_option('SYSTEMD_PSTORE_PATH'),
     description: 'Path to the systemd pstore directory',
 )
-conf_data.set_quoted(
-    'KDUMP_DUMP_PATH',
-    get_option('KDUMP_DUMP_PATH'),
-    description: 'Directory where kdump vmcore-dmesg captures are written by the capture /init',
-)
 conf_data.set(
     'BMC_DUMP_MAX_SIZE',
     get_option('BMC_DUMP_MAX_SIZE'),
@@ -132,11 +127,6 @@ conf_data.set(
     'BMC_CORE_DUMP_MAX_LIMIT',
     get_option('BMC_CORE_DUMP_MAX_LIMIT'),
     description: 'Total core dumps to be retained on bmc',
-)
-conf_data.set(
-    'KDUMP_MAX_ENTRIES_PER_BOOT',
-    get_option('KDUMP_MAX_ENTRIES_PER_BOOT'),
-    description: 'Defensive cap on kdump artifacts processed per boot',
 )
 conf_data.set_quoted(
     'SYSTEM_DUMP_PATH',
@@ -494,22 +484,6 @@ phosphor_ramoops_monitor_install = true
 
 phosphor_ramoops_monitor_incdir = []
 
-phosphor_kdump_monitor_sources = [
-    dump_types_hpp,
-    'kdump_manager.cpp',
-    'kdump_manager_main.cpp',
-]
-
-phosphor_kdump_monitor_dependency = [
-    phosphor_dbus_interfaces_dep,
-    phosphor_logging_dep,
-    sdeventplus_dep,
-]
-
-phosphor_kdump_monitor_install = true
-
-phosphor_kdump_monitor_incdir = []
-
 executables = [
     [
         'phosphor-dump-manager',
@@ -531,13 +505,6 @@ executables = [
         phosphor_ramoops_monitor_dependency,
         phosphor_ramoops_monitor_install,
         phosphor_ramoops_monitor_incdir,
-    ],
-    [
-        'phosphor-kdump-monitor',
-        phosphor_kdump_monitor_sources,
-        phosphor_kdump_monitor_dependency,
-        phosphor_kdump_monitor_install,
-        phosphor_kdump_monitor_incdir,
     ],
 ]
 
