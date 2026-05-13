@@ -3,6 +3,8 @@
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  */
 
+#include "nsm_dump_utils.hpp"
+
 #include <fcntl.h>
 #include <sys/stat.h> // for fstat
 #include <unistd.h>
@@ -20,7 +22,7 @@
 #include <fstream>
 #include <iostream>
 
-#define VERSION "3.0"
+#define VERSION "3.1"
 #define SLEEP_DURING_WAIT_SECONDS 1
 
 using namespace phosphor::logging;
@@ -425,12 +427,34 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
     }
     else
     {
+<<<<<<< HEAD
         auto errorStr =
             std::format("Getting {} data failed for {} with status: {}",
                         dataType == DataType::Dump ? "dump" : "log",
                         targetDevice, response);
         log<level::ERR>(errorStr.c_str());
         logMsg(errorStr);
+||||||| constructed merge base
+        auto errorStr =
+            std::format("Getting {} data failed for {} with status: {}",
+                        dataType == DataType::Dump ? "dump" : "log",
+                        targetDevice, response);
+        throw std::runtime_error(errorStr);
+=======
+        // Multi-line execution-report entry: human-readable summary plus
+        // severity / retry hint / resolution from the categorized status,
+        // followed by the raw NSM cc/reason/swRc decoded from
+        // com.nvidia.Async.Value.Value when available
+        const char* dataLabel = dataType == DataType::Dump ? "dump" : "log";
+        logMsg(
+            renderAsyncFailureBlock(path, targetDevice, dataLabel, response));
+
+        // The raw enum string also goes to journald so log-scraping
+        // assertions stay machine-parseable.
+        log<level::ERR>(std::format("nsm-dump-tool failure for {}: status={}",
+                                    targetDevice, response)
+                            .c_str());
+>>>>>>> nsm-dump-tool: categorized dump failures and interface gating
     }
 }
 
@@ -451,20 +475,47 @@ void dumpData(DumpType dumpType)
 
     if (dumpType == DumpType::Network)
     {
-        auto eraseDumpPath = objectPath;
-        eraseDump(eraseDumpPath);
+        const auto eraseDumpPath = objectPath;
+        const bool eraseSupportedOnDumpPath =
+            deviceHasInterface(targetDevice, "com.nvidia.Dump.Erase");
+        if (eraseSupportedOnDumpPath)
+        {
+            eraseDump(eraseDumpPath);
+        }
+        else
+        {
+            logMsg(std::format(
+                "Erase not supported on device {} — skipping (com.nvidia.Dump.Erase not exposed)",
+                targetDevice));
+        }
+
+        // LogInfo is optional. Pre-check the interface before getDBusObject()
+        // so an unsupported device skips cleanly instead of getDBusObject()
+        // emitting an error-level "path not found" log for the expected case.
+        if (!deviceHasInterface(targetDevice, "com.nvidia.Dump.LogInfo"))
+        {
+            logMsg(std::format(
+                "LogInfo not supported on device {} — skipping (com.nvidia.Dump.LogInfo not exposed)",
+                targetDevice));
+            return;
+        }
+
         objectPath = getDBusObject(targetDevice, DataType::Log, dumpType);
         if (objectPath.empty())
         {
-            throw std::runtime_error(
-                "D-Bus path with LogInfo interface not found for " +
-                targetDevice);
+            logMsg(std::format(
+                "LogInfo not supported on device {} — skipping (com.nvidia.Dump.LogInfo not exposed)",
+                targetDevice));
+            return;
         }
 
         logMsg(std::format("Starting getting log data for target device: {}",
                            targetDevice));
         getDumpData(objectPath, DataType::Log, dumpType);
-        if (objectPath != eraseDumpPath)
+        // Erase on the log object only when THAT exact path exposes
+        // com.nvidia.Dump.Erase.
+        if (objectPath != eraseDumpPath &&
+            objectPathHasInterface(objectPath, "com.nvidia.Dump.Erase"))
         {
             eraseDump(objectPath);
         }
