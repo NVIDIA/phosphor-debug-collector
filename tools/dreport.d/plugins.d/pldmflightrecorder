@@ -11,10 +11,19 @@ desc="pldm flight recorder"
 
 # collect data only if pldmd is enabled
 if [ -e "/usr/bin/pldmd" ]; then
-    # Signal pldmd to flush the flight recorder, then poll for the file
-    # instead of a fixed 5-second sleep.
+    # Signal pldmd to flush the flight recorder, then poll for the file.
+    # A simple "exists and non-empty" check can race with pldmd still
+    # writing, so wait for the size to stabilise across two consecutive
+    # polls before reading. Budget stays at ~5s like the previous fixed
+    # sleep, but finishes early when the write completes quickly.
     command="rm -rf /tmp/pldm_flight_recorder; killall -s SIGUSR1 pldmd; \
-           for i in \$(seq 1 10); do [ -s /tmp/pldm_flight_recorder ] && break; sleep 0.5; done; \
+           prev=-1; \
+           for i in \$(seq 1 10); do \
+               sz=\$(stat -c %s /tmp/pldm_flight_recorder 2>/dev/null || echo 0); \
+               if [ \"\$sz\" -gt 0 ] && [ \"\$sz\" = \"\$prev\" ]; then break; fi; \
+               prev=\$sz; \
+               sleep 0.5; \
+           done; \
            cat /tmp/pldm_flight_recorder"
 
     file_name="pldmflightrecorder.log"

@@ -182,17 +182,18 @@ function collect_data()
         plugin_names+=("${i##*/}")
         running=$((running + 1))
 
-        # When we hit the parallel limit, wait for any one to finish
+        # When we hit the parallel limit, wait for any one to finish.
+        # Always decrement: wait -n returns the finished job's exit status,
+        # so a non-zero return (timeout, plugin failure) still means one
+        # slot freed up. Gating on success would stall the loop.
         if [ $running -ge $max_parallel ]; then
             if [ "$have_wait_n" -eq 1 ]; then
-                if wait -n 2>/dev/null; then
-                    running=$((running - 1))
-                fi
+                wait -n 2>/dev/null || true
             else
                 # Bash < 5.1: no wait -n; wait for the job we just started
                 wait "$!" 2>/dev/null || true
-                running=$((running - 1))
             fi
+            running=$((running - 1))
         fi
     done
 
@@ -327,12 +328,18 @@ function package()
     if [ -n "$header_file" ] && [ -f "$header_file" ]; then
         # Stream header + compressed data in one pass, avoiding a re-read
         # of the entire compressed archive that prepending would otherwise
-        # require.
+        # require. Use a subshell with pipefail so tar failures propagate
+        # through the pipe to zstd; otherwise the pipe's exit status would
+        # be zstd's and a tar error producing truncated output would slip
+        # past the check below.
         local archive="${name_dir}.${ARCHIVE_EXT}"
         case "${DUMP_COMPRESSION:-xz}" in
             zstd)
-                { cat "$header_file"; tar -cf - -C \
-                    "$(dirname "$name_dir")" "$(basename "$name_dir")" | zstd; } > "$archive"
+                (
+                    set -o pipefail
+                    { cat "$header_file"; tar -cf - -C \
+                        "$(dirname "$name_dir")" "$(basename "$name_dir")" | zstd; } > "$archive"
+                )
                 ;;
             *)
                 { cat "$header_file"; tar ${TAR_COMPRESS_FLAG} -cf - -C \
