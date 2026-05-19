@@ -925,19 +925,27 @@ int main(int argc, char** argv)
             "Execution time: {} hours, {} minutes, {} seconds, {} milliseconds",
             hours, mins, seconds, msecs));
 
-        std::string command = "tar -Jcf " + dumpPath + "/" + tempFolderName +
-                              ".tar.xz -C " + tempDir + " " + tempFolderName;
-
-        logMsg(std::format("Compressing dump to `{}`",
-                           dumpPath + "/" + tempFolderName + ".tar.xz"));
-        // NOLINTBEGIN
-        result = system(command.c_str());
-        // NOLINTEND
-
-        if (result != 0)
+        if (eventCount > 0)
         {
-            logMsg(
-                std::format("Compression failed with error code: {}", result));
+            std::string command =
+                "tar -Jcf " + dumpPath + "/" + tempFolderName + ".tar.xz -C " +
+                tempDir + " " + tempFolderName;
+
+            logMsg(std::format("Compressing dump to `{}`",
+                               dumpPath + "/" + tempFolderName + ".tar.xz"));
+            // NOLINTBEGIN
+            int tarRc = system(command.c_str());
+            // NOLINTEND
+
+            if (tarRc != 0)
+            {
+                logMsg(std::format("Compression failed with error code: {}",
+                                   tarRc));
+            }
+        }
+        else
+        {
+            logMsg("No events received within timeout.");
         }
 
         // Cleanup temp directory
@@ -946,15 +954,11 @@ int main(int argc, char** argv)
         // Set exit code based on collection status
         if (eventCount == 0)
         {
-            result = 2; // Complete failure
-        }
-        else if (eventCount < 3)
-        {
-            result = 1; // Partial success
+            result = 2; // Complete failure: no archive produced
         }
         else
         {
-            result = 0; // Full success
+            result = 0; // Success or partial: archive produced
         }
     }
     catch (const std::exception& e)
