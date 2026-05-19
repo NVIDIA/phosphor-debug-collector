@@ -51,7 +51,8 @@ constexpr auto PLDM_STATIC_CONFIG_PATH =
 // Event file names (written by pldmd for OEM event classes)
 // Files in /var/lib/pldm_events/<terminus>/
 constexpr auto CPER_ERROR_COUNT_EVENT_FILE = "CPERErrorCount_0_0.bin";
-constexpr auto PCIE_LTSSM_EVENT_FILE = "PCIeLTSSM_0_0.bin";
+// LTSSM event collection disabled - backend not ready
+// constexpr auto PCIE_LTSSM_EVENT_FILE = "PCIeLTSSM_0_0.bin";
 constexpr auto PCIE_TELEMETRY_EVENT_FILE = "PCIeTelemetry_0_0.bin";
 
 // D-Bus effecter paths
@@ -61,7 +62,8 @@ constexpr auto CONTROL_TRIGGER_INTERFACE =
 
 // Effecter name suffixes (appended to ProcessorModule_X_)
 constexpr auto EFFECTER_CPER_ERROR_COUNT = "CPERErrorCount_0_0";
-constexpr auto EFFECTER_PCIE_LTSSM = "PCIeLTSSM_0_0";
+// LTSSM effecter disabled - backend not ready
+// constexpr auto EFFECTER_PCIE_LTSSM = "PCIeLTSSM_0_0";
 constexpr auto EFFECTER_PCIE_TELEMETRY = "PCIeTelemetry_0_0";
 
 struct PldmTarget
@@ -79,7 +81,8 @@ int timeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
 
 // Event reception timestamps
 std::string cperErrorCountReceivedTime;
-std::string pcieLtssmReceivedTime;
+// LTSSM reception timestamp disabled - backend not ready
+// std::string pcieLtssmReceivedTime;
 std::string pcieTelemetryReceivedTime;
 
 // Link speed names
@@ -104,6 +107,8 @@ struct ErrorCounterPayload
     uint32_t cmetSpareCount;
 };
 
+#if 0
+// LTSSM History data structure disabled - backend not ready
 // LTSSM History data structure (per root port)
 // hb_num(1) + rp_num(1) + ltssm_history(128 * 4 = 512) = 514 bytes
 constexpr size_t LTSSM_HISTORY_SIZE = 128; // 128 uint32_t entries
@@ -113,6 +118,7 @@ struct PcieLtssmData
     uint8_t rpNum;                             // Root port number
     uint32_t ltssmHistory[LTSSM_HISTORY_SIZE]; // LTSSM state history array
 };
+#endif
 
 // PCIe Telemetry payload header
 struct PcieTelemetryHeader
@@ -416,7 +422,7 @@ bool triggerEffecter(const std::string& effecterPath)
 
 void triggerAllEffecters(const PldmTarget& target)
 {
-    // Trigger all 3 effecters
+    // Trigger all effecters
     auto cperPath = findEffecterPath(target.terminus, EFFECTER_CPER_ERROR_COUNT,
                                      target.eid);
     if (!cperPath.empty())
@@ -424,12 +430,15 @@ void triggerAllEffecters(const PldmTarget& target)
         triggerEffecter(cperPath);
     }
 
+#if 0
+    // LTSSM effecter trigger disabled - backend not ready
     auto ltssmPath =
         findEffecterPath(target.terminus, EFFECTER_PCIE_LTSSM, target.eid);
     if (!ltssmPath.empty())
     {
         triggerEffecter(ltssmPath);
     }
+#endif
 
     auto telemetryPath =
         findEffecterPath(target.terminus, EFFECTER_PCIE_TELEMETRY, target.eid);
@@ -441,8 +450,9 @@ void triggerAllEffecters(const PldmTarget& target)
 
 void clearStagingFiles(const std::string& eventDir)
 {
+    // LTSSM event file removed from staging list - backend not ready
     std::vector<std::string> files = {CPER_ERROR_COUNT_EVENT_FILE,
-                                      PCIE_LTSSM_EVENT_FILE,
+                                      // PCIE_LTSSM_EVENT_FILE,
                                       PCIE_TELEMETRY_EVENT_FILE};
     for (const auto& file : files)
     {
@@ -525,6 +535,8 @@ json parseErrorCounterPayload(const std::vector<uint8_t>& data)
     return result;
 }
 
+#if 0
+// LTSSM payload parser disabled - backend not ready
 json parsePcieLtssmPayload(const std::vector<uint8_t>& data)
 {
     json result;
@@ -563,6 +575,7 @@ json parsePcieLtssmPayload(const std::vector<uint8_t>& data)
 
     return result;
 }
+#endif
 
 json parsePcieTelemetryPayload(const std::vector<uint8_t>& data)
 {
@@ -705,8 +718,9 @@ int waitForEvents(const std::string& eventDir,
         return -1;
     }
 
+    // LTSSM event file removed from expected events - backend not ready
     std::set<std::string> expectedEvents = {
-        PCIE_LTSSM_EVENT_FILE, CPER_ERROR_COUNT_EVENT_FILE,
+        /* PCIE_LTSSM_EVENT_FILE, */ CPER_ERROR_COUNT_EVENT_FILE,
         PCIE_TELEMETRY_EVENT_FILE};
 
     // Check for existing files first
@@ -716,11 +730,15 @@ int waitForEvents(const std::string& eventDir,
         if (fs::exists(path))
         {
             receivedEvents.insert(file);
+#if 0
+            // LTSSM timestamp tracking disabled - backend not ready
             if (file == PCIE_LTSSM_EVENT_FILE)
             {
                 pcieLtssmReceivedTime = getCurrentTimestamp();
             }
-            else if (file == CPER_ERROR_COUNT_EVENT_FILE)
+            else
+#endif
+            if (file == CPER_ERROR_COUNT_EVENT_FILE)
             {
                 cperErrorCountReceivedTime = getCurrentTimestamp();
             }
@@ -732,7 +750,7 @@ int waitForEvents(const std::string& eventDir,
         }
     }
 
-    if (receivedEvents.size() >= 3)
+    if (receivedEvents.size() >= 2)
     {
         inotify_rm_watch(inotifyFd, watchFd);
         close(inotifyFd);
@@ -747,7 +765,8 @@ int waitForEvents(const std::string& eventDir,
     auto startTime = std::chrono::steady_clock::now();
     constexpr int POLL_INTERVAL_MS = 2000; // Check files every 2 seconds
 
-    while (receivedEvents.size() < 3)
+    // Expecting 2 events (LTSSM disabled - backend not ready)
+    while (receivedEvents.size() < 2)
     {
         auto elapsed = std::chrono::steady_clock::now() - startTime;
         auto elapsedSec =
@@ -778,11 +797,15 @@ int waitForEvents(const std::string& eventDir,
                 {
                     receivedEvents.insert(file);
                     auto timestamp = getCurrentTimestamp();
+#if 0
+                    // LTSSM timestamp tracking disabled - backend not ready
                     if (file == PCIE_LTSSM_EVENT_FILE)
                     {
                         pcieLtssmReceivedTime = timestamp;
                     }
-                    else if (file == CPER_ERROR_COUNT_EVENT_FILE)
+                    else
+#endif
+                    if (file == CPER_ERROR_COUNT_EVENT_FILE)
                     {
                         cperErrorCountReceivedTime = timestamp;
                     }
@@ -796,7 +819,8 @@ int waitForEvents(const std::string& eventDir,
             }
         }
 
-        if (receivedEvents.size() >= 3)
+        // Expecting 2 events (LTSSM disabled - backend not ready)
+        if (receivedEvents.size() >= 2)
         {
             break;
         }
@@ -826,11 +850,15 @@ int waitForEvents(const std::string& eventDir,
                 {
                     receivedEvents.insert(filename);
                     auto timestamp = getCurrentTimestamp();
+#if 0
+                    // LTSSM timestamp tracking disabled - backend not ready
                     if (filename == PCIE_LTSSM_EVENT_FILE)
                     {
                         pcieLtssmReceivedTime = timestamp;
                     }
-                    else if (filename == CPER_ERROR_COUNT_EVENT_FILE)
+                    else
+#endif
+                    if (filename == CPER_ERROR_COUNT_EVENT_FILE)
                     {
                         cperErrorCountReceivedTime = timestamp;
                     }
@@ -862,14 +890,18 @@ json createCombinedDump(const std::string& eventDir,
     metadata["dump_timestamp"] = getCurrentTimestamp();
     metadata["device"] = targetDevice;
     metadata["dump_id"] = std::stoul(dumpID);
-    metadata["events_expected"] = 3;
+    // LTSSM event disabled - backend not ready (was 3)
+    metadata["events_expected"] = 2;
     metadata["events_received"] = receivedEvents.size();
 
     std::vector<std::string> missingEvents;
+#if 0
+    // LTSSM event collection disabled - backend not ready
     if (receivedEvents.count(PCIE_LTSSM_EVENT_FILE) == 0)
     {
         missingEvents.push_back("pcie_ltssm_history");
     }
+#endif
     if (receivedEvents.count(CPER_ERROR_COUNT_EVENT_FILE) == 0)
     {
         missingEvents.push_back("cper_error_counters");
@@ -908,7 +940,8 @@ json createCombinedDump(const std::string& eventDir,
         dump["cper_error_counters"] = nullptr;
     }
 
-    // Parse PCIe LTSSM History
+#if 0
+    // Parse PCIe LTSSM History - disabled, backend not ready
     if (receivedEvents.count(PCIE_LTSSM_EVENT_FILE) > 0)
     {
         auto data = readBinaryFile(eventDir + "/" + PCIE_LTSSM_EVENT_FILE);
@@ -918,6 +951,7 @@ json createCombinedDump(const std::string& eventDir,
     {
         dump["pcie_ltssm_history"] = nullptr;
     }
+#endif
 
     // Parse PCIe Telemetry Data
     if (receivedEvents.count(PCIE_TELEMETRY_EVENT_FILE) > 0)
@@ -1051,7 +1085,8 @@ int main(int argc, char** argv)
         // Step 3: Wait for event files
         std::set<std::string> receivedEvents;
         int eventCount = waitForEvents(eventDir, receivedEvents);
-        logMsg(std::format("Received {} of 3 expected events", eventCount));
+        // Expecting 2 events (LTSSM disabled - backend not ready)
+        logMsg(std::format("Received {} of 2 expected events", eventCount));
 
         // Step 4: Create combined JSON dump
         json dumpJson = createCombinedDump(eventDir, receivedEvents);
@@ -1107,6 +1142,7 @@ int main(int argc, char** argv)
         fs::remove_all(tempDir);
 
         // Set exit code based on collection status
+        // Expecting 2 events (LTSSM disabled - backend not ready)
         if (eventCount == 0)
         {
             result = 2; // Complete failure: no archive produced
