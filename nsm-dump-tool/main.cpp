@@ -390,8 +390,7 @@ void eraseDump(std::string objectPath)
     if (status != OperationStatus::Success)
     {
         auto errorStr = std::format("Erase failed for {}", objectPath);
-        log<level::ERR>(errorStr.c_str());
-        logMsg(errorStr);
+        throw std::runtime_error(errorStr);
     }
 }
 
