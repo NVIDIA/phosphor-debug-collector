@@ -185,10 +185,40 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
     {
         if (std::holds_alternative<std::string>(search->second))
         {
-            arg_v.push_back(const_cast<char*>("-S"));
             extended_source = std::get<std::string>(params["ExtendedSource"]);
-            arg_v.push_back(const_cast<char*>(extended_source.c_str()));
         }
+    }
+
+    // Selective FDR dump: append DataFilter to ExtendedSource so fdr_dump.sh
+    // receives it via -S flag. bmcweb passes DataFilter as a separate D-Bus
+    // param from OEMDiagnosticDataType parsing (e.g. "DataFilter=GpuDump").
+    // fdr_dump.sh already handles DataFilter parsing from the -S string.
+    //
+    // Today the only meaningful value is "GpuDump" (paired with nvidia-fdr
+    // MR 333 GpuDump profile). Empty values are skipped: bmcweb's parser
+    // preserves trailing empty tokens (so "DataFilter=" reaches us as the
+    // empty string), but appending an empty "DataFilter=" to -S would just
+    // be noise.
+    if (auto search = params.find("DataFilter"); search != params.end())
+    {
+        if (std::holds_alternative<std::string>(search->second))
+        {
+            auto dataFilter = std::get<std::string>(params["DataFilter"]);
+            if (!dataFilter.empty())
+            {
+                if (!extended_source.empty())
+                {
+                    extended_source += ";";
+                }
+                extended_source += "DataFilter=" + dataFilter;
+            }
+        }
+    }
+
+    if (!extended_source.empty())
+    {
+        arg_v.push_back(const_cast<char*>("-S"));
+        arg_v.push_back(const_cast<char*>(extended_source.c_str()));
     }
 
     arg_v.push_back(nullptr);

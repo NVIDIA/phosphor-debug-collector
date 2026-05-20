@@ -35,7 +35,6 @@
 #include <iostream>
 #include <regex>
 #include <unordered_map>
-
 namespace phosphor
 {
 namespace dump
@@ -46,7 +45,6 @@ namespace system
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using namespace phosphor::logging;
 
-// Diagnostic type enumeration
 enum class DiagnosticType
 {
     SelfTest,
@@ -68,7 +66,6 @@ enum class DiagnosticType
     Unknown
 };
 
-// String to enum mapping
 const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"SelfTest", DiagnosticType::SelfTest},
     {"FPGA", DiagnosticType::FPGA},
@@ -85,9 +82,9 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"FirmwareAttributes", DiagnosticType::FirmwareAttributes},
     {"HardwareCheckout", DiagnosticType::HardwareCheckout},
     {"CPLD", DiagnosticType::CPLD},
-    {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump}};
+    {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump},
+};
 
-// Helper function to get DiagnosticType from string
 DiagnosticType getDiagnosticType(const std::string& typeStr)
 {
     auto it = diagnosticTypeMap.find(typeStr);
@@ -210,7 +207,7 @@ uint32_t executeDumpCommand(
     // Add binary path
     arg_v.push_back(const_cast<char*>(binPath.c_str()));
 
-    // Add path and id options which are common to all dumps
+    // Add path and id options which are common to dumps
     arg_v.push_back(const_cast<char*>("-p"));
     arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
     arg_v.push_back(const_cast<char*>("-i"));
@@ -295,7 +292,7 @@ uint32_t erotDump(const std::string& dumpId, const std::string& dumpPath)
 {
     return executeDumpCommand(
         EROT_DUMP_BIN_PATH, dumpId, dumpPath, {},
-        "System dump: Error occurred during dreport function execution");
+        "System dump: Error occurred during EROT dump execution");
 }
 
 uint32_t retimerLtssmDump(const std::string& dumpId,

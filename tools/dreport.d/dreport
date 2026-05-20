@@ -47,6 +47,7 @@ declare -rx TYPE_CORE="core"
 declare -rx TYPE_ELOG="elog"
 declare -rx TYPE_CHECKSTOP="checkstop"
 declare -rx TYPE_RAMOOPS="ramoops"
+declare -rx TYPE_KDUMP="kdump"
 declare -rx TYPE_SYSTEM="system"
 declare -rx SUMMARY_LOG="summary.log"
 declare -rx DREPORT_LOG="dreport.log"
@@ -119,6 +120,9 @@ function collect_data()
         "$TYPE_RAMOOPS")
             log_summary "Ramoops: $optional_path"
             ;;
+        "$TYPE_KDUMP")
+            log_summary "Kdump: $optional_path"
+            ;;
         "$TYPE_ELOG")
             log_summary "ELOG: $optional_path"
             elog_id=$(basename "$optional_path")
@@ -165,6 +169,7 @@ function collect_data()
 
         # Handle timeout (exit 143 = SIGTERM from timeout) - trigger fallback
         if [ "$exit_code" -eq 143 ]; then
+            echo "Plugin ${i##*/} exceeded ${per_plugin_timeout}s timeout, collecting fallback data" >&2
             generate_fallback_dump "${i##*/}" "$per_plugin_timeout"
             break
         fi
@@ -243,6 +248,7 @@ function initialize()
              $dump_type = $TYPE_CORE || \
              $dump_type = $TYPE_ELOG || \
              $dump_type = $TYPE_RAMOOPS || \
+             $dump_type = $TYPE_KDUMP || \
              $dump_type = $TYPE_SYSTEM || \
              $dump_type = $TYPE_CHECKSTOP) ]]; then
        log_error "Invalid -type, Only summary log is available"
