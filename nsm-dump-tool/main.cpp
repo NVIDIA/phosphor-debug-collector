@@ -360,8 +360,7 @@ void eraseDump(std::string objectPath)
     if (status != OperationStatus::Success)
     {
         auto errorStr = std::format("Erase failed for {}", objectPath);
-        log<level::ERR>(errorStr.c_str());
-        logMsg(errorStr);
+        throw std::runtime_error(errorStr);
     }
 }
 
@@ -429,8 +428,7 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
             std::format("Getting {} data failed for {} with status: {}",
                         dataType == DataType::Dump ? "dump" : "log",
                         targetDevice, response);
-        log<level::ERR>(errorStr.c_str());
-        logMsg(errorStr);
+        throw std::runtime_error(errorStr);
     }
 }
 
