@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Fallback dump collection when a main plugin times out
-# Called from dreport when plugin exits with code 143 (SIGTERM from timeout)
+# Called from dreport when plugin exits with code 124 (GNU timeout sent
+# SIGTERM and child exited cleanly) or 143 (128 + SIGTERM, child killed
+# without trapping).
 
 function generate_fallback_dump()
 {
