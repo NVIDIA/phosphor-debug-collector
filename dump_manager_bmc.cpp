@@ -129,8 +129,8 @@ uint32_t Manager::captureDump(DumpTypes type, const std::string& path)
         auto timeout = std::to_string(bmcDumpMaxTimeLimitInSec);
         execl("/usr/bin/dreport", "dreport", "-d", dumpPath.c_str(), "-i",
               id.c_str(), "-s", std::to_string(size).c_str(), "-q", "-v", "-p",
-              path.empty() ? "" : path.c_str(), "-t", strType.c_str(),
-              "-T", timeout.c_str(), nullptr);
+              path.empty() ? "" : path.c_str(), "-t", strType.c_str(), "-T",
+              timeout.c_str(), nullptr);
 
         // dreport script execution is failed.
         auto error = errno;
