@@ -45,6 +45,8 @@ namespace fs = std::filesystem;
 
 // Event staging directory base path
 constexpr auto EVENT_STAGING_BASE = "/var/lib/pldm_events";
+constexpr auto PLDM_STATIC_CONFIG_PATH =
+    "/usr/share/pldm/pldm_static_configuration.json";
 
 // Event file names (written by pldmd for OEM event classes)
 // Files in /var/lib/pldm_events/<terminus>/
@@ -61,6 +63,12 @@ constexpr auto CONTROL_TRIGGER_INTERFACE =
 constexpr auto EFFECTER_CPER_ERROR_COUNT = "CPERErrorCount_0_0";
 constexpr auto EFFECTER_PCIE_LTSSM = "PCIeLTSSM_0_0";
 constexpr auto EFFECTER_PCIE_TELEMETRY = "PCIeTelemetry_0_0";
+
+struct PldmTarget
+{
+    std::string terminus;
+    int eid = -1;
+};
 
 // Tool state
 std::string tempPath;
@@ -196,12 +204,141 @@ std::string generateTempFolderName(const std::string& id)
     return std::format("obmcdump_{}_{}", id, timeString);
 }
 
+bool loadDeviceToTerminusMap(const std::string& configPath,
+                             std::unordered_map<std::string, PldmTarget>& map)
+{
+    std::set<std::pair<std::string, int>> seenTargets;
+    std::ifstream configFile(configPath);
+    if (!configFile.is_open())
+    {
+        log<level::ERR>(
+            std::format("Failed to open PLDM static configuration: {}",
+                        configPath)
+                .c_str());
+        return false;
+    }
+
+    json config = json::parse(configFile, nullptr, false);
+    if (config.is_discarded())
+    {
+        log<level::ERR>(
+            std::format("Failed to parse PLDM static configuration: {}",
+                        configPath)
+                .c_str());
+        return false;
+    }
+
+    constexpr auto terminiKey = "PLDMTermini";
+    if (!config.contains(terminiKey) || !config[terminiKey].is_array())
+    {
+        log<level::ERR>(
+            std::format("PLDM static configuration {} must contain array '{}'",
+                        configPath, terminiKey)
+                .c_str());
+        return false;
+    }
+
+    for (const auto& terminusInfo : config[terminiKey])
+    {
+        if (!terminusInfo.is_object())
+        {
+            log<level::ERR>(
+                std::format("PLDM static configuration {} contains an invalid "
+                            "PLDMTermini entry",
+                            configPath)
+                    .c_str());
+            return false;
+        }
+
+        if (terminusInfo.contains("Type") &&
+            terminusInfo.value("Type", "") != "PLDMTerminus")
+        {
+            continue;
+        }
+
+        if (!terminusInfo.contains("CpuIndex"))
+        {
+            continue;
+        }
+
+        if (!terminusInfo["CpuIndex"].is_number_integer() ||
+            terminusInfo["CpuIndex"].get<int>() < 0)
+        {
+            log<level::ERR>(std::format("PLDM static configuration {} has an "
+                                        "invalid CpuIndex",
+                                        configPath)
+                                .c_str());
+            return false;
+        }
+
+        if (!terminusInfo.contains("TerminusName") ||
+            !terminusInfo["TerminusName"].is_string() ||
+            terminusInfo["TerminusName"].get<std::string>().empty())
+        {
+            log<level::ERR>(std::format("PLDM static configuration {} has an "
+                                        "invalid TerminusName",
+                                        configPath)
+                                .c_str());
+            return false;
+        }
+
+        if (!terminusInfo.contains("EID") ||
+            !terminusInfo["EID"].is_number_integer() ||
+            terminusInfo["EID"].get<int>() < 0)
+        {
+            log<level::ERR>(std::format("PLDM static configuration {} has an "
+                                        "invalid EID",
+                                        configPath)
+                                .c_str());
+            return false;
+        }
+
+        auto cpuIndex = terminusInfo["CpuIndex"].get<int>();
+        auto device = std::format("CPU_{}", cpuIndex);
+        PldmTarget target{
+            .terminus = terminusInfo["TerminusName"].get<std::string>(),
+            .eid = terminusInfo["EID"].get<int>(),
+        };
+
+        if (!seenTargets.emplace(target.terminus, target.eid).second)
+        {
+            log<level::ERR>(
+                std::format("PLDM static configuration {} contains duplicate "
+                            "CPU target TerminusName '{}' with EID {}",
+                            configPath, target.terminus, target.eid)
+                    .c_str());
+            return false;
+        }
+
+        if (!map.emplace(device, target).second)
+        {
+            log<level::ERR>(
+                std::format("PLDM static configuration {} contains duplicate "
+                            "CpuIndex {}",
+                            configPath, cpuIndex)
+                    .c_str());
+            return false;
+        }
+    }
+
+    if (map.empty())
+    {
+        log<level::ERR>(
+            std::format("PLDM static configuration {} has no CPU mappings",
+                        configPath)
+                .c_str());
+        return false;
+    }
+
+    return true;
+}
+
 std::string findEffecterPath(const std::string& terminus,
-                             const std::string& effecterSuffix)
+                             const std::string& effecterSuffix, int eid)
 {
     // Search for effecter path using ObjectMapper
     // Effecter paths are:
-    // /xyz/openbmc_project/control/PLDM_Effecter_<id>_<tid>/<terminus>_<suffix>
+    // /xyz/openbmc_project/control/PLDM_Effecter_<id>_<eid>/<terminus>_<suffix>
     try
     {
         sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
@@ -224,6 +361,17 @@ std::string findEffecterPath(const std::string& terminus,
         {
             if (path.ends_with(suffix))
             {
+                if (eid >= 0)
+                {
+                    const auto leafPos = path.rfind('/');
+                    const auto parentPath = leafPos == std::string::npos
+                                                ? ""
+                                                : path.substr(0, leafPos);
+                    if (!parentPath.ends_with(std::format("_{}", eid)))
+                    {
+                        continue;
+                    }
+                }
                 logMsg(std::format("Found effecter path: {}", path));
                 return path;
             }
@@ -266,22 +414,25 @@ bool triggerEffecter(const std::string& effecterPath)
     }
 }
 
-void triggerAllEffecters(const std::string& terminus)
+void triggerAllEffecters(const PldmTarget& target)
 {
     // Trigger all 3 effecters
-    auto cperPath = findEffecterPath(terminus, EFFECTER_CPER_ERROR_COUNT);
+    auto cperPath = findEffecterPath(target.terminus, EFFECTER_CPER_ERROR_COUNT,
+                                     target.eid);
     if (!cperPath.empty())
     {
         triggerEffecter(cperPath);
     }
 
-    auto ltssmPath = findEffecterPath(terminus, EFFECTER_PCIE_LTSSM);
+    auto ltssmPath =
+        findEffecterPath(target.terminus, EFFECTER_PCIE_LTSSM, target.eid);
     if (!ltssmPath.empty())
     {
         triggerEffecter(ltssmPath);
     }
 
-    auto telemetryPath = findEffecterPath(terminus, EFFECTER_PCIE_TELEMETRY);
+    auto telemetryPath =
+        findEffecterPath(target.terminus, EFFECTER_PCIE_TELEMETRY, target.eid);
     if (!telemetryPath.empty())
     {
         triggerEffecter(telemetryPath);
@@ -793,7 +944,8 @@ void printUsage()
     printf("  -p <dump_path>     Final dump output directory\n");
     printf("  -i <dump_id>       Unique dump identifier\n");
     printf("  -t <temp_path>     Temporary working directory\n");
-    printf("  -d <device_type>   Target device (CPU_0 or CPU_1)\n");
+    printf("  -d <device_type>   Target device from %s\n",
+           PLDM_STATIC_CONFIG_PATH);
     printf("  -T <timeout_secs>  Event reception timeout (default: 90s)\n");
 }
 
@@ -855,10 +1007,12 @@ int main(int argc, char** argv)
         fs::create_directories(dumpPath);
     }
 
-    // Validate targetDevice against allowed values and map to PLDM terminus
-    static const std::unordered_map<std::string, std::string>
-        deviceToTerminusMap = {{"CPU_0", "ProcessorModule_0"},
-                               {"CPU_1", "ProcessorModule_1"}};
+    // Load targetDevice validation and PLDM terminus mapping from config
+    std::unordered_map<std::string, PldmTarget> deviceToTerminusMap;
+    if (!loadDeviceToTerminusMap(PLDM_STATIC_CONFIG_PATH, deviceToTerminusMap))
+    {
+        return 1;
+    }
 
     auto it = deviceToTerminusMap.find(targetDevice);
     if (it == deviceToTerminusMap.end())
@@ -877,7 +1031,8 @@ int main(int argc, char** argv)
         fprintf(stderr, "\n");
         return 1;
     }
-    std::string pldmTerminus = it->second;
+    const auto& pldmTarget = it->second;
+    std::string pldmTerminus = pldmTarget.terminus;
 
     std::string eventDir = std::string(EVENT_STAGING_BASE) + "/" + pldmTerminus;
 
@@ -891,7 +1046,7 @@ int main(int argc, char** argv)
 
         // Step 2: Trigger all PLDM effecters
         logMsg("Triggering PLDM effecters...");
-        triggerAllEffecters(pldmTerminus);
+        triggerAllEffecters(pldmTarget);
 
         // Step 3: Wait for event files
         std::set<std::string> receivedEvents;
