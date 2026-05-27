@@ -162,24 +162,75 @@ function collect_data()
     fi
 
     local per_plugin_timeout=$BMC_DUMP_PER_PLUGIN_TIMEOUT_SEC
-    
-    #Executes plugins based on the type.
-    for i in $plugin_path/* ; do
-        # Execute plugin with timeout
+
+    # Maximum number of plugins to run concurrently.
+    # Keeps memory and CPU usage bounded on the BMC.
+    # wait -n exists only in bash 5.1+; without it, parallel scheduling breaks
+    # (wait -n fails every time) and would spawn every plugin at once.
+    local max_parallel=4
+    local have_wait_n=1
+    if ((BASH_VERSINFO[0] < 5 ||
+        (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1))); then
+        max_parallel=1
+        have_wait_n=0
+    fi
+    local running=0
+    local pids=()
+    local plugin_names=()
+    local -A plugin_name_by_pid=()
+    local -A plugin_exit_by_pid=()
+
+    #Executes plugins based on the type, with bounded parallelism.
+    #The throttling block only records exit codes; fallback dispatch is
+    #deferred to a single reap pass below so each plugin is processed
+    #at most once.
+    for i in "$plugin_path"/* ; do
+        # Execute plugin with timeout in background
         if [ ${#plugin_args[@]} -ne 0 ]; then
-            timeout $per_plugin_timeout $i ${plugin_args[@]}
+            timeout "$per_plugin_timeout" "$i" "${plugin_args[@]}" &
         else
-            timeout $per_plugin_timeout $i
+            timeout "$per_plugin_timeout" "$i" &
         fi
+        pids+=("$!")
+        plugin_names+=("${i##*/}")
+        plugin_name_by_pid["$!"]="${i##*/}"
+        running=$((running + 1))
 
-        # Capture exit code
-        local exit_code=$?
+        # When we hit the parallel limit, wait for any one to finish.
+        # Always decrement: wait -n returns the finished job's exit status,
+        # so a non-zero return (timeout, plugin failure) still means one
+        # slot freed up. Gating on success would stall the loop.
+        if [ $running -ge $max_parallel ]; then
+            if [ "$have_wait_n" -eq 1 ]; then
+                local done_pid=""
+                wait -n -p done_pid 2>/dev/null
+                local done_rc=$?
+                if [ -n "$done_pid" ]; then
+                    plugin_exit_by_pid["$done_pid"]=$done_rc
+                fi
+            else
+                # Bash < 5.1: no wait -n; wait for the job we just started
+                wait "$!" 2>/dev/null
+                plugin_exit_by_pid["$!"]=$?
+            fi
+            running=$((running - 1))
+        fi
+    done
 
-        # Handle timeout (exit 143 = SIGTERM from timeout) - trigger fallback
-        if [ $exit_code -eq 143 ]; then
-            echo "Plugin ${i##*/} exceeded ${per_plugin_timeout}s timeout, collecting fallback data" >&2
-            generate_fallback_dump "${i##*/}" "$per_plugin_timeout"
-            break
+    # Final reap pass: collect any remaining exit codes and dispatch
+    # generate_fallback_dump exactly once per plugin for timeouts.
+    # GNU timeout returns 124 when it sends SIGTERM and the child exits
+    # cleanly, or 143 (128 + SIGTERM=15) when the child is killed by
+    # SIGTERM without trapping it; treat both as timeouts.
+    for idx in "${!pids[@]}"; do
+        local pid="${pids[$idx]}"
+        if [ -z "${plugin_exit_by_pid[$pid]+x}" ]; then
+            wait "$pid" 2>/dev/null
+            plugin_exit_by_pid["$pid"]=$?
+        fi
+        local exit_code="${plugin_exit_by_pid[$pid]}"
+        if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 143 ]; then
+            generate_fallback_dump "${plugin_names[$idx]}" "$per_plugin_timeout"
         fi
     done
 }
@@ -289,32 +340,68 @@ function package()
         dest_dir=$TMP_DIR
     fi
 
-    #tar and compress the files.
+    #Generate dump header first (if needed) so it can be prepended
+    #without re-reading the entire compressed archive. The header script
+    #writes to a predictable path in /tmp, so validate the result before
+    #trusting it: reject symlinks (could redirect writes), non-regular
+    #files, files not owned by the current user, and unreadable/empty
+    #files.
+    local header_file=""
     if [ -f "$HEADER_EXTENSION" ]; then
-        if [ "$compression_type" = "xz" ]; then
-            tar -Jcf "$name_dir.tar.xz" -C \
-                $(dirname "$name_dir") $(basename "$name_dir")
-            echo "Adding Dump Header :"$HEADER_EXTENSION
-            ("$HEADER_EXTENSION")
-            cat "$name_dir.tar.xz" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
-            mv "/tmp/dumpheader_$EPOCHTIME" "$name_dir.tar.xz"
+        echo "Adding Dump Header: $HEADER_EXTENSION"
+        if ! "$HEADER_EXTENSION"; then
+            log_error "Dump header script failed: $HEADER_EXTENSION"
         else
-            tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
-            echo "Adding Dump Header :"$HEADER_EXTENSION
-            ("$HEADER_EXTENSION")
-            cat "$name_dir.zst" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
-            mv "/tmp/dumpheader_$EPOCHTIME" "$name_dir.zst"
-        fi
-    else
-        if [ "$compression_type" = "xz" ]; then
-            tar -Jcf "$name_dir.tar.xz" -C \
-                $(dirname "$name_dir") $(basename "$name_dir")
-        else
-            tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
+            header_file="/tmp/dumpheader_$EPOCHTIME"
+            if [ -L "$header_file" ] || [ ! -f "$header_file" ] ||
+                [ ! -O "$header_file" ] || [ ! -r "$header_file" ] ||
+                [ ! -s "$header_file" ]; then
+                log_error "Dump header missing, invalid, or unsafe: $header_file"
+                rm -f "$header_file"
+                header_file=""
+            fi
         fi
     fi
 
-    if [ $? -ne 0 ]; then
+    #tar and compress the files. Capture the archive exit status in
+    #archive_rc immediately after the tar/zstd invocation so subsequent
+    #commands (e.g. rm -f of the header file) don't clobber $?.
+    local archive_rc=0
+    if [ -n "$header_file" ] && [ -f "$header_file" ]; then
+        # Stream header + compressed data in one pass, avoiding a re-read
+        # of the entire compressed archive that prepending would otherwise
+        # require. Use a subshell with pipefail in the zstd case so tar
+        # failures propagate through the pipe; otherwise the pipe's exit
+        # status would be zstd's and a tar error producing truncated
+        # output would slip past the check below.
+        if [ "$compression_type" = "xz" ]; then
+            { cat "$header_file"; tar -Jcf - -C \
+                "$(dirname "$name_dir")" "$(basename "$name_dir")"; } \
+                > "$name_dir.tar.xz"
+            archive_rc=$?
+        else
+            (
+                set -o pipefail
+                { cat "$header_file"; tar cf - -C \
+                    "$(dirname "$name_dir")" "$(basename "$name_dir")" \
+                    | zstd; } > "$name_dir.zst"
+            )
+            archive_rc=$?
+        fi
+        rm -f "$header_file"
+    else
+        if [ "$compression_type" = "xz" ]; then
+            tar -Jcf "$name_dir.tar.xz" -C \
+                "$(dirname "$name_dir")" "$(basename "$name_dir")"
+            archive_rc=$?
+        else
+            tar cf - -C "$(dirname "$name_dir")" "$(basename "$name_dir")" \
+                | zstd > "$name_dir.zst"
+            archive_rc=$?
+        fi
+    fi
+
+    if [ $archive_rc -ne 0 ]; then
         echo $($TIME_STAMP) "Could not create the compressed tar file"
         rm -r "$name_dir"
         return $INTERNAL_FAILURE
