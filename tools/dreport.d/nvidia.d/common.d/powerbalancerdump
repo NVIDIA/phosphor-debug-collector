@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#
+# config: 123 59
+# @brief: Flush NVIDIA power balancer diagnostics to the journal for journalpretty.
+#
+
+# shellcheck source=tools/dreport.d/include.d/functions
+. "$DREPORT_INCLUDE"/functions
+
+if [ ! -e "/usr/bin/nvidia-power-balancerd" ]; then
+    log_warning "Skipping NVIDIA power balancer LogDump: nvidia-power-balancerd binary not found"
+    exit 0
+fi
+
+if ! busctl status com.Nvidia.PowerBalancer >/dev/null 2>&1; then
+    log_warning "Skipping NVIDIA power balancer LogDump: com.Nvidia.PowerBalancer not on bus"
+    exit 0
+fi
+
+if busctl call com.Nvidia.PowerBalancer /com/Nvidia/PowerBalancer \
+    com.nvidia.Common.LogDump LogDump; then
+    log_info "NVIDIA power balancer LogDump written to journal"
+else
+    log_warning "NVIDIA power balancer LogDump failed"
+fi
