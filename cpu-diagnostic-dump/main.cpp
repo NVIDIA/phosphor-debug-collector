@@ -277,6 +277,17 @@ bool loadDeviceToTerminusMap(const std::string& configPath,
             return false;
         }
 
+        if (!terminusInfo.contains("Instance") ||
+            !terminusInfo["Instance"].is_number_integer() ||
+            terminusInfo["Instance"].get<int>() < 0)
+        {
+            log<level::ERR>(std::format("PLDM static configuration {} has an "
+                                        "invalid Instance",
+                                        configPath)
+                                .c_str());
+            return false;
+        }
+
         if (!terminusInfo.contains("TerminusName") ||
             !terminusInfo["TerminusName"].is_string() ||
             terminusInfo["TerminusName"].get<std::string>().empty())
@@ -299,8 +310,8 @@ bool loadDeviceToTerminusMap(const std::string& configPath,
             return false;
         }
 
-        auto cpuIndex = terminusInfo["CpuIndex"].get<int>();
-        auto device = std::format("CPU_{}", cpuIndex);
+        auto instanceNum = terminusInfo["Instance"].get<int>();
+        auto device = std::format("CPU_{}", instanceNum);
         PldmTarget target{
             .terminus = terminusInfo["TerminusName"].get<std::string>(),
             .eid = terminusInfo["EID"].get<int>(),
@@ -320,8 +331,8 @@ bool loadDeviceToTerminusMap(const std::string& configPath,
         {
             log<level::ERR>(
                 std::format("PLDM static configuration {} contains duplicate "
-                            "CpuIndex {}",
-                            configPath, cpuIndex)
+                            "CPU device '{}' (Instance {})",
+                            configPath, device, instanceNum)
                     .c_str());
             return false;
         }
