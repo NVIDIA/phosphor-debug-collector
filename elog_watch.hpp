@@ -90,10 +90,10 @@ class Watch
     Mgr& mgr;
 
     /** @brief sdbusplus signal match for elog add */
-    sdbusplus::bus::match_t addMatch;
+    sdbusplus::match addMatch;
 
     /** @brief sdbusplus signal match for elog delete */
-    sdbusplus::bus::match_t delMatch;
+    sdbusplus::match delMatch;
 
     /** @brief List of elog ids, which have associated dumps created */
     ElogList elogList;

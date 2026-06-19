@@ -34,13 +34,13 @@ using PropertyMap = std::map<PropertyName, AttributeMap>;
 Watch::Watch(sdbusplus::bus_t& bus, Mgr& mgr) :
     mgr(mgr),
     addMatch(bus,
-             sdbusplus::bus::match::rules::interfacesAdded() +
-                 sdbusplus::bus::match::rules::path_namespace(OBJ_LOGGING),
+             sdbusplus::match_rules::interfacesAdded() +
+                 sdbusplus::match_rules::path_namespace(OBJ_LOGGING),
              std::bind(std::mem_fn(&Watch::addCallback), this,
                        std::placeholders::_1)),
     delMatch(bus,
-             sdbusplus::bus::match::rules::interfacesRemoved() +
-                 sdbusplus::bus::match::rules::path_namespace(OBJ_LOGGING),
+             sdbusplus::match_rules::interfacesRemoved() +
+                 sdbusplus::match_rules::path_namespace(OBJ_LOGGING),
              std::bind(std::mem_fn(&Watch::delCallback), this,
                        std::placeholders::_1))
 {
