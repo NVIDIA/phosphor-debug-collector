@@ -453,10 +453,12 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         fmt::format("Capturing system dump of type ({})", diagnosticTypeStr)
             .c_str());
 
+#ifdef RETIMER_DEBUG_MODE
     if (diagnosticType == DiagnosticType::RetLTSSM)
     {
         retimerState.debugMode(true);
     }
+#endif
 
     Manager::dumpInProgress.insert(diagnosticTypeStr);
 
@@ -553,6 +555,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                             "Diagnostics");
                 }
                 break;
+#ifdef RETIMER_DEBUG_MODE
             case DiagnosticType::RetLTSSM:
                 retimerLtssmDump(id, dumpPath, retimerState.getVendorId());
                 break;
@@ -564,6 +567,7 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                                     retimerState.getVendorId());
                 break;
             }
+#endif
             case DiagnosticType::FirmwareAttributes:
                 fwAttrsDump(id, dumpPath);
                 break;
@@ -609,11 +613,13 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                 log<level::ERR>(msg.c_str());
                 this->createDumpFailed(static_cast<int>(entryId));
 
+#ifdef RETIMER_DEBUG_MODE
                 // Disable retimer debug mode if RetLTSSM dump failed
                 if (diagnosticTypeStr == "RetLTSSM")
                 {
                     retimerState.debugMode(false);
                 }
+#endif
             }
 
             this->childPtrMap.erase(pid);
@@ -685,10 +691,12 @@ void Manager::createEntry(const fs::path& file)
         {
             entryPtr->update(timestamp, fs::file_size(file), file);
             auto dumpType = entryPtr->getDumpType();
+#ifdef RETIMER_DEBUG_MODE
             if (dumpType == "RetLTSSM")
             {
                 retimerState.debugMode(false);
             }
+#endif
             Manager::dumpInProgress.erase(dumpType);
 
             return;

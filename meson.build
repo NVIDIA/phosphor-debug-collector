@@ -193,6 +193,11 @@ conf_data.set_quoted(
     get_option('RETIMER_DEBUG_MODE_OBJPATH'),
     description: 'The retimer Debug Mode state D-Bus object path',
 )
+conf_data.set(
+    'RETIMER_DEBUG_MODE',
+    get_option('retimer-debug-mode').enabled(),
+    description: 'Enable the retimer DebugMode interface and retimer dumps',
+)
 conf_data.set_quoted(
     'OBJ_LOGGING',
     '/xyz/openbmc_project/logging',
