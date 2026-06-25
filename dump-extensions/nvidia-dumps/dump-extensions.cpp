@@ -30,7 +30,7 @@ namespace phosphor
 namespace dump
 {
 
-void loadExtensions(sdbusplus::bus::bus& bus, DumpManagerList& dumpList)
+void loadExtensions(sdbusplus::bus_t& bus, DumpManagerList& dumpList)
 {
     using namespace phosphor::logging;
     using InternalFailure =

@@ -98,7 +98,7 @@ class NsmDbusClient
         }
         sdbusplus::message::unix_fd requestFd(reqFd);
 
-        sdbusplus::message::object_path asyncPath;
+        sdbusplus::object_path asyncPath;
         try
         {
             auto method =

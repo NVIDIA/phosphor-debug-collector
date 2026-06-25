@@ -98,8 +98,7 @@ void OEMTypeAllowableValuesIf::populateDebugInfoDumpTypes(
                             {
                                 std::string dumpType =
                                     std::get<std::string>(value);
-                                sdbusplus::message::object_path dumpDebugInfoId(
-                                    path);
+                                sdbusplus::object_path dumpDebugInfoId(path);
                                 std::string dumpDebugInfoName =
                                     dumpDebugInfoId.filename();
 

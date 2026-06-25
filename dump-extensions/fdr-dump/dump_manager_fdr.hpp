@@ -71,7 +71,7 @@ class Manager :
      *  @param[in] baseEntryPath - Base path for dump entry.
      *  @param[in] filePath - Path where the dumps are stored.
      */
-    Manager(sdbusplus::bus::bus& bus, const EventPtr& event, const char* path,
+    Manager(sdbusplus::bus_t& bus, const EventPtr& event, const char* path,
             const std::string& baseEntryPath, const char* filePath) :
         CreateIface(bus, path),
         phosphor::dump::Manager(bus, path, baseEntryPath),
@@ -99,7 +99,7 @@ class Manager :
      *
      *  @return object_path - The object path of the new dump entry.
      */
-    sdbusplus::message::object_path createDump(
+    sdbusplus::object_path createDump(
         phosphor::dump::DumpCreateParams params) override;
 
     /** @brief Used to serve case where create dump failed

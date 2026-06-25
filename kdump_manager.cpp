@@ -153,7 +153,7 @@ std::string Manager::createKdump(const fs::path& filePath)
     method.append(params);
     auto reply = bus.call(method);
 
-    sdbusplus::message::object_path objPath;
+    sdbusplus::object_path objPath;
     reply.read(objPath);
     return objPath.str;
 }

@@ -58,7 +58,7 @@ class State : virtual public DebugModeIface, virtual public ServiceReadyIface
      *  @param[in] bus - Bus to attach to.
      *  @param[in] path - Path to attach at.
      */
-    State(sdbusplus::bus::bus& bus, const char* path) :
+    State(sdbusplus::bus_t& bus, const char* path) :
         DebugModeIface(bus, path), ServiceReadyIface(bus, path)
     {
         DebugModeIface::debugMode(false);
@@ -115,7 +115,7 @@ class State : virtual public DebugModeIface, virtual public ServiceReadyIface
      * the retimer info.
      *  @return service name - The target resouce service name.
      */
-    std::string getDBusObject(sdbusplus::bus::bus& bus,
+    std::string getDBusObject(sdbusplus::bus_t& bus,
                               const std::string& rootPath);
 
     /** @brief Get the resource service that populates retimer vendor id.
@@ -124,13 +124,13 @@ class State : virtual public DebugModeIface, virtual public ServiceReadyIface
      *  @param[in] interface - interface that has the retimer info.
      *  @return service name - The target resouce service name.
      */
-    std::string getService(sdbusplus::bus::bus& bus, const char* path,
+    std::string getService(sdbusplus::bus_t& bus, const char* path,
                            const char* interface) const;
 
     /** @brief Starts listener for retimer property changing events.
      *  @param[in] bus - Bus to attach to.
      */
-    void listenRetimerVendorIdEvents(sdbusplus::bus::bus& bus);
+    void listenRetimerVendorIdEvents(sdbusplus::bus_t& bus);
 
     /** @brief Callback function for listenRetimerVendorIdEvents().
      *         Set retimerVendorId to the captured value if retimerVendorId

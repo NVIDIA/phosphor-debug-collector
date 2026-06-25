@@ -75,7 +75,7 @@ void Manager::limitDumpEntries()
 #endif // #if FDR_DUMP_MAX_LIMIT == 0
 }
 
-sdbusplus::message::object_path Manager::createDump(
+sdbusplus::object_path Manager::createDump(
     phosphor::dump::DumpCreateParams params)
 {
     // Default action is to collect the dump

@@ -169,7 +169,7 @@ std::string State::getVendorId() const
     return retimerVendorId;
 }
 
-std::string State::getDBusObject(sdbusplus::bus::bus& bus,
+std::string State::getDBusObject(sdbusplus::bus_t& bus,
                                  const std::string& rootPath)
 {
     std::vector<std::string> paths;
@@ -195,7 +195,7 @@ std::string State::getDBusObject(sdbusplus::bus::bus& bus,
     return {};
 }
 
-std::string State::getService(sdbusplus::bus::bus& bus, const char* path,
+std::string State::getService(sdbusplus::bus_t& bus, const char* path,
                               const char* interface) const
 {
     using DbusInterfaceList = std::vector<std::string>;
@@ -212,7 +212,7 @@ std::string State::getService(sdbusplus::bus::bus& bus, const char* path,
     return mapperResponse.begin()->first;
 }
 
-void State::listenRetimerVendorIdEvents(sdbusplus::bus::bus& bus)
+void State::listenRetimerVendorIdEvents(sdbusplus::bus_t& bus)
 {
     try
     {

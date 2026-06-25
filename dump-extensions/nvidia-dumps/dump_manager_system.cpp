@@ -123,7 +123,7 @@ void Manager::limitDumpEntries()
 #endif // #if SYSTEM_DUMP_MAX_LIMIT == 0
 }
 
-sdbusplus::message::object_path Manager::createDump(
+sdbusplus::object_path Manager::createDump(
     phosphor::dump::DumpCreateParams params)
 {
     // Limit dumps to max allowed entries

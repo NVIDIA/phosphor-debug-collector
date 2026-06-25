@@ -76,7 +76,7 @@ void logMsg(std::string msg)
 
 OperationStatus getAsyncStatus(std::string path, std::string& response)
 {
-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+    sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     std::string interf;
     std::string method;
     interf = "org.freedesktop.DBus.Properties";
@@ -120,7 +120,7 @@ OperationStatus getAsyncStatus(std::string path, std::string& response)
 
 OperationStatus getEraseStatus(std::string objectPath)
 {
-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+    sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     auto eraseStatusMethod =
         bus.new_method_call("xyz.openbmc_project.NSM", objectPath.c_str(),
                             "org.freedesktop.DBus.Properties", "Get");
@@ -182,7 +182,7 @@ OperationStatus getEraseStatus(std::string objectPath)
 std::string getDBusObject(const std::string& targetDevice, DataType dataType,
                           DumpType dumpType)
 {
-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+    sdbusplus::bus_t bus = sdbusplus::bus::new_default();
 
     std::string rootPath("/xyz/openbmc_project/inventory/system");
 
@@ -275,7 +275,7 @@ std::string generateTempFolderName(std::string dumpID)
 std::string startAsyncDump(std::string objectPath, DataType dataType,
                            DumpType dumpType, sdbusplus::message::unix_fd fd)
 {
-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+    sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     std::string interf;
     std::string method;
 
@@ -316,7 +316,7 @@ std::string startAsyncDump(std::string objectPath, DataType dataType,
     }
     startAsyncDumpMethod.append(fd);
 
-    sdbusplus::message::object_path path;
+    sdbusplus::object_path path;
     try
     {
         auto reply = bus.call(startAsyncDumpMethod);
@@ -334,7 +334,7 @@ std::string startAsyncDump(std::string objectPath, DataType dataType,
 
 void eraseDump(std::string objectPath)
 {
-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+    sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     auto sendCommandMethod =
         bus.new_method_call("xyz.openbmc_project.NSM", objectPath.c_str(),
                             "com.nvidia.Dump.Erase", "EraseDebugInfo");

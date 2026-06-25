@@ -30,6 +30,6 @@ namespace dump
  * @param[out] dumpMgrList - list dump manager objects.
  *
  */
-void loadExtensionsFDR(sdbusplus::bus::bus& bus, DumpManagerList& dumpMgrList);
+void loadExtensionsFDR(sdbusplus::bus_t& bus, DumpManagerList& dumpMgrList);
 } // namespace dump
 } // namespace phosphor

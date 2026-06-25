@@ -83,7 +83,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
      *  @param[in] sourceId - DumpId provided by the source.
      *  @param[in] parent - The dump entry's parent.
      */
-    Entry(sdbusplus::bus::bus& bus, const std::string& objPath, uint32_t dumpId,
+    Entry(sdbusplus::bus_t& bus, const std::string& objPath, uint32_t dumpId,
           uint64_t timeStamp, FaultDataType typeIn,
           const std::string& additionalTypeNameIn,
           const std::string& primaryLogIdIn, uint64_t fileSize,

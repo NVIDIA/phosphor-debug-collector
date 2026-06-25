@@ -89,8 +89,8 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
 #endif
 
         auto& conn = AsioConnection::getAsioConnection();
-        debugInfoMatch = std::make_unique<sdbusplus::bus::match::match>(
-            static_cast<sdbusplus::bus::bus&>(*conn),
+        debugInfoMatch = std::make_unique<sdbusplus::bus::match_t>(
+            static_cast<sdbusplus::bus_t&>(*conn),
             "type='signal',member='PropertiesChanged',"
             "arg0='" +
                 std::string(DEBUG_INFO_INTERFACE) + "'",
@@ -113,8 +113,7 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
                             {
                                 auto path = msg.get_path();
                                 std::string dumpDebugInfoName =
-                                    sdbusplus::message::object_path(path)
-                                        .filename();
+                                    sdbusplus::object_path(path).filename();
                                 std::string diagTypeStr =
                                     "DiagnosticType=" + it->second +
                                     ";DeviceType=" + dumpDebugInfoName;
@@ -164,7 +163,7 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
 
     /** @brief D-Bus match for monitoring DebugInfo interface property changes
      */
-    std::unique_ptr<sdbusplus::bus::match::match> debugInfoMatch;
+    std::unique_ptr<sdbusplus::bus::match_t> debugInfoMatch;
 };
 
 } // namespace dump

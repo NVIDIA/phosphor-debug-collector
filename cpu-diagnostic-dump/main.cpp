@@ -347,7 +347,7 @@ std::string findEffecterPath(const std::string& terminus,
     // /xyz/openbmc_project/control/PLDM_Effecter_<id>_<eid>/<terminus>_<suffix>
     try
     {
-        sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+        sdbusplus::bus_t bus = sdbusplus::bus::new_default();
         auto method = bus.new_method_call(
             "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
@@ -402,7 +402,7 @@ bool triggerEffecter(const std::string& effecterPath)
 
     try
     {
-        sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+        sdbusplus::bus_t bus = sdbusplus::bus::new_default();
         auto method =
             bus.new_method_call(PLDM_SERVICE, effecterPath.c_str(),
                                 "org.freedesktop.DBus.Properties", "Set");
