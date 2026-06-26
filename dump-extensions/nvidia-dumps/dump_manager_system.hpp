@@ -21,7 +21,9 @@
 #include "dump_manager.hpp"
 #include "dump_utils.hpp"
 #include "nvidia_dumps_config.hpp"
+#ifdef RETIMER_DEBUG_MODE
 #include "retimer_debug_mode_state.hpp"
+#endif
 #include "system_dump_entry.hpp"
 #include "watch.hpp"
 #include "xyz/openbmc_project/Dump/NewDump/server.hpp"
@@ -84,7 +86,11 @@ class Manager :
             std::bind(
                 std::mem_fn(&phosphor::dump::system::Manager::watchCallback),
                 this, std::placeholders::_1)),
-        dumpDir(filePath), retimerState(bus, RETIMER_DEBUG_MODE_OBJPATH)
+        dumpDir(filePath)
+#ifdef RETIMER_DEBUG_MODE
+        ,
+        retimerState(bus, RETIMER_DEBUG_MODE_OBJPATH)
+#endif
     {}
 
     /** @brief Implementation of dump watch call back
@@ -159,8 +165,10 @@ class Manager :
     /** @brief map of SDEventPlus child pointer added to event loop */
     std::map<pid_t, std::unique_ptr<Child>> childPtrMap;
 
+#ifdef RETIMER_DEBUG_MODE
     /** @brief D-bus object for indicating retimer state*/
     phosphor::dump::retimer::State retimerState;
+#endif
 
     /** @brief a set containing string of dump types that are in progress */
     std::set<std::string> dumpInProgress;

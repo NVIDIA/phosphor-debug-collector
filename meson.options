@@ -335,6 +335,13 @@ option(
 # Retimer debug mode options
 
 option(
+    'retimer-debug-mode',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Enable the retimer DebugMode interface and retimer dumps (platforms with a retimer FPGA, e.g. hgx, hgxb)',
+)
+
+option(
     'RETIMER_DEBUG_MODE_OBJPATH',
     type: 'string',
     value: '/xyz/openbmc_project/dump/retimer',
