@@ -40,7 +40,7 @@ class Watch
      *  @param[in] mask  - Mask of events
      *  @param[in] events - Events to be watched
      *  @param[in] path - File path to be watched
-     *  @param[in] userFunc - User specific callback fnction wrapper.
+     *  @param[in] userFunc - User specific callback function wrapper.
      *
      */
     Watch(const EventPtr& eventObj, int flags, uint32_t mask, uint32_t events,

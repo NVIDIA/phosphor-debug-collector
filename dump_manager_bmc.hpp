@@ -116,7 +116,7 @@ class Manager :
     /** @brief Path to the dump file*/
     std::string dumpDir;
 
-    /** @brief Flag to reject user intiated dump if a dump is in progress*/
+    /** @brief Flag to reject user initiated dump if a dump is in progress*/
     // TODO: https://github.com/openbmc/phosphor-debug-collector/issues/19
     static bool fUserDumpInProgress;
 

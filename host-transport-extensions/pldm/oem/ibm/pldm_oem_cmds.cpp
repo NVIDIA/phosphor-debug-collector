@@ -179,7 +179,7 @@ void requestDelete(uint32_t dumpId, uint32_t dumpType)
 
     auto pldmInstanceId = getPLDMInstanceID(mctpEndPointId);
 
-    // - PLDM_SUCCESS - To indicate dump was readed (offloaded) or user decided,
+    // - PLDM_SUCCESS - To indicate dump was read (offloaded) or user decided,
     //   no longer host dump is not required so, initiate deletion from
     //   host memory
     int retCode =
