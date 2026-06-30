@@ -7,6 +7,8 @@
  * D-Bus Raw API) into an existing workspace directory.
  */
 
+#include "config.h"
+
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
@@ -46,6 +48,8 @@ constexpr const char* DBUS_PROP_INTF = "org.freedesktop.DBus.Properties";
 constexpr const char* NSM_FRU_INTF = "xyz.openbmc_project.FruDevice";
 constexpr const char* ASYNC_STATUS_INTF = "com.nvidia.Async.Status";
 constexpr const char* ASYNC_VALUE_INTF = "com.nvidia.Async.Value";
+
+constexpr const char* MCTP_EID_CSV_PATH = ROT_DUMP_MCTP_EID_CSV_PATH;
 
 constexpr uint8_t NSM_DEVICE_EROT_ID = 4;
 constexpr uint8_t NSM_MESSAGE_TYPE_DIAG = 4;
@@ -642,10 +646,71 @@ static bool isRotDeviceEid(NsmDbusClient& client, uint32_t eid)
     return true;
 }
 
+/**
+ * @brief Load EID-to-name map from a CSV file.
+ *
+ * Parses a CSV file where each line has the format: name,eid.
+ * EIDs absent from the file fall back to "EID_<N>" at lookup time.
+ *
+ * @param[in] csvPath Path to the CSV file to parse.
+ * @return Map of EID to device name.
+ */
+static std::unordered_map<uint32_t, std::string> loadEidNameMap(
+    const std::string& csvPath)
+{
+    std::unordered_map<uint32_t, std::string> result;
+    std::ifstream f(csvPath);
+    if (!f)
+    {
+        std::cerr << "Warning: cannot open " << csvPath
+                  << ", EID names will use EID_<N> fallback" << std::endl;
+        return result;
+    }
+    std::string line;
+    while (std::getline(f, line))
+    {
+        if (line.empty() || line[0] == '#')
+        {
+            continue;
+        }
+        auto comma = line.find(',');
+        if (comma == std::string::npos)
+        {
+            continue;
+        }
+        std::string name = line.substr(0, comma);
+        std::string eidStr = line.substr(comma + 1);
+        auto trim = [](std::string& s) {
+            s.erase(0, s.find_first_not_of(" \t\r\n"));
+            s.erase(s.find_last_not_of(" \t\r\n") + 1);
+        };
+        trim(name);
+        trim(eidStr);
+        if (name.empty() || eidStr.empty())
+        {
+            continue;
+        }
+        try
+        {
+            uint32_t eid = static_cast<uint32_t>(std::stoul(eidStr));
+            result.emplace(eid, name);
+        }
+        catch (const std::exception&)
+        {
+            std::cerr << "Warning: skipping invalid EID value '" << eidStr
+                      << "' for name '" << name << "' in " << csvPath
+                      << std::endl;
+            continue;
+        }
+    }
+    return result;
+}
+
 // Discover ROT targets via D-Bus (MCTP endpoints with PCI VDM + DCD probe).
 using EidNamePair = std::pair<uint32_t, std::string>;
-static std::vector<EidNamePair> discoverRotTargets(sdbusplus::bus_t& bus,
-                                                   NsmDbusClient& client)
+static std::vector<EidNamePair> discoverRotTargets(
+    sdbusplus::bus_t& bus, NsmDbusClient& client,
+    const std::unordered_map<uint32_t, std::string>& eidNameMap)
 {
     std::vector<EidNamePair> targets;
     const char* mapperService = "xyz.openbmc_project.ObjectMapper";
@@ -731,7 +796,10 @@ static std::vector<EidNamePair> discoverRotTargets(sdbusplus::bus_t& bus,
             continue;
         }
 
-        std::string name = "EID_" + std::to_string(eid);
+        auto mapIt = eidNameMap.find(eid);
+        std::string name = (mapIt != eidNameMap.end())
+                               ? mapIt->second
+                               : "EID_" + std::to_string(eid);
         targets.emplace_back(eid, name);
     }
 
@@ -906,7 +974,9 @@ int main(int argc, char* argv[])
 
     sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     NsmDbusClient nsmClient(bus);
-    std::vector<EidNamePair> rotTargets = discoverRotTargets(bus, nsmClient);
+    auto eidNameMap = loadEidNameMap(MCTP_EID_CSV_PATH);
+    std::vector<EidNamePair> rotTargets =
+        discoverRotTargets(bus, nsmClient, eidNameMap);
 
     for (const auto& [eid, name] : rotTargets)
     {

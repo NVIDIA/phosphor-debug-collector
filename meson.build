@@ -305,6 +305,13 @@ conf_data.set(
     description: 'Rotate dump when total size of dumps exceed the quota',
 )
 
+# Add ROT dump configuration values to main config.h
+conf_data.set_quoted(
+    'ROT_DUMP_MCTP_EID_CSV_PATH',
+    get_option('ROT_DUMP_MCTP_EID_CSV_PATH'),
+    description: 'Path to the MCTP EID CSV file used by the ROT dump collector',
+)
+
 # Add Fault Log dump configuration values to main config.h
 conf_data.set_quoted(
     'CPER_DUMP_BIN_PATH',
