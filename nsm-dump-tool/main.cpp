@@ -14,6 +14,7 @@
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -24,6 +25,24 @@
 
 #define VERSION "3.1"
 #define SLEEP_DURING_WAIT_SECONDS 1
+
+#ifndef NSM_DUMP_ASYNC_STATUS_DBUS_TIMEOUT_US
+#define NSM_DUMP_ASYNC_STATUS_DBUS_TIMEOUT_US (120000000ULL) // 120 seconds
+#endif
+
+namespace
+{
+constexpr std::array<unsigned, 3> kAsyncStatusRetryBackoffSec{2, 4, 8};
+constexpr size_t kAsyncStatusRetryPhases = kAsyncStatusRetryBackoffSec.size();
+
+bool isAsyncStatusDBusTimeout(
+    const sdbusplus::exception::SdBusError& e) noexcept
+{
+    return (e.name() != nullptr && std::string_view(e.name()) ==
+                                       "org.freedesktop.DBus.Error.Timeout") ||
+           (e.get_errno() == ETIMEDOUT);
+}
+} // namespace
 
 using namespace phosphor::logging;
 
@@ -79,45 +98,54 @@ void logMsg(std::string msg)
 OperationStatus getAsyncStatus(std::string path, std::string& response)
 {
     sdbusplus::bus_t bus = sdbusplus::bus::new_default();
-    std::string interf;
-    std::string method;
-    interf = "org.freedesktop.DBus.Properties";
-    method = "Get";
+    const char* interf = "org.freedesktop.DBus.Properties";
+    const char* method = "Get";
 
-    auto commandStatusMethod =
-        bus.new_method_call("xyz.openbmc_project.NSM", path.c_str(),
-                            interf.c_str(), method.c_str());
-    commandStatusMethod.append("com.nvidia.Async.Status", "Status");
-
-    try
+    for (size_t attempt = 0;; ++attempt)
     {
-        auto statusReply = bus.call(commandStatusMethod);
-        std::variant<std::string> status;
-        statusReply.read(status);
-        response = (std::get<std::string>(status));
-        if (response == "com.nvidia.Async.Status.AsyncOperationStatus.Success")
+        auto commandStatusMethod = bus.new_method_call(
+            "xyz.openbmc_project.NSM", path.c_str(), interf, method);
+        commandStatusMethod.append("com.nvidia.Async.Status", "Status");
+
+        try
         {
-            return Success;
+            auto statusReply = bus.call(commandStatusMethod,
+                                        NSM_DUMP_ASYNC_STATUS_DBUS_TIMEOUT_US);
+            std::variant<std::string> status;
+            statusReply.read(status);
+            response = (std::get<std::string>(status));
+            if (response ==
+                "com.nvidia.Async.Status.AsyncOperationStatus.Success")
+            {
+                return Success;
+            }
+            else if (response ==
+                     "com.nvidia.Async.Status.AsyncOperationStatus.InProgress")
+            {
+                return InProgress;
+            }
+            else
+            {
+                log<level::ERR>(response.c_str());
+                return Error;
+            }
         }
-        else if (response ==
-                 "com.nvidia.Async.Status.AsyncOperationStatus.InProgress")
+        catch (const sdbusplus::exception::SdBusError& e)
         {
-            return InProgress;
-        }
-        else
-        {
-            log<level::ERR>(response.c_str());
+            if (attempt < kAsyncStatusRetryPhases &&
+                isAsyncStatusDBusTimeout(e))
+            {
+                log<level::WARNING>(
+                    "getAsyncStatus: D-Bus timeout; retrying after backoff");
+                sleep(kAsyncStatusRetryBackoffSec[attempt]);
+                continue;
+            }
+            std::string errorStr("Function getAsyncStatus failed");
+            log<level::ERR>(errorStr.c_str());
+            log<level::ERR>(e.what());
             return Error;
         }
     }
-    catch (const sdbusplus::exception::SdBusError& e)
-    {
-        std::string errorStr("Function getAsyncStatus failed");
-        log<level::ERR>(errorStr.c_str());
-        log<level::ERR>(e.what());
-    }
-
-    return Error;
 }
 
 OperationStatus getEraseStatus(std::string objectPath)
@@ -609,7 +637,7 @@ int main(int argc, char** argv)
             log<level::ERR>(errorStr.c_str());
         }
 
-        std::filesystem::remove_all(tempDir);
+        std::filesystem::remove_all(tempPath);
     }
 
     return result;

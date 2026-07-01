@@ -131,10 +131,13 @@ class Manager :
     void createEntry(const fs::path& fullPath);
 
     /** @brief Capture System Dump.
-     *  @param[in] parama - Additional arguments for system dump.
+     *  @param[in] params - Additional arguments for system dump.
+     *  @param[in] progressKey - Key for Manager::dumpInProgress (see
+     * createDump).
      *  @return id - The Dump entry id number.
      */
-    uint32_t captureDump(phosphor::dump::DumpCreateParams params);
+    uint32_t captureDump(phosphor::dump::DumpCreateParams params,
+                         const std::string& progressKey);
 
     /** @brief Remove specified watch object pointer from the
      *        watch map and associated entry from the map.
