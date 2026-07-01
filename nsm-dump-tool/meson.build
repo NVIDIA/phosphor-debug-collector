@@ -1,5 +1,5 @@
 incdir = include_directories('..')
-sources = ['main.cpp', 'nsm_dump_utils.cpp']
+sources = ['main.cpp']
 fmt_dep = dependency('fmt', required: false)
 if not fmt_dep.found()
     fmt_proj = import('cmake').subproject(
