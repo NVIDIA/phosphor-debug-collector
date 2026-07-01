@@ -109,17 +109,20 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
      *  @param[in] sourceId - DumpId provided by the source.
      *  @param[in] parent - The dump entry's parent.
      *  @param[in] diagnosticType - The dump entry's dump type.
+     *  @param[in] inProgressKey - Key for Manager::dumpInProgress (e.g.
+     * NetIR:GPU_0).
      */
     Entry(sdbusplus::bus_t& bus, const std::string& objPath, uint32_t dumpId,
           uint64_t timeStamp, uint64_t fileSize, const fs::path& file,
           phosphor::dump::OperationStatus status, std::string originatorId,
           originatorTypes originatorType, phosphor::dump::Manager& parent,
-          std::string diagnosticType) :
+          std::string diagnosticType, std::string inProgressKey) :
         phosphor::dump::Entry(bus, objPath.c_str(), dumpId, timeStamp, fileSize,
                               file, status, originatorId, originatorType,
                               parent),
         EntryIfaces(bus, objPath.c_str(), EntryIfaces::action::defer_emit),
-        dumpType(diagnosticType)
+        dumpType(std::move(diagnosticType)),
+        dumpInProgressKey(std::move(inProgressKey))
     {
         // Emit deferred signal.
         this->phosphor::dump::system::EntryIfaces::emit_object_added();
@@ -216,6 +219,13 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         return dumpType;
     }
 
+    /** @brief Key used in Manager::dumpInProgress (may include device scope).
+     */
+    const std::string& getDumpInProgressKey() const
+    {
+        return dumpInProgressKey.empty() ? dumpType : dumpInProgressKey;
+    }
+
     void clearProcessGroupId()
     {
         entryProcessGroupID = 0;
@@ -225,6 +235,9 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     /** @brief A string implying the dump type of entry*/
     std::string dumpType;
 
+    /** @brief Scoped key matching Manager::dumpInProgress for this request */
+    std::string dumpInProgressKey;
+
     /**
      * @brief timer to update progress percent
      *
@@ -233,7 +246,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
 
     /** @brief Dump process group Id when currently running > 0 or 0 if not
      * valid */
-    pid_t entryProcessGroupID;
+    pid_t entryProcessGroupID{0};
 };
 
 } // namespace system

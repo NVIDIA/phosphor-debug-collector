@@ -91,6 +91,112 @@ DiagnosticType getDiagnosticType(const std::string& typeStr)
     return it != diagnosticTypeMap.end() ? it->second : DiagnosticType::Unknown;
 }
 
+namespace
+{
+
+/** Extract string or decimal from a CreateDump variant value. */
+std::optional<std::string> variantAsString(
+    const phosphor::dump::DumpCreateParams::mapped_type& v)
+{
+    if (const auto* p = std::get_if<std::string>(&v))
+    {
+        return *p;
+    }
+    if (const auto* p = std::get_if<uint64_t>(&v))
+    {
+        return std::to_string(*p);
+    }
+    return std::nullopt;
+}
+
+/** Read CreateDump param by exact key (Redfish / bmcweb use fixed key names).
+ */
+std::string lookupCreateParam(const phosphor::dump::DumpCreateParams& params,
+                              std::string_view key)
+{
+    auto it = params.find(std::string(key));
+    if (it == params.end())
+    {
+        return {};
+    }
+    auto s = variantAsString(it->second);
+    if (s && !s->empty())
+    {
+        return *s;
+    }
+    return {};
+}
+
+/** Single-line summary of CreateDump params for journal logging. */
+std::string formatCreateDumpParamsSummary(
+    const phosphor::dump::DumpCreateParams& params)
+{
+    std::string dbg;
+    for (const auto& [k, v] : params)
+    {
+        dbg += k + "=" + variantAsString(v).value_or("?") + ";";
+    }
+    return dbg;
+}
+
+/** Comma-separated list of dumpInProgress keys for journal logging. */
+std::string joinDumpInProgressKeys(const std::set<std::string>& keys)
+{
+    std::string out;
+    for (const auto& k : keys)
+    {
+        if (!out.empty())
+        {
+            out += ',';
+        }
+        out += k;
+    }
+    return out;
+}
+
+/** Monotonic suffix for synthetic progress keys when params are empty. */
+std::atomic<uint64_t> g_anonymousProgressSeq{1};
+
+} // namespace
+
+/** True if any in-progress key matches family or "family:..." scoped prefix. */
+bool diagnosticFamilyInProgress(const std::set<std::string>& inProg,
+                                const std::string& family)
+{
+    const std::string prefix = family + ":";
+    for (const auto& k : inProg)
+    {
+        if (k == family)
+        {
+            return true;
+        }
+        if (k.size() > prefix.size() && k.starts_with(prefix))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Key for dumpInProgress: scoped by DeviceType / DeviceID when applicable so
+ *  parallel dumps (e.g. NetIR on GPU_0 vs GPU_1) do not collide. */
+std::string buildDumpProgressKey(const phosphor::dump::DumpCreateParams& params)
+{
+    auto diagnosticTypeStr = lookupCreateParam(params, "DiagnosticType");
+
+    auto scope = lookupCreateParam(params, "DeviceType");
+    if (scope.empty())
+    {
+        scope = lookupCreateParam(params, "DeviceID");
+    }
+
+    if (!scope.empty())
+    {
+        return diagnosticTypeStr + ":" + scope;
+    }
+    return diagnosticTypeStr;
+}
+
 // TODO: Merge system dump with bmc dump to avoid code duplication.
 
 void Manager::limitDumpEntries()
@@ -129,12 +235,80 @@ sdbusplus::message::object_path Manager::createDump(
     // Limit dumps to max allowed entries
     limitDumpEntries();
 
-    auto diagnosticTypeStr = std::get<std::string>(params["DiagnosticType"]);
+    auto diagnosticTypeStr = lookupCreateParam(params, "DiagnosticType");
     auto diagnosticType = getDiagnosticType(diagnosticTypeStr);
+    std::string progressKey = buildDumpProgressKey(params);
+    if (progressKey.empty())
+    {
+        if (params.empty())
+        {
+            const auto n = g_anonymousProgressSeq.fetch_add(1);
+            progressKey = fmt::format("_anon_{}", n);
+            log<level::INFO>(
+                fmt::format(
+                    "CreateDump: built synthetic progressKey {} for empty "
+                    "AdditionalData",
+                    progressKey)
+                    .c_str());
+        }
+        else
+        {
+            log<level::ERR>(
+                "CreateDump: AdditionalData has keys but string values are "
+                "empty — common cause is incorrect busctl dict syntax. Use the "
+                "variant payload type directly per field, e.g. "
+                "'a{sv}' 2 DiagnosticType s NetIR DeviceType s GPU_0 "
+                "(do not use 'DiagnosticType v s NetIR'; the extra 'v' breaks "
+                "decoding and yields empty strings). See systemd busctl(1) "
+                "a{sv} examples.");
+            using InvalidArgument =
+                sdbusplus::xyz::openbmc_project::Common::Error::InvalidArgument;
+            using INV_ARG =
+                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
+            using INV_VAL =
+                xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
+            elog<InvalidArgument>(
+                INV_ARG("AdditionalData"),
+                INV_VAL(
+                    "Empty strings in dict; fix busctl encoding (journal has "
+                    "details)"));
+        }
+    }
+    const std::string dtRaw = lookupCreateParam(params, "DeviceType");
+    const std::string didRaw = lookupCreateParam(params, "DeviceID");
+    std::string diagScope = dtRaw;
+    if (diagScope.empty())
+    {
+        diagScope = didRaw;
+    }
+
+    log<level::INFO>(
+        fmt::format(
+            "CreateDump: diagnosticTypeStr={}, progressKey={}, "
+            "raw_DeviceType={}, raw_DeviceID={}, deviceScope={}, "
+            "dumpInProgress_before=[{}] size={}, duplicate_progressKey_blocked={}, "
+            "params=[{}]",
+            diagnosticTypeStr, progressKey, dtRaw, didRaw, diagScope,
+            joinDumpInProgressKeys(Manager::dumpInProgress),
+            Manager::dumpInProgress.size(),
+            Manager::dumpInProgress.contains(progressKey) ? "yes" : "no",
+            formatCreateDumpParamsSummary(params))
+            .c_str());
+
+    if (diagnosticType == DiagnosticType::NetIR &&
+        progressKey.find(':') == std::string::npos)
+    {
+        log<level::WARNING>(
+            fmt::format(
+                "NetIR progress key has no device suffix (parallel dumps disabled "
+                "until DeviceType/DeviceID reach the service); params: {}",
+                formatCreateDumpParamsSummary(params))
+                .c_str());
+    }
 
     // Check whether there is same dump already running
     // Also ensure RetLTSSM and RetRegister will not run at the same time
-    if ((Manager::dumpInProgress.contains(diagnosticTypeStr)) ||
+    if ((Manager::dumpInProgress.contains(progressKey)) ||
         (Manager::dumpInProgress.contains("RetLTSSM") &&
          diagnosticType == DiagnosticType::RetRegister) ||
         (Manager::dumpInProgress.contains("RetRegister") &&
@@ -144,24 +318,26 @@ sdbusplus::message::object_path Manager::createDump(
     }
 
     // Ensure NetIR and GPUDeviceDiagnostics will not run at the same time
-    if ((Manager::dumpInProgress.contains("NetIR") &&
+    if ((diagnosticFamilyInProgress(Manager::dumpInProgress, "NetIR") &&
          diagnosticType == DiagnosticType::GPUDeviceDiagnostics) ||
-        (Manager::dumpInProgress.contains("GPUDeviceDiagnostics") &&
+        (diagnosticFamilyInProgress(Manager::dumpInProgress,
+                                    "GPUDeviceDiagnostics") &&
          diagnosticType == DiagnosticType::NetIR))
     {
         elog<Unavailable>();
     }
 
     // Ensure Net_GPU_SXM and GPUDeviceDiagnostics will not run at the same time
-    if ((Manager::dumpInProgress.contains("Net_GPU_SXM") &&
+    if ((diagnosticFamilyInProgress(Manager::dumpInProgress, "Net_GPU_SXM") &&
          diagnosticType == DiagnosticType::GPUDeviceDiagnostics) ||
-        (Manager::dumpInProgress.contains("GPUDeviceDiagnostics") &&
+        (diagnosticFamilyInProgress(Manager::dumpInProgress,
+                                    "GPUDeviceDiagnostics") &&
          diagnosticType == DiagnosticType::GPU_SXM))
     {
         elog<Unavailable>();
     }
 
-    auto id = captureDump(params);
+    auto id = captureDump(params, progressKey);
 
     // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
@@ -179,7 +355,7 @@ sdbusplus::message::object_path Manager::createDump(
             id, std::make_unique<system::Entry>(
                     bus, objPath.c_str(), id, timeStamp, 0, std::string(),
                     phosphor::dump::OperationStatus::InProgress, originatorId,
-                    originatorType, *this, diagnosticTypeStr)));
+                    originatorType, *this, diagnosticTypeStr, progressKey)));
     }
     catch (const std::invalid_argument& e)
     {
@@ -364,7 +540,8 @@ uint32_t cpuDiagnosticDump(const std::string& dumpId,
 }
 
 // NOLINTEND
-uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
+uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
+                              const std::string& progressKey)
 {
     // check if minimum required space is available on destination partition
     std::error_code ec{};
@@ -414,9 +591,9 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     // Get Dump size.
     auto size = getAllowedSize();
 
-    auto diagnosticTypeStr = std::get<std::string>(params["DiagnosticType"]);
-    auto deviceID = std::get<std::string>(params["DeviceID"]);
-    auto deviceType = std::get<std::string>(params["DeviceType"]);
+    auto diagnosticTypeStr = lookupCreateParam(params, "DiagnosticType");
+    std::string deviceType = lookupCreateParam(params, "DeviceType");
+    std::string deviceID = lookupCreateParam(params, "DeviceID");
     params.erase("DiagnosticType");
     params.erase("DeviceID");
     params.erase("DeviceType");
@@ -450,7 +627,9 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 #endif
 
     log<level::INFO>(
-        fmt::format("Capturing system dump of type ({})", diagnosticTypeStr)
+        fmt::format("Capturing system dump: diagnosticType={}, progressKey={}, "
+                    "deviceType_resolved={}, deviceID_resolved={}",
+                    diagnosticTypeStr, progressKey, deviceType, deviceID)
             .c_str());
 
 #ifdef RETIMER_DEBUG_MODE
@@ -460,7 +639,13 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     }
 #endif
 
-    Manager::dumpInProgress.insert(diagnosticTypeStr);
+    Manager::dumpInProgress.insert(progressKey);
+    log<level::INFO>(
+        fmt::format(
+            "Capturing system dump: dumpInProgress inserted key={}, keys_now=[{}] size={}",
+            progressKey, joinDumpInProgressKeys(Manager::dumpInProgress),
+            Manager::dumpInProgress.size())
+            .c_str());
 
     pid_t pid = fork();
 
@@ -599,8 +784,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
     else if (pid > 0)
     {
         auto entryId = lastEntryId + 1;
-        Child::Callback callback = [this, pid, entryId, diagnosticTypeStr](
-                                       Child&, const siginfo_t* si) {
+        Child::Callback callback = [this, pid, entryId, diagnosticTypeStr,
+                                    progressKey](Child&, const siginfo_t* si) {
             if (si->si_status != 0)
             {
                 std::string msg =
@@ -624,7 +809,15 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
 
             this->childPtrMap.erase(pid);
             // Remove dumpType from dumpInProgress when dump ends
-            Manager::dumpInProgress.erase(diagnosticTypeStr);
+            Manager::dumpInProgress.erase(progressKey);
+            log<level::INFO>(
+                fmt::format(
+                    "Erasing system dump: dumpInProgress removed key={}, "
+                    "keys_now=[{}] size={}",
+                    progressKey,
+                    joinDumpInProgressKeys(Manager::dumpInProgress),
+                    Manager::dumpInProgress.size())
+                    .c_str());
         };
 
         try
@@ -644,7 +837,14 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
                     ex.what())
                     .c_str());
             // Remove dumpType from dumpInProgress
-            Manager::dumpInProgress.erase(diagnosticTypeStr);
+            Manager::dumpInProgress.erase(progressKey);
+            log<level::INFO>(
+                fmt::format(
+                    "Erasing system dump: when failed to add to event loop, dumpInProgress removed key={}, "
+                    "keys_now=[{}]",
+                    progressKey,
+                    joinDumpInProgressKeys(Manager::dumpInProgress))
+                    .c_str());
             elog<InternalFailure>();
         }
     }
@@ -653,6 +853,13 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params)
         auto error = errno;
         log<level::ERR>("System dump: Error occurred during fork",
                         entry("ERRNO=%d", error));
+        Manager::dumpInProgress.erase(progressKey);
+        log<level::INFO>(
+            fmt::format(
+                "Erasing system dump: when error occurred during fork, dumpInProgress removed key={}, "
+                "keys_now=[{}]",
+                progressKey, joinDumpInProgressKeys(Manager::dumpInProgress))
+                .c_str());
         elog<InternalFailure>();
     }
 
@@ -690,14 +897,21 @@ void Manager::createEntry(const fs::path& file)
         if (entryPtr != nullptr)
         {
             entryPtr->update(timestamp, fs::file_size(file), file);
-            auto dumpType = entryPtr->getDumpType();
 #ifdef RETIMER_DEBUG_MODE
+            auto dumpType = entryPtr->getDumpType();
             if (dumpType == "RetLTSSM")
             {
                 retimerState.debugMode(false);
             }
 #endif
-            Manager::dumpInProgress.erase(dumpType);
+            const auto& key = entryPtr->getDumpInProgressKey();
+            Manager::dumpInProgress.erase(key);
+            log<level::INFO>(
+                fmt::format(
+                    "Erasing system dump: dumpInProgress removed key={}, "
+                    "keys_now=[{}]",
+                    key, joinDumpInProgressKeys(Manager::dumpInProgress))
+                    .c_str());
 
             return;
         }
