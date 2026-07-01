@@ -44,10 +44,7 @@ using ServerObject = typename sdbusplus::server::object::object<T>;
 using EntryIfaces = sdbusplus::server::object::object<
     sdbusplus::xyz::openbmc_project::Dump::Entry::server::System>;
 
-// Timeout is kept similar to bmcweb dump creation task timeout
-// Max time taken for the bmcweb task timeout is 45 min and dump
-// creation is around 45 minutes but keeping the bmcweb task
-// timeout as the timeout.
+// Matches the bmcweb dump creation task timeout (~45 min)
 constexpr auto systemDumpMaxTimeLimitInSec = 2700;
 
 namespace fs = std::filesystem;
@@ -55,11 +52,8 @@ namespace fs = std::filesystem;
 // NOLINTNEXTLINE
 class Manager;
 
-/** @class Entry
- *  @brief OpenBMC Dump Entry implementation.
- *  @details A concrete implementation for the
- *  xyz.openbmc_project.Dump.Entry DBus API
- */
+/** @brief OpenBMC Dump Entry implementation for the
+ *  xyz.openbmc_project.Dump.Entry DBus API */
 class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
 {
   public:
@@ -70,19 +64,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     Entry& operator=(Entry&&) = delete;
     ~Entry() = default;
 
-    /** @brief Constructor for the System Dump Entry Object
-     *  @param[in] bus - Bus to attach to.
-     *  @param[in] objPath - Object path to attach to
-     *  @param[in] dumpId - Dump id.
-     *  @param[in] timeStamp - Dump creation timestamp
-     *             since the epoch.
-     *  @param[in] fileSize - Dump file size in bytes.
-     *  @param[in] file - Name of dump file.
-     *  @param[in] status - status  of the dump.
-     *  @param[in] dumpSize - Dump size in bytes.
-     *  @param[in] sourceId - DumpId provided by the source.
-     *  @param[in] parent - The dump entry's parent.
-     */
+    /** @brief Constructor for the System Dump Entry Object */
     Entry(sdbusplus::bus_t& bus, const std::string& objPath, uint32_t dumpId,
           uint64_t timeStamp, uint64_t fileSize, const fs::path& file,
           phosphor::dump::OperationStatus status, std::string originatorId,
@@ -126,7 +108,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     {
         // Emit deferred signal.
         this->phosphor::dump::system::EntryIfaces::emit_object_added();
-        // Create timer for entries which are in progress
+        // Create timer for in-progress entries
         if (phosphor::dump::Entry::status() == OperationStatus::InProgress)
         {
             progressTimer = std::make_unique<sdbusplus::Timer>([this]() {
@@ -139,11 +121,6 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
                                     100.0F)
                                  : 100.0F;
                 progress(static_cast<uint8_t>(100 - timeProgress));
-                std::string m =
-                    "Dump is " + std::to_string(100 - timeProgress) + " " +
-                    std::to_string(now) + " " + std::to_string(limit) + +" " +
-                    std::to_string(timeProgress);
-                log<level::ERR>(m.c_str());
 
                 bool completed = phosphor::dump::Entry::status() ==
                                  OperationStatus::Completed;
@@ -156,8 +133,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
                         "Terminating " + std::to_string(entryProcessGroupID) +
                         " PGID\r\n";
                     log<level::ERR>(msg.c_str());
-                    /* use SIGTERM as dreport has TRAP on it to clean-up
-                        leftovers in /tmp */
+                    // SIGTERM: dreport traps it to clean up /tmp leftovers
                     kill(-1 * (entryProcessGroupID), SIGTERM);
                     clearProcessGroupId();
                 }
@@ -174,27 +150,18 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
                 }
                 return;
             });
-            // Progress update is done every 45 second.
+            // Progress update every 45 seconds
             progressTimer->start(std::chrono::seconds(45), true);
         }
     }
 
-    /** @brief Delete this d-bus object.
-     */
+    /** @brief Delete this d-bus object. */
     void delete_() override;
 
-    /** @brief Method to initiate the offload of dump
-     *  @param[in] uri - URI to offload dump
-     */
+    /** @brief Initiate the offload of dump to the given URI */
     void initiateOffload(std::string uri) override;
 
-    /** @brief Method to update an existing dump entry, once the dump creation
-     *  is completed this function will be used to update the entry which got
-     *  created during the dump request.
-     *  @param[in] timeStamp - Dump creation timestamp
-     *  @param[in] fileSize - Dump file size in bytes.
-     *  @param[in] file - Name of dump file.
-     */
+    /** @brief Update an existing dump entry once dump creation is completed */
     void update(uint64_t timeStamp, uint64_t fileSize, const fs::path& filePath)
     {
         elapsed(timeStamp);
@@ -204,16 +171,19 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
         completedTime(timeStamp);
     }
 
-    /** @brief Minimal interface to allow setting status as failed
-     */
+    /** @brief Set status as failed */
     void setFailedStatus()
     {
         status(phosphor::dump::OperationStatus::Failed);
+        // Stop the timer so a failed dump resolves immediately (its stop
+        // condition only checks Completed or past-timeout, not Failed).
+        if (progressTimer)
+        {
+            progressTimer->stop();
+        }
     }
 
-    /** @brief Method to get entry's dump type
-     *  @return A string of dump type.
-     */
+    /** @brief Get entry's dump type */
     std::string getDumpType()
     {
         return dumpType;
@@ -232,7 +202,7 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     }
 
   private:
-    /** @brief A string implying the dump type of entry*/
+    /** @brief The dump type of entry */
     std::string dumpType;
 
     /** @brief Scoped key matching Manager::dumpInProgress for this request */

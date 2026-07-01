@@ -331,14 +331,6 @@ option(
     description: 'The system dump entry D-Bus object path',
 )
 
-option(
-    'SYSTEM_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
-    type: 'string',
-    value: 'EROT,ROT,FirmwareAttributes',
-    description: 'OEM diagnostic data allowable type for system dump',
-)
-
-
 # Retimer debug mode options
 
 option(

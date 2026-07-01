@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION &
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,11 +22,20 @@
 #include <boost/asio/io_context.hpp>
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/asio/connection.hpp>
+#include <sdbusplus/bus.hpp>
+#include <sdbusplus/bus/match.hpp>
+
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <optional>
+#include <shared_mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 constexpr auto DUMP_OEM_ALLOWABLE_VALUES_PATH =
     "/xyz/openbmc_project/dump/oem_allowable_values";
-
-constexpr auto DEBUG_INFO_INTERFACE = "com.nvidia.Dump.DebugInfo";
 
 namespace phosphor
 {
@@ -39,11 +48,6 @@ using DumpType = AllowableValuesIface::DumpType;
 
 using OEMDataTypeAllowableValuesObject =
     sdbusplus::server::object::object<AllowableValuesIface>;
-
-// <SupportedDumpType, DiagnosticType>
-const std::unordered_map<std::string, std::string> debugInfoDumpTypeMapping{
-    {"com.nvidia.Dump.DebugInfo.DumpType.Network", "NetIR"},
-    {"com.nvidia.Dump.DebugInfo.DumpType.Diagnostics", "GPUDeviceDiagnostics"}};
 
 class AsioConnection
 {
@@ -64,6 +68,34 @@ class AsioConnection
     }
 };
 
+/** @brief One entry in the EID-keyed dump-target map; a live snapshot of
+ *  currently-present dumpable endpoints (added/erased on MCTPReactor signals).
+ */
+struct DumpTarget
+{
+    std::string redfishDeviceName;           // e.g. "HGX_GPU_0"
+    std::optional<std::string> deviceType;   // default DeviceType (fan-out)
+    std::vector<std::string> supportedDumps; // e.g. {"RoT","GPUDiag","NetIR"}
+    // Per-kind DeviceType override (kind -> DeviceType) parsed from
+    // "<kind>=<DeviceType>" tokens; lets one endpoint expose kinds under
+    // distinct DeviceTypes.
+    std::map<std::string, std::string> deviceTypeByKind;
+};
+
+/** @brief MCTPReactor endpoint subtree root; PDC subscribes to
+ *  InterfacesAdded/Removed under this path.
+ */
+constexpr auto MCTP_REACTOR_ROOT = "/au/com/codeconstruct/mctp1";
+
+/** @brief Interface mctpd publishes on each endpoint (watched for teardown). */
+constexpr auto MCTP_ENDPOINT_INTERFACE = "xyz.openbmc_project.MCTP.Endpoint";
+
+/** @brief Association interface carrying the `configured_by` link to the device
+ *  inventory object; PDC triggers on this so the target is always resolvable.
+ */
+constexpr auto ASSOCIATION_DEFINITIONS_INTERFACE =
+    "xyz.openbmc_project.Association.Definitions";
+
 class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
 {
   public:
@@ -75,78 +107,14 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
     OEMTypeAllowableValuesIf& operator=(OEMTypeAllowableValuesIf&&) = delete;
     virtual ~OEMTypeAllowableValuesIf() = default;
 
-    /** @brief Constructor to put object onto bus at a dbus path.
-     *  @param[in] path - Path to attach at.
+    /** @brief Subscribes to MCTPReactor signals and runs a cold-start
+     *  enumeration; `bus` must be the sd_event-attached bus so matches fire.
      */
-    OEMTypeAllowableValuesIf(const char* path) :
-        OEMDataTypeAllowableValuesObject(*AsioConnection::getAsioConnection(),
-                                         path)
-    {
-        populateSystemOEMDataTypeAllowableValues(*this);
+    OEMTypeAllowableValuesIf(sdbusplus::bus_t& bus, const char* path);
 
-#ifdef FDR_DUMP_EXTENSION
-        populateFDROEMDataTypeAllowableValues(*this);
-#endif
-
-        auto& conn = AsioConnection::getAsioConnection();
-        debugInfoMatch = std::make_unique<sdbusplus::bus::match_t>(
-            static_cast<sdbusplus::bus_t&>(*conn),
-            "type='signal',member='PropertiesChanged',"
-            "arg0='" +
-                std::string(DEBUG_INFO_INTERFACE) + "'",
-            [this](sdbusplus::message::message& msg) {
-                std::string interface;
-                std::map<std::string, std::variant<std::string>> properties;
-                msg.read(interface, properties);
-
-                auto supportedTypeIt = properties.find("SupportedDumpType");
-                if (supportedTypeIt != properties.end())
-                {
-                    const std::string* dumpType =
-                        std::get_if<std::string>(&supportedTypeIt->second);
-                    if (dumpType)
-                    {
-                        if (auto it = debugInfoDumpTypeMapping.find(*dumpType);
-                            it != debugInfoDumpTypeMapping.end())
-                        {
-                            try
-                            {
-                                auto path = msg.get_path();
-                                std::string dumpDebugInfoName =
-                                    sdbusplus::object_path(path).filename();
-                                std::string diagTypeStr =
-                                    "DiagnosticType=" + it->second +
-                                    ";DeviceType=" + dumpDebugInfoName;
-                                std::map<DumpType, std::vector<std::string>>
-                                    oemAllowableValuesMap =
-                                        this->oemDataTypeAllowableValues();
-                                auto& systemValues =
-                                    oemAllowableValuesMap[DumpType::System];
-                                if (std::ranges::find(systemValues,
-                                                      diagTypeStr) ==
-                                    systemValues.end())
-                                {
-                                    systemValues.emplace_back(diagTypeStr);
-                                    std::sort(systemValues.begin(),
-                                              systemValues.end());
-                                    this->oemDataTypeAllowableValues(
-                                        oemAllowableValuesMap);
-                                }
-                            }
-                            catch (const sdbusplus::exception_t& e)
-                            {
-                                lg2::error(
-                                    "Failed to update OEM allowable values for System {TYPE} Dump: "
-                                    "ERROR={ERROR}",
-                                    "TYPE", it->second, "ERROR", e.what());
-                            }
-                        }
-                    }
-                }
-            });
-    }
-
-    /** @brief Populate OEM allowable values for System dump */
+    /** @brief Populate OEM allowable values for System dump; runs cold-start
+     *  catch-up then rebuilds. Later MCTPReactor signals re-publish.
+     */
     void populateSystemOEMDataTypeAllowableValues(
         sdbusplus::server::com::nvidia::dump::AllowableValues& iface);
 
@@ -156,14 +124,57 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
         sdbusplus::server::com::nvidia::dump::AllowableValues& iface);
 #endif
 
-  private:
-    /** @brief Collect and populate DebugInfo device types for system dump */
-    void populateDebugInfoDumpTypes(
-        sdbusplus::server::com::nvidia::dump::AllowableValues& iface);
-
-    /** @brief D-Bus match for monitoring DebugInfo interface property changes
+    /** @brief Snapshot the EID-keyed target map by value under a shared lock.
      */
-    std::unique_ptr<sdbusplus::bus::match_t> debugInfoMatch;
+    std::map<uint8_t, DumpTarget> snapshotTargets() const;
+
+  private:
+    /** @brief Resolve an endpoint via its configured_by association and insert
+     *  into targetsByEid_. Caller holds unique_lock on mapMutex_. Returns true
+     *  if a target was resolved and inserted.
+     */
+    bool populateTargetFromEm(uint8_t eid, const std::string& endpointPath);
+
+    /** @brief Handler for InterfacesAdded (and cold-start synthetic-add);
+     *  resolves and inserts the endpoint's target, idempotent.
+     */
+    void onInterfacesAdded(uint8_t eid, const std::string& endpointPath);
+
+    /** @brief Handler for the MCTPReactor InterfacesRemoved signal. */
+    void onInterfacesRemoved(uint8_t eid);
+
+    /** @brief Build the AllowableValues set from targetsByEid_ and publish.
+     *  Caller must NOT hold mapMutex_ (takes a shared_lock).
+     */
+    void rebuildAllowableValues();
+
+    /** @brief One-shot cold-start enumeration of present endpoints, calling
+     *  onInterfacesAdded per live EID. Runs once from the constructor.
+     */
+    void coldStartEnumerate();
+
+    /** @brief Extract the EID from an endpoint object path; nullopt if the path
+     *  doesn't match the expected pattern.
+     */
+    static std::optional<uint8_t> parseEidFromEndpointPath(
+        const std::string& path);
+
+    /** @brief EID-keyed target map, the SoT for AllowableValues; mutated under
+     *  mapMutex_.
+     */
+    std::map<uint8_t, DumpTarget> targetsByEid_;
+    mutable std::shared_mutex mapMutex_;
+
+    /** @brief The sd_event-attached bus; matches and D-Bus calls go through it
+     *  so signals fire.
+     */
+    sdbusplus::bus_t& bus_;
+
+    /** @brief D-Bus match for InterfacesAdded under MCTPReactor's root. */
+    std::unique_ptr<sdbusplus::bus::match_t> ifacesAddedMatch_;
+
+    /** @brief D-Bus match for InterfacesRemoved under MCTPReactor's root. */
+    std::unique_ptr<sdbusplus::bus::match_t> ifacesRemovedMatch_;
 };
 
 } // namespace dump

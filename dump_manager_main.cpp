@@ -56,7 +56,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    // Block SIGCHLD first, so that the event loop can handle it
+    // Block SIGCHLD so the event loop can handle it
     if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0)
     {
         lg2::error("Unable to block signal, errno: {ERRNO}", "ERRNO", errno);
@@ -68,9 +68,8 @@ int main()
 
     try
     {
-        // Add the object for the AllowableValues interface
         phosphor::dump::OEMTypeAllowableValuesIf objOEMTypeAllowableValuesIf(
-            DUMP_OEM_ALLOWABLE_VALUES_PATH);
+            bus, DUMP_OEM_ALLOWABLE_VALUES_PATH);
 
         phosphor::dump::DumpManagerList dumpMgrList{};
         std::unique_ptr<phosphor::dump::bmc::Manager> bmcDumpMgr =

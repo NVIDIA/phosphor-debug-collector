@@ -201,21 +201,16 @@ std::string buildDumpProgressKey(const phosphor::dump::DumpCreateParams& params)
 
 void Manager::limitDumpEntries()
 {
-    // Delete dumps only when system dump max limit is configured
 #if SYSTEM_DUMP_MAX_LIMIT == 0
-    // Do nothing - system dump max limit is not configured
     return;
 #else  // #if SYSTEM_DUMP_MAX_LIMIT == 0
-    // Delete dumps on reaching allowed entries
+    // Delete oldest dumps on reaching allowed entries
     auto totalDumps = entries.size();
     if (totalDumps < SYSTEM_DUMP_MAX_LIMIT)
     {
-        // Do nothing - Its within allowed entries
         return;
     }
-    // Get the oldest dumps
     size_t excessDumps = totalDumps - (SYSTEM_DUMP_MAX_LIMIT - 1);
-    // Delete the oldest dumps
     auto d = entries.begin();
     while (d != entries.end() && excessDumps != 0U)
     {
@@ -232,7 +227,6 @@ void Manager::limitDumpEntries()
 sdbusplus::object_path Manager::createDump(
     phosphor::dump::DumpCreateParams params)
 {
-    // Limit dumps to max allowed entries
     limitDumpEntries();
 
     auto diagnosticTypeStr = lookupCreateParam(params, "DiagnosticType");
@@ -339,12 +333,10 @@ sdbusplus::object_path Manager::createDump(
 
     auto id = captureDump(params, progressKey);
 
-    // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
 
     try
     {
-        // Get the originator id and type from params
         std::string originatorId;
         originatorTypes originatorType;
 
@@ -371,7 +363,7 @@ sdbusplus::object_path Manager::createDump(
 
 // captureDump helper functions
 // NOLINTBEGIN
-// Helper function to build and execute dump command
+// Build and execute dump command
 uint32_t executeDumpCommand(
     const std::string& binPath, const std::string& dumpId,
     const std::string& dumpPath,
@@ -380,16 +372,14 @@ uint32_t executeDumpCommand(
 {
     std::vector<char*> arg_v;
 
-    // Add binary path
     arg_v.push_back(const_cast<char*>(binPath.c_str()));
 
-    // Add path and id options which are common to dumps
+    // Path and id options common to all dumps
     arg_v.push_back(const_cast<char*>("-p"));
     arg_v.push_back(const_cast<char*>(dumpPath.c_str()));
     arg_v.push_back(const_cast<char*>("-i"));
     arg_v.push_back(const_cast<char*>(dumpId.c_str()));
 
-    // Add additional options
     for (const auto& opt : options)
     {
         arg_v.push_back(const_cast<char*>(opt.first.c_str()));
@@ -402,7 +392,7 @@ uint32_t executeDumpCommand(
     arg_v.push_back(nullptr);
     execv(arg_v[0], &arg_v[0]);
 
-    // If we get here, execution failed
+    // Reached only if execv failed
     auto error = errno;
     log<level::ERR>(errorMsg.c_str(), entry("ERRNO=%d", error));
     _exit(EXIT_FAILURE);
@@ -419,7 +409,6 @@ uint32_t executeDreport(const std::string& dumpType, const std::string& dumpId,
         {"-v", ""},
         {"-t", dumpType}};
 
-    // Add additional arguments
     for (const auto& arg : addArgs)
     {
         if (!arg.empty())
@@ -458,6 +447,9 @@ uint32_t nsmDump(const std::string& dumpId, const std::string& dumpPath,
                  const std::string& tempPath, const std::string& targetDevice,
                  const std::string& dumpType)
 {
+    // Invoke nsm-dump-tool directly; `dumpType` is its -o bundle mode
+    // ("Network" or "Diagnostics"). The tool writes the obmcdump archive
+    // itself.
     return executeDumpCommand(
         NSM_DUMP_BIN_PATH, dumpId, dumpPath,
         {{"-t", tempPath}, {"-d", targetDevice}, {"-o", dumpType}},
@@ -475,7 +467,6 @@ uint32_t retimerLtssmDump(const std::string& dumpId,
                           const std::string& dumpPath,
                           const std::string& vendorId)
 {
-    // Construct additional options for Retimer Ltssm Dump
     std::vector<std::pair<std::string, std::string>> options;
     if (!vendorId.empty())
     {
@@ -491,7 +482,6 @@ uint32_t retimerRegisterDump(
     const std::string& dumpId, const std::string& dumpPath,
     const std::string& retimer_address, const std::string& vendorId)
 {
-    // Construct additional options for Retimer Register Dump
     std::vector<std::pair<std::string, std::string>> options;
     if (!retimer_address.empty())
     {
@@ -543,18 +533,13 @@ uint32_t cpuDiagnosticDump(const std::string& dumpId,
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
                               const std::string& progressKey)
 {
-    // check if minimum required space is available on destination partition
+    // Check minimum required space on destination partition
     std::error_code ec{};
     fs::path partitionPath(dumpDir);
 
 #if (JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT > 0)
-    /* jffs2 space available problem is worked around by substracting 2%
-       of capacity from currently available space, eg. 200M - 4M = 196M
-       it solves problem of failed dump when user request it close to space
-       limit so instead if silently failing the task user receives appropriate
-       message. Test it yourself - fill up the partition until 'no space left'
-       message appears, check `df -T` for available space, if there seems to be
-       at least 1% space available then you just reproduced the issue*/
+    /* Work around jffs2 space-available inaccuracy by subtracting a
+       percentage of capacity so dumps near the limit fail gracefully. */
     uintmax_t offset = (fs::space(partitionPath, ec).capacity *
                         JFFS_SPACE_CALC_INACCURACY_OFFSET_WORKAROUND_PERCENT) /
                        100;
@@ -588,7 +573,6 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
         elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
     }
 
-    // Get Dump size.
     auto size = getAllowedSize();
 
     auto diagnosticTypeStr = lookupCreateParam(params, "DiagnosticType");
@@ -655,9 +639,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
         auto id = std::to_string(lastEntryId + 1);
         dumpPath /= id;
 
-        // Construct additional arguments from params
+        // Additional args in fixed order: bf_ip, bf_username, bf_password
         std::array<std::string, 3> addArgs;
-        // Fix additional arguments order 'bf_ip', 'bf_username', 'bf_password'
         for (const auto& param : params)
         {
             auto kvPair = param.first + "=" +
@@ -680,6 +663,8 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
             }
         }
 
+        // Dispatch by diagnostic type; per-device data is discovered from
+        // D-Bus inventory by each collector's main() at collection time.
         switch (diagnosticType)
         {
             case DiagnosticType::Unknown:
@@ -780,6 +765,9 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
                 log<level::ERR>("System dump: Invalid DiagnosticType");
                 elog<InternalFailure>();
         }
+        // A collector normally execv()'s and never returns; if one does return
+        // the child must exit rather than fall through into parent event-loop.
+        _exit(EXIT_FAILURE);
     }
     else if (pid > 0)
     {
@@ -829,7 +817,6 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
         }
         catch (const sdeventplus::SdEventError& ex)
         {
-            // Failed to add to event loop
             log<level::ERR>(
                 fmt::format(
                     "Error occurred during the sdeventplus::source::Child "
@@ -888,7 +875,7 @@ void Manager::createEntry(const fs::path& file)
 
     auto id = stoul(idString);
 
-    // If there is an existing entry update it and return.
+    // Update existing entry if present
     auto dumpEntry = entries.find(id);
     if (dumpEntry != entries.end())
     {
@@ -917,12 +904,10 @@ void Manager::createEntry(const fs::path& file)
         }
     }
 
-    // Entry Object path.
     auto objPath = fs::path(baseEntryPath) / std::to_string(id);
 
     try
     {
-        // Get the originator id and type from params
         std::string originatorId;
         originatorTypes originatorType;
 
@@ -947,16 +932,12 @@ void Manager::watchCallback(const UserMap& fileInfo)
 {
     for (const auto& [path, event] : fileInfo)
     {
-        // For any new dump file create dump entry object
-        // and associated inotify watch.
+        // For any new dump file create dump entry object and inotify watch
         if (event == IN_CLOSE_WRITE)
         {
             if (!std::filesystem::is_directory(path))
             {
-                // Don't require filename to be passed, as the path
-                // of dump directory is stored in the childWatchMap
                 removeWatch(path.parent_path());
-                // dump file is written now create D-Bus entry
                 createEntry(path);
             }
             else
@@ -964,7 +945,7 @@ void Manager::watchCallback(const UserMap& fileInfo)
                 removeWatch(path);
             }
         }
-        // Start inotify watch on newly created directory.
+        // Start inotify watch on newly created directory
         else if (event == IN_CREATE && fs::is_directory(path))
         {
             auto watchObj = std::make_unique<Watch>(
@@ -979,7 +960,6 @@ void Manager::watchCallback(const UserMap& fileInfo)
 
 void Manager::removeWatch(const fs::path& path)
 {
-    // Delete Watch entry from map.
     childWatchMap.erase(path);
 }
 
@@ -996,15 +976,13 @@ void Manager::restore()
     {
         auto idStr = p.path().filename().string();
 
-        // Consider only directory's with dump id as name.
-        // Note: As per design one file per directory.
+        // Consider only directories named with a dump id (one file per dir)
         if (fs::is_directory(p.path()) &&
             std::all_of(idStr.begin(), idStr.end(), ::isdigit))
         {
             lastEntryId =
                 std::max(lastEntryId, static_cast<uint32_t>(std::stoul(idStr)));
             auto fileIt = fs::directory_iterator(p.path());
-            // Create dump entry d-bus object.
             if (fileIt != fs::end(fileIt))
             {
                 createEntry(fileIt->path());
@@ -1020,7 +998,7 @@ size_t Manager::getAllowedSize()
 
     size_t size = 0;
 
-    // Get current size of the dump directory.
+    // Current size of the dump directory
     for (const auto& p : fs::recursive_directory_iterator(dumpDir))
     {
         if (!fs::is_directory(p))
@@ -1029,17 +1007,13 @@ size_t Manager::getAllowedSize()
         }
     }
 
-    // Convert size into KB
+    // Convert to KB
     size = size / 1024;
-
-    // Set the Dump size to Maximum  if the free space is greater than
-    // Dump max size otherwise return the available size.
 
     size = (size > SYSTEM_DUMP_TOTAL_SIZE ? 0 : SYSTEM_DUMP_TOTAL_SIZE - size);
 
     if (size < SYSTEM_DUMP_MIN_SPACE_REQD)
     {
-        // Reached to maximum limit
         elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
     }
 
