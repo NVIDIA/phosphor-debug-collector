@@ -47,7 +47,7 @@ bool pathHasDeviceSegment(const std::string& path, const std::string& dev)
 bool deviceHasInterface(const std::string& targetDevice,
                         const std::string& iface)
 {
-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+    sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     std::string rootPath("/xyz/openbmc_project/inventory/system");
     std::vector<std::string> paths;
 
@@ -92,7 +92,7 @@ bool deviceHasInterface(const std::string& targetDevice,
 bool objectPathHasInterface(const std::string& objectPath,
                             const std::string& iface)
 {
-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+    sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     auto mapper =
         bus.new_method_call("xyz.openbmc_project.ObjectMapper",
                             "/xyz/openbmc_project/object_mapper",
@@ -201,7 +201,7 @@ UnpackedNsmError unpackNsmError(uint64_t packed)
 
 bool getAsyncValue(const std::string& path, uint64_t& outValue)
 {
-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+    sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     auto valueMethod =
         bus.new_method_call("xyz.openbmc_project.NSM", path.c_str(),
                             "org.freedesktop.DBus.Properties", "Get");
