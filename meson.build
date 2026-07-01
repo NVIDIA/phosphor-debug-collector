@@ -566,7 +566,11 @@ endforeach
 
 subdir('create-dump-dbus')
 
-if get_option('nsm-dump-tool').allowed()
+# Build nsm-dump-tool when the feature is enabled, or when tests are enabled so
+# that CI always compiles it and catches breakages even though it is not
+# installed by default. Installation is still gated on the feature option (see
+# nsm-dump-tool/meson.build).
+if get_option('nsm-dump-tool').allowed() or get_option('tests').allowed()
     subdir('nsm-dump-tool')
 endif
 

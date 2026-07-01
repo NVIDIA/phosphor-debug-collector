@@ -17,6 +17,8 @@ endif
 executable(
     'nsm-dump-tool',
     sources,
-    dependencies: [sdbusplus_dep, fmt_dep],
-    install: true,
+    dependencies: [sdbusplus_dep, phosphor_logging_dep, fmt_dep],
+    # Only install when the feature is explicitly enabled. When built solely
+    # because tests are enabled (CI compile coverage), skip installation.
+    install: get_option('nsm-dump-tool').allowed(),
 )
