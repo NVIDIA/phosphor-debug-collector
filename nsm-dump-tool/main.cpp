@@ -441,9 +441,10 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
 
         // The raw enum string also goes to journald so log-scraping
         // assertions stay machine-parseable.
-        log<level::ERR>(std::format("nsm-dump-tool failure for {}: status={}",
-                                    targetDevice, response)
-                            .c_str());
+        auto errorStr = std::format("nsm-dump-tool failure for {}: status={}",
+                                    targetDevice, response);
+        log<level::ERR>(errorStr.c_str());
+        throw std::runtime_error(errorStr);
     }
 }
 
