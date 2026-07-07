@@ -45,10 +45,10 @@ using EntryIfaces = sdbusplus::server::object::object<
     sdbusplus::xyz::openbmc_project::Dump::Entry::server::System>;
 
 // Timeout is kept similar to bmcweb dump creation task timeout
-// Max time taken for the bmcweb task timeout is 45 min and dump
-// creation is around 45 minutes but keeping the bmcweb task
+// Max time taken for the bmcweb task timeout is 60 min and dump
+// creation is around 60 minutes but keeping the bmcweb task
 // timeout as the timeout.
-constexpr auto systemDumpMaxTimeLimitInSec = 2700;
+constexpr auto systemDumpMaxTimeLimitInSec = 3600;
 
 namespace fs = std::filesystem;
 
