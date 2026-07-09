@@ -1,32 +1,22 @@
 #!/bin/bash
 #
 # config: 24 60
-# @brief: Collect Journal log information.
+# @brief: Collect Journal pretty log information.
 #
-# Uses compact single-line JSON format to reduce output size and collection
-# time. To bound the amount of journal data that needs to be processed
-# during the dump without imposing a time cutoff (which would limit
-# debuggability on systems with low log volume), vacuum the journal to a
-# fixed size first so the subsequent journalctl invocations process a
-# predictable amount of data.
 
 # shellcheck source=tools/dreport.d/include.d/functions
 . "$DREPORT_INCLUDE"/functions
 
-# Bound journal size before collection. Per-dump rather than per-command so
-# multiple journalctl invocations below see a consistent view.
-journalctl --rotate --vacuum-size=100M >/dev/null 2>&1 || true
-
-desc="Journal log (json)"
-file_name="journal.json"
-command="journalctl --namespace=* -o json"
+desc="Journal pretty log"
+file_name="journal-pretty.log"
+command="journalctl --namespace=* -o json-pretty"
 
 add_cmd_output "$command" "$file_name" "$desc"
 status=$?  # Capture exit status of journalctl
 
 if [ $status -eq 1 ]; then
     desc="Journal log at error"
-    file_name="journal-error.log"
+    file_name="journal-pretty-error.log"
     command_compact="journalctl || true"
     add_cmd_output "$command_compact" "$file_name" "$desc"
 
