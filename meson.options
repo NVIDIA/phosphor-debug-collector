@@ -24,6 +24,13 @@ option(
 )
 
 option(
+    'ROT_DUMP_MCTP_EID_CSV_PATH',
+    type: 'string',
+    value: '/usr/share/device_mctp_eid.csv',
+    description: 'Path to the MCTP EID CSV file used by the ROT dump collector',
+)
+
+option(
     'cpu-diagnostic-dump',
     type: 'feature',
     value: 'disabled',
