@@ -451,3 +451,10 @@ option(
     value: 'xz',
     description: 'Compression algorithm for dump archives',
 )
+
+option(
+    'dump-staging-dir',
+    type: 'string',
+    value: '/tmp',
+    description: 'Directory used by dreport to stage dump data during collection',
+)

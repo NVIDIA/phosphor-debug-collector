@@ -354,6 +354,7 @@ configure_file(configuration: conf_data, output: 'config.h')
 
 dreport_conf = configuration_data()
 dreport_conf.set('DUMP_COMPRESSION', get_option('dump-compression-algorithm'))
+dreport_conf.set('DUMP_STAGING_DIR', get_option('dump-staging-dir'))
 
 configure_file(
     input: 'tools/dreport.d/dreport.conf.in',
