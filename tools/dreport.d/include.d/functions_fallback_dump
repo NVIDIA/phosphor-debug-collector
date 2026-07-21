@@ -38,3 +38,29 @@ function generate_fallback_dump()
     log_info "Fallback dump completed ($fallback_success success, $fallback_failed failed)"
     return 0
 }
+
+# Return the dump collection staging directory. Uses DUMP_STAGING_DIR (meson:
+# dump-staging-dir, e.g. eMMC) when it exists, is writable, and has at least as
+# much free space as /tmp; otherwise falls back to /tmp.
+function get_dump_staging_dir()
+{
+    # DUMP_STAGING_DIR is set at build time in dreport.conf.
+    if [ -f "$DREPORT_SOURCE/dreport.conf" ]; then
+        # shellcheck source=/dev/null
+        . "$DREPORT_SOURCE/dreport.conf"
+    fi
+    local dir="${DUMP_STAGING_DIR:-/tmp}"
+    local dir_free tmp_free
+
+    if [ -d "$dir" ] && [ -w "$dir" ]; then
+        dir_free=$(df -k "$dir" 2>/dev/null | awk 'NR==2 {print $4}')
+        tmp_free=$(df -k /tmp 2>/dev/null | awk 'NR==2 {print $4}')
+        if [ -n "$dir_free" ] && [ -n "$tmp_free" ] &&
+            [ "$dir_free" -ge "$tmp_free" ]; then
+            echo "$dir"
+            return
+        fi
+    fi
+
+    echo "/tmp"
+}

@@ -54,7 +54,6 @@ declare -rx TYPE_KDUMP="kdump"
 declare -rx TYPE_SYSTEM="system"
 declare -rx SUMMARY_LOG="summary.log"
 declare -rx DREPORT_LOG="dreport.log"
-declare -rx TMP_DIR="/tmp"
 declare -rx EPOCHTIME=$(date +"%s")
 declare -rx TIME_STAMP="date -u"
 declare -rx PLUGIN="pl_"
@@ -97,6 +96,8 @@ declare -x elog_id=""
 #Source dreport common functions
 . $DREPORT_INCLUDE/functions
 . $DREPORT_INCLUDE/functions_fallback_dump
+
+declare -rx TMP_DIR="$(get_dump_staging_dir)"
 
 function cleanup_on_termination()
 {

@@ -449,3 +449,10 @@ option(
     value: 'xz',
     description: 'compression type for the bmc dump it can be xz or zstd',
 )
+
+option(
+    'dump-staging-dir',
+    type: 'string',
+    value: '/tmp',
+    description: 'Directory used by dreport to stage dump data during collection',
+)

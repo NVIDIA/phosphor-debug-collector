@@ -7,21 +7,25 @@
 . $DREPORT_INCLUDE/functions
 
 desc="Journal pretty log"
-file_name="journal-pretty.log"
+file_name="journal-pretty.log.zst"
+out_file="$name_dir/$file_name"
 command="journalctl --namespace=* -o json-pretty"
 
-add_cmd_output "$command" "$file_name" "$desc"
-status=$?  # Capture exit status of journalctl
-
-if [ $status -eq 1 ]; then
-    desc="Journal log at error"
-    file_name="journal-pretty-error.log"
-    command_compact="journalctl || true"
-    add_cmd_output "$command_compact" "$file_name" "$desc"
-
-elif [ $status -eq 2 ]; then
+# json-pretty of a large journal expands ~10-20x. Stream it straight through
+# zstd so the uncompressed text is never fully staged; only the compressed
+# file grows on disk. zstd is fast and low-memory on the BMC. The pipeline
+# exit status is zstd's, checked directly (PIPESTATUS is unreliable here).
+if eval "$command" 2>/dev/null | zstd -q -c >"$out_file" && [ -s "$out_file" ]; then
+    if check_size "$out_file"; then
+        log_info "Collected $desc"
+    else
+        log_warning "Skipping $desc"
+    fi
+else
+    # Fallback: collect a plain journal if streaming/compression failed, so the
+    # dump still contains journal data.
+    rm -f "$out_file"
     desc="Journal log"
     file_name="journal.log"
-    command_compact="journalctl"
-    add_cmd_output "$command_compact" "$file_name" "$desc"
+    add_cmd_output "journalctl --namespace=* || true" "$file_name" "$desc"
 fi
