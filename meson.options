@@ -331,6 +331,15 @@ option(
     description: 'The system dump entry D-Bus object path',
 )
 
+# Retained for build compatibility: AllowableValues are now EM-driven, but
+# platform bbappends may still pass this. Declared so meson setup doesn't fail.
+option(
+    'SYSTEM_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
+    type: 'string',
+    value: '',
+    description: 'OEM diagnostic data allowable type for system dump (unused; EM-driven)',
+)
+
 # Retimer debug mode options
 
 option(
