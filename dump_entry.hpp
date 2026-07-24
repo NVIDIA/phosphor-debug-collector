@@ -20,7 +20,7 @@ namespace phosphor
 namespace dump
 {
 
-// Current serialiation version of the class increment if there any change
+// Current serialization version of the class increment if there any change
 // in the serialized data members
 constexpr size_t CLASS_SERIALIZATION_VERSION = 1;
 
