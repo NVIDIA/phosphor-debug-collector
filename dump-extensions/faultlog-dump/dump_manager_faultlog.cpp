@@ -22,7 +22,7 @@
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <sys/inotify.h>
 #include <unistd.h>
 
