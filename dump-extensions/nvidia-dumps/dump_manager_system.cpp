@@ -31,6 +31,7 @@
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <iostream>
@@ -856,6 +857,22 @@ void Manager::createEntry(const fs::path& file)
 
     auto id = stoul(idString);
 
+    // A collector can unlink an archive it has just failed to finish writing,
+    // so the file behind an already-queued IN_CLOSE_WRITE may be gone by the
+    // time it is handled. The throwing file_size overload would unwind out of
+    // Watch::callback, which sd_event invokes from a C frame, and terminate
+    // the daemon.
+    std::error_code sizeEc;
+    const auto fileSize = fs::file_size(file, sizeEc);
+    if (sizeEc)
+    {
+        log<level::ERR>(
+            "System dump: archive vanished before it could be recorded",
+            entry("FILENAME=%s", file.c_str()),
+            entry("ERROR=%s", sizeEc.message().c_str()));
+        return;
+    }
+
     // If there is an existing entry update it and return.
     auto dumpEntry = entries.find(id);
     if (dumpEntry != entries.end())
@@ -864,7 +881,7 @@ void Manager::createEntry(const fs::path& file)
             dumpEntry->second.get());
         if (entryPtr != nullptr)
         {
-            entryPtr->update(timestamp, fs::file_size(file), file);
+            entryPtr->update(timestamp, fileSize, file);
 #ifdef RETIMER_DEBUG_MODE
             auto dumpType = entryPtr->getDumpType();
             if (dumpType == "RetLTSSM")
@@ -896,9 +913,9 @@ void Manager::createEntry(const fs::path& file)
 
         entries.insert(std::make_pair(
             id, std::make_unique<system::Entry>(
-                    bus, objPath.c_str(), id, timestamp, fs::file_size(file),
-                    file, phosphor::dump::OperationStatus::Completed,
-                    originatorId, originatorType, *this)));
+                    bus, objPath.c_str(), id, timestamp, fileSize, file,
+                    phosphor::dump::OperationStatus::Completed, originatorId,
+                    originatorType, *this)));
     }
     catch (const std::invalid_argument& e)
     {
@@ -906,7 +923,7 @@ void Manager::createEntry(const fs::path& file)
         log<level::ERR>("Error in creating system dump entry",
                         entry("OBJECTPATH=%s", objPath.c_str()),
                         entry("ID=%d", id), entry("TIMESTAMP=%ull", timestamp),
-                        entry("SIZE=%d", fs::file_size(file)),
+                        entry("SIZE=%d", fileSize),
                         entry("FILENAME=%s", file.c_str()));
     }
 }
@@ -915,6 +932,20 @@ void Manager::watchCallback(const UserMap& fileInfo)
 {
     for (const auto& [path, event] : fileInfo)
     {
+        // Dot-prefixed names are collector staging files, never dumps. A
+        // collector that wants its archive to appear atomically has to write
+        // it somewhere before it is complete, and this directory is the only
+        // place it can do that on the dump filesystem. Such a file must be
+        // ignored outright rather than merely skipped by name matching:
+        // createEntry uses regex_search, so the obmcdump_<id>_<epoch>
+        // substring inside a staging name would create an entry pointing at a
+        // partial archive, and removeWatch below would drop this directory's
+        // watch before the completed archive ever arrived.
+        if (path.filename().string().starts_with('.'))
+        {
+            continue;
+        }
+
         // For any new dump file create dump entry object
         // and associated inotify watch.
         if (event == IN_CLOSE_WRITE)
@@ -971,9 +1002,16 @@ void Manager::restore()
         {
             lastEntryId =
                 std::max(lastEntryId, static_cast<uint32_t>(std::stoul(idStr)));
-            auto fileIt = fs::directory_iterator(p.path());
+            // Skip dot-prefixed staging files: a power cut between tar and the
+            // publishing rename leaves one behind, and this takes whichever
+            // entry the iterator yields first.
+            auto fileIt = std::find_if(
+                fs::directory_iterator(p.path()), fs::directory_iterator{},
+                [](const auto& f) {
+                    return !f.path().filename().string().starts_with('.');
+                });
             // Create dump entry d-bus object.
-            if (fileIt != fs::end(fileIt))
+            if (fileIt != fs::directory_iterator{})
             {
                 createEntry(fileIt->path());
             }
