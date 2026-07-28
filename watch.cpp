@@ -5,6 +5,7 @@
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/lg2.hpp>
 
+#include <exception>
 #include <span>
 
 namespace phosphor
@@ -125,10 +126,23 @@ int Watch::callback(sd_event_source*, int fd, uint32_t revents, void* userdata)
         offset += offsetof(inotify_event, name) + event->len;
     }
 
-    // Call user call back function in case valid data in the map
+    // Call user call back function in case valid data in the map.
+    // sd_event invokes this callback from a C frame, so an exception escaping
+    // the handler unwinds through libsystemd and terminates the daemon, taking
+    // every in-flight dump with it. The handlers reach throwing filesystem
+    // calls on paths a collector can remove concurrently, so contain it here
+    // for every dump manager at once.
     if (!userMap.empty())
     {
-        userData->userFunc(userMap);
+        try
+        {
+            userData->userFunc(userMap);
+        }
+        catch (const std::exception& e)
+        {
+            lg2::error("Unhandled exception in inotify callback: {ERROR}",
+                       "ERROR", e.what());
+        }
     }
 
     return 0;

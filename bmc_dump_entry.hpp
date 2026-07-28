@@ -254,8 +254,9 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     std::unique_ptr<sdbusplus::Timer> progressTimer;
 
     /** @brief Dump process group Id when currently running > 0 or 0 if not
-     * valid */
-    pid_t entryProcessGroupID;
+     * valid. Never left indeterminate: the progress timer reads it and would
+     * otherwise signal a process group picked out of uninitialised memory. */
+    pid_t entryProcessGroupID{0};
 };
 
 } // namespace bmc
