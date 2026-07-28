@@ -57,6 +57,26 @@ option(
 )
 
 option(
+    'pcore-dump',
+    type: 'feature',
+    value: 'disabled',
+    description: 'PCoreDump diagnostic type: raw per-PCore dumps of a CPU package, collected by cpu-diagnostic-dump in PCore mode',
+)
+
+option(
+    'PCORE_DUMP_COLLECTION_TIMEOUT',
+    type: 'integer',
+    min: 1,
+    value: 90,
+    description: '''Seconds to wait for each PCore payload to be staged by
+        pldmd, passed to the collector as -T. Applies per selector, so a
+        request for N PCores can run for N times this value. Nothing shortens
+        that: the entry progress cap marks the entry Failed at expiry but does
+        not terminate the collector, so N times this value is the real bound
+        on a collection''',
+)
+
+option(
     'jffs-workaround',
     type: 'feature',
     description: 'Turn on jffs workaround for core file',

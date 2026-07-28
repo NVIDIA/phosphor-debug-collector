@@ -17,6 +17,12 @@ if get_option('retimer-debug-mode').enabled()
     ]
 endif
 
+if get_option('pcore-dump').enabled()
+    phosphor_dump_manager_sources += [
+        'dump-extensions/nvidia-dumps/pcore_dump.cpp',
+    ]
+endif
+
 if get_option('rot-dump-collector').allowed()
     subdir('rot_dump')
 endif

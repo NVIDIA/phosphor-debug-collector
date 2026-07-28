@@ -18,6 +18,9 @@ executable(
     'cpu-diagnostic-dump',
     sources,
     dependencies: [sdbusplus_dep, fmt_dep, nlohmann_json_dep],
+    # For dump-extensions/nvidia-dumps/pcore_selectors.hpp, shared with the
+    # dump manager so both ends parse the selector list the same way.
+    include_directories: incdir,
     install: true,
 )
 

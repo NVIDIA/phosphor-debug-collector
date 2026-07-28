@@ -70,3 +70,19 @@ test(
     ),
     workdir: meson.current_source_dir(),
 )
+
+# PCore selector handling is header-only and shared by the dump manager and
+# cpu-diagnostic-dump, so it is tested without either of their dependencies.
+# Built whenever tests are enabled, not only under -Dpcore-dump=enabled, so CI
+# keeps compiling it on platforms that ship the feature disabled.
+test(
+    'pcore_dump_test',
+    executable(
+        'pcore_dump_test',
+        'pcore_dump_test.cpp',
+        include_directories: ['.', '../'],
+        implicit_include_directories: false,
+        dependencies: [gtest_dep, gmock_dep],
+    ),
+    workdir: meson.current_source_dir(),
+)

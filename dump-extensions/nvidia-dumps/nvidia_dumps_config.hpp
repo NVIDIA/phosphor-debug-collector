@@ -31,3 +31,8 @@ constexpr auto SMA_DUMP_BIN_PATH = "/usr/bin/sma_dump.sh";
 constexpr auto CPLD_DUMP_BIN_PATH = "/usr/bin/cpld_dump.sh";
 constexpr auto CPU_DIAGNOSTIC_DUMP_BIN_PATH = "/usr/bin/cpu-diagnostic-dump";
 constexpr auto CPU_DIAGNOSTIC_DUMP_TEMP_PATH = "/tmp/cpu_diagnostic_dump";
+
+// PCoreDump runs cpu-diagnostic-dump in PCore mode (-m). That tool is a
+// standalone binary rather than an nv-collector-* wrapper, so dispatch forks it
+// directly instead of going through nv-collector-cpu-diag.
+constexpr auto PCORE_DUMP_BIN_PATH = "/usr/bin/cpu-diagnostic-dump";
