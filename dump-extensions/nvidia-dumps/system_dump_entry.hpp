@@ -146,8 +146,20 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
                     progressTimer->stop();
                     if (pastTimeout && !completed)
                     {
+                        // Stopping the timer alone used to leave the entry
+                        // reporting InProgress forever, so a collection
+                        // interrupted by a restart or a wedged collector never
+                        // reached a terminal state (D6). Qualified because the
+                        // constructor's status parameter shadows the setter.
+                        phosphor::dump::Entry::status(OperationStatus::Failed);
+                        // The gate is otherwise released only when the child
+                        // exits or the archive lands. A collector that does
+                        // neither held it for the life of the daemon, so every
+                        // later request was refused as Unavailable with no
+                        // InProgress entry left anywhere to explain why.
+                        releaseInProgressGate();
                         std::string msg =
-                            "Stopped progress timer due to timeout";
+                            "Marked dump entry Failed: progress timer expired";
                         log<level::ERR>(msg.c_str());
                     }
                 }
@@ -169,9 +181,23 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     {
         elapsed(timeStamp);
         size(fileSize);
-        status(OperationStatus::Completed);
+        // Record the artifact before the status check below returns, so a
+        // late archive still has a path and size and stays deletable.
         file = filePath;
         completedTime(timeStamp);
+
+        // Failed is terminal. The progress cap or a nonzero collector exit has
+        // already resolved this entry and the operator may have acted on it,
+        // so an archive that turns up afterwards must not report the request
+        // as having succeeded after all.
+        if (status() == OperationStatus::Failed)
+        {
+            log<level::ERR>(
+                "Dump entry already Failed; late archive recorded without "
+                "changing status");
+            return;
+        }
+        status(OperationStatus::Completed);
     }
 
     /** @brief Set status as failed */
@@ -205,6 +231,13 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     }
 
   private:
+    /** @brief Release this entry's key from the manager's busy gate.
+     *
+     *  Defined out of line: the gate lives on the system dump Manager and this
+     *  header is included by it.
+     */
+    void releaseInProgressGate();
+
     /** @brief The dump type of entry */
     std::string dumpType;
 

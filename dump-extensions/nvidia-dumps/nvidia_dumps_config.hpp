@@ -47,3 +47,8 @@ constexpr auto RETIMER_REGISTER_DUMP_BIN_PATH =
     "/usr/bin/retimerRegisterDump.sh";
 constexpr auto NSM_DUMP_TEMP_PATH = "/var/emmc/user-logs";
 constexpr auto CPU_DIAGNOSTIC_DUMP_TEMP_PATH = "/tmp/cpu_diagnostic_dump";
+
+// PCoreDump runs cpu-diagnostic-dump in PCore mode (-m). That tool is a
+// standalone binary rather than an nv-collector-* wrapper, so dispatch forks it
+// directly instead of going through nv-collector-cpu-diag.
+constexpr auto PCORE_DUMP_BIN_PATH = "/usr/bin/cpu-diagnostic-dump";

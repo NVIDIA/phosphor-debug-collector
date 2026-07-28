@@ -17,6 +17,7 @@
 #include "system_dump_entry.hpp"
 
 #include "dump_manager.hpp"
+#include "dump_manager_system.hpp"
 #include "dump_offload.hpp"
 
 #include <phosphor-logging/log.hpp>
@@ -50,6 +51,19 @@ void Entry::initiateOffload(std::string uri)
 {
     phosphor::dump::offload::requestOffload(file, id, uri);
     offloaded(true);
+}
+
+void Entry::releaseInProgressGate()
+{
+    // The base class holds only a phosphor::dump::Manager reference, and the
+    // gate is a member of the system dump manager. Every entry that owns a
+    // progress timer was created by that manager, so the cast succeeds; it is
+    // checked rather than asserted because the base is polymorphic and a
+    // future manager could reuse this entry type.
+    if (auto* mgr = dynamic_cast<phosphor::dump::system::Manager*>(&parent))
+    {
+        mgr->clearDumpInProgress(getDumpInProgressKey());
+    }
 }
 
 } // namespace system

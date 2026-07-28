@@ -2,18 +2,30 @@
  * SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
- * Tool to collect PLDM OEM diagnostic events from SatMC:
+ * Tool to collect PLDM OEM diagnostic events from SatMC.
+ *
+ * Legacy mode (default) collects a fixed bundle and decodes it into JSON:
  * - CPER Error Counters
  * - PCIe Root Port Static Data
  * - PCIe Root Port Performance Data
+ *
+ * PCore mode (-m) collects raw per-PCore dumps of one CPU package. It owns the
+ * multi-PCore loop: one Collect call per selector, one staged payload copied
+ * out per selector, and one archive holding every payload that arrived. The
+ * payload is never decoded.
  */
 
+#include "config.h"
+
 #include "../dump-extensions/nvidia-dumps/tar_compress_lock.hpp"
+#include "dump-extensions/nvidia-dumps/pcore_selectors.hpp"
 
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/file.h>
 #include <sys/inotify.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <nlohmann/json.hpp>
@@ -24,19 +36,24 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
+#include <charconv>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <set>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 #define SLEEP_DURING_WAIT_SECONDS 1
 #define DEFAULT_TIMEOUT_SECONDS 90
 #define CMET_CHANNEL_COUNT 64
@@ -48,13 +65,13 @@
 using json = nlohmann::json;
 using namespace phosphor::logging;
 namespace fs = std::filesystem;
+namespace pcore = phosphor::dump::pcore;
 
 // Event staging directory base path
 constexpr auto EVENT_STAGING_BASE = "/var/lib/pldm_events";
 constexpr auto PLDM_STATIC_CONFIG_PATH =
     "/usr/share/pldm/pldm_static_configuration.json";
 constexpr int EXIT_CODE_TAR_WARNING = 1;
-constexpr int EXIT_CODE_COMPLETE_FAILURE = 2;
 
 // Event file names (written by pldmd for OEM event classes)
 // Files in /var/lib/pldm_events/<terminus>/
@@ -63,16 +80,52 @@ constexpr auto CPER_ERROR_COUNT_EVENT_FILE = "CPERErrorCount_0_0.bin";
 // constexpr auto PCIE_LTSSM_EVENT_FILE = "PCIeLTSSM_0_0.bin";
 constexpr auto PCIE_TELEMETRY_EVENT_FILE = "PCIeTelemetry_0_0.bin";
 
+#ifdef PCORE_DUMP
+// PCore payloads are staged under a single fixed name, overwritten by every
+// collection. Correlation to a request is by serialization plus the name this
+// tool gives the copy, never by anything in the staged file itself.
+constexpr auto PCORE_DUMP_EVENT_FILE = "PCoreDump_0_0.bin";
+#endif // PCORE_DUMP
+
 // D-Bus effecter paths
 constexpr auto PLDM_SERVICE = "xyz.openbmc_project.PLDM";
 constexpr auto CONTROL_TRIGGER_INTERFACE =
     "xyz.openbmc_project.Control.Trigger";
+constexpr auto PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
+constexpr auto MAPPER_SERVICE = "xyz.openbmc_project.ObjectMapper";
+constexpr auto MAPPER_PATH = "/xyz/openbmc_project/object_mapper";
+constexpr auto MAPPER_INTERFACE = "xyz.openbmc_project.ObjectMapper";
 
 // Effecter name suffixes (appended to ProcessorModule_X_)
 constexpr auto EFFECTER_CPER_ERROR_COUNT = "CPERErrorCount_0_0";
 // LTSSM effecter disabled - backend not ready
 // constexpr auto EFFECTER_PCIE_LTSSM = "PCIeLTSSM_0_0";
 constexpr auto EFFECTER_PCIE_TELEMETRY = "PCIeTelemetry_0_0";
+
+// Per-request working directories, one per mode, so a PCore collection and a
+// legacy collection can never clean up each other's staging.
+constexpr auto LEGACY_TEMP_SUBDIR = "CPUDiagnosticDump";
+#ifdef PCORE_DUMP
+constexpr auto PCORE_TEMP_SUBDIR = "PCoreDump";
+#endif
+
+#ifdef PCORE_DUMP
+// Per-terminus lock serialising direct invocations against each other; the
+// dump manager already serialises requests that come through it.
+constexpr auto LOCK_DIR = "/run/lock";
+#endif
+
+// Exit codes. The dump manager fails the entry on any nonzero status; the
+// distinct values exist so the journal names the failure.
+enum ExitCode : int
+{
+    exitSuccess = 0,
+    exitUsage = 1,
+    exitNoEvents = 2,           // legacy mode: nothing collected
+    exitAllSelectorsFailed = 3, // PCore mode: every selector was rejected
+    exitAllSelectorsTimedOut = 4,
+    exitArchiveFailed = 5,
+};
 
 struct PldmTarget
 {
@@ -86,6 +139,39 @@ std::string targetDevice;
 std::string dumpPath;
 std::string dumpID;
 int timeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
+#ifdef PCORE_DUMP
+bool pcoreMode = false;
+std::string pcoreSelectorArg = pcore::allSelectorsToken;
+#endif
+
+// Mode-dependent values. Kept as functions so the PCore branch appears in
+// exactly one place each on a build with the feature compiled out.
+const char* modeTempSubdir()
+{
+#ifdef PCORE_DUMP
+    return pcoreMode ? PCORE_TEMP_SUBDIR : LEGACY_TEMP_SUBDIR;
+#else
+    return LEGACY_TEMP_SUBDIR;
+#endif
+}
+
+const char* modeName()
+{
+#ifdef PCORE_DUMP
+    return pcoreMode ? "PCore" : "CPU diagnostic";
+#else
+    return "CPU diagnostic";
+#endif
+}
+
+int modeNothingCollectedExit()
+{
+#ifdef PCORE_DUMP
+    return pcoreMode ? exitAllSelectorsFailed : exitNoEvents;
+#else
+    return exitNoEvents;
+#endif
+}
 
 // Event reception timestamps
 std::string cperErrorCountReceivedTime;
@@ -213,12 +299,15 @@ static_assert(sizeof(PcieHbTelemetryData) == 952);
 
 void logMsg(const std::string& msg)
 {
+    // stdout first and unconditionally: the dump manager's journal is the only
+    // record left when the report cannot be written or the archive is dropped.
+    std::cout << msg << std::endl;
+
     std::fstream logFile;
     logFile.open(tempPath + "/Execution_Report.txt", std::ios::app);
     if (logFile)
     {
         logFile << msg << std::endl;
-        std::cout << msg << std::endl;
     }
     logFile.close();
 }
@@ -232,21 +321,133 @@ std::string getCurrentTimestamp()
     return ss.str();
 }
 
+/** @brief Timestamped Execution_Report.txt line. */
+void reportMsg(const std::string& msg)
+{
+    logMsg(std::format("[{}] {}", getCurrentTimestamp(), msg));
+}
+
+/** @brief Archive base name: obmcdump_<id>_<epoch seconds>.
+ *
+ *  The dump manager parses the second token as epoch seconds when it builds
+ *  the entry, so an MMDDHHMMSS token there produced nonsense Created and
+ *  CompletedTime values on every dump this tool made (D5).
+ */
 std::string generateTempFolderName(const std::string& id)
 {
-    auto now = std::chrono::system_clock::now();
-    std::time_t timeNow = std::chrono::system_clock::to_time_t(now);
+    const auto epoch = std::chrono::duration_cast<std::chrono::seconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
 
-    struct tm timeInfo;
-    char timeString[26];
-    localtime_r(&timeNow, &timeInfo);
-
-    sprintf(timeString, "%02d%02d%02d%02d%02d", timeInfo.tm_mon + 1,
-            timeInfo.tm_mday, timeInfo.tm_hour, timeInfo.tm_min,
-            timeInfo.tm_sec);
-
-    return std::format("obmcdump_{}_{}", id, timeString);
+    return std::format("obmcdump_{}_{}", id, epoch);
 }
+
+/** @brief Removes a directory tree when the enclosing scope exits.
+ *
+ *  The staging directory is created before the argument checks that can bail
+ *  out, and those returns bypassed the explicit cleanup at the end of main.
+ *  Nothing else sweeps the collector's temp root, so every such request leaked
+ *  a directory until the next reboot (D4).
+ */
+class TempDirGuard
+{
+  public:
+    TempDirGuard(const TempDirGuard&) = delete;
+    TempDirGuard& operator=(const TempDirGuard&) = delete;
+    TempDirGuard(TempDirGuard&&) = delete;
+    TempDirGuard& operator=(TempDirGuard&&) = delete;
+
+    explicit TempDirGuard(std::string dir) : path(std::move(dir)) {}
+
+    ~TempDirGuard()
+    {
+        std::error_code ec;
+        fs::remove_all(path, ec);
+    }
+
+  private:
+    std::string path;
+};
+
+#ifdef PCORE_DUMP
+/** @brief Exclusive per-terminus lock held for the length of a collection.
+ *
+ *  The staging filename is fixed, so two collectors working the same terminus
+ *  would overwrite each other's payloads. pldmd deliberately keeps no
+ *  collection state and refuses nothing, so this lock is the only thing that
+ *  serialises them. Requests routed through the dump manager are already
+ *  serialised by its own gate; this covers direct invocations.
+ */
+class TerminusLock
+{
+  public:
+    TerminusLock(const TerminusLock&) = delete;
+    TerminusLock& operator=(const TerminusLock&) = delete;
+    TerminusLock(TerminusLock&&) = delete;
+    TerminusLock& operator=(TerminusLock&&) = delete;
+
+    explicit TerminusLock(const std::string& terminus) :
+        path(std::format("{}/cpu-diag-dump-{}.lock", LOCK_DIR, terminus))
+    {}
+
+    ~TerminusLock()
+    {
+        if (fd >= 0)
+        {
+            flock(fd, LOCK_UN);
+            close(fd);
+        }
+    }
+
+    /** @brief Take the lock, giving up after timeoutSec seconds. */
+    bool acquire(int timeoutSec)
+    {
+        std::error_code ec;
+        fs::create_directories(LOCK_DIR, ec);
+
+        fd = open(path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
+        if (fd < 0)
+        {
+            logMsg(std::format("Failed to open lock {}: {}", path,
+                               strerror(errno)));
+            return false;
+        }
+
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSec);
+        for (;;)
+        {
+            if (flock(fd, LOCK_EX | LOCK_NB) == 0)
+            {
+                return true;
+            }
+            if (errno != EWOULDBLOCK && errno != EINTR)
+            {
+                logMsg(std::format("Failed to lock {}: {}", path,
+                                   strerror(errno)));
+                break;
+            }
+            if (std::chrono::steady_clock::now() >= deadline)
+            {
+                logMsg(std::format(
+                    "Timed out after {}s waiting for lock {}; another "
+                    "collection holds this terminus",
+                    timeoutSec, path));
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+
+        close(fd);
+        fd = -1;
+        return false;
+    }
+
+  private:
+    std::string path;
+    int fd = -1;
+};
+#endif // PCORE_DUMP
 
 bool loadDeviceToTerminusMap(const std::string& configPath,
                              std::unordered_map<std::string, PldmTarget>& map)
@@ -513,6 +714,322 @@ void clearStagingFiles(const std::string& eventDir)
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// PCore mode
+// ---------------------------------------------------------------------------
+
+#ifdef PCORE_DUMP
+/** @brief Locate the PCore dump effecter object of one CPU package.
+ *
+ *  Discovery is by interface through ObjectMapper plus the terminus-prefixed
+ *  object name, so no EID, effecter ID or object path is ever assumed.
+ *
+ *  @param[in] terminus - PLDM terminus name owning the CPU package.
+ *  @param[in] eid - EID of that package, reported in the not-found log only.
+ *
+ *  @return The object path, or an empty string when the CPU exposes none.
+ */
+std::string findPCoreEffecterPath(const std::string& terminus, int eid)
+{
+    try
+    {
+        sdbusplus::bus_t bus = sdbusplus::bus::new_default();
+        auto method = bus.new_method_call(MAPPER_SERVICE, MAPPER_PATH,
+                                          MAPPER_INTERFACE, "GetSubTreePaths");
+        method.append(std::string(pcore::controlRoot));
+        method.append(0); // depth
+        method.append(
+            std::vector<std::string>{std::string(pcore::pcoreDumpInterface)});
+
+        std::vector<std::string> paths;
+        bus.call(method).read(paths);
+
+        const std::string prefix = terminus + "_";
+        for (const auto& path : paths)
+        {
+            if (!fs::path(path).filename().string().starts_with(prefix))
+            {
+                continue;
+            }
+
+            // Matching stops at the terminus-prefixed name deliberately.
+            // pldmd builds these paths flat as
+            // /xyz/openbmc_project/control/<effecterName>, so there is no
+            // parent component to carry an EID, and the fallback name for an
+            // effecter with no PDR auxiliary name embeds the TID rather than
+            // the EID. A platform that ever fronted both packages behind a
+            // single terminus name could therefore not be separated here at
+            // all; the mechanism for that is the per-CPU
+            // cpu/pcore_dump_control association pldmd already publishes on
+            // each effecter, not the object path.
+            logMsg(std::format("Found PCore dump effecter: {}", path));
+            return path;
+        }
+
+        logMsg(std::format(
+            "No {} object named for terminus {} (EID {}) among {} candidate(s)",
+            pcore::pcoreDumpInterface, terminus, eid, paths.size()));
+    }
+    catch (const std::exception& e)
+    {
+        logMsg(std::format("ObjectMapper query for {} failed: {}",
+                           pcore::pcoreDumpInterface, e.what()));
+    }
+
+    return "";
+}
+
+/** @brief Read one of the selector bound properties off the effecter. */
+std::optional<uint64_t> readPCoreBound(const std::string& effecterPath,
+                                       const char* property)
+{
+    try
+    {
+        sdbusplus::bus_t bus = sdbusplus::bus::new_default();
+        auto method = bus.new_method_call(PLDM_SERVICE, effecterPath.c_str(),
+                                          PROPERTIES_INTERFACE, "Get");
+        method.append(std::string(pcore::pcoreDumpInterface), property);
+
+        std::variant<uint64_t> value;
+        bus.call(method).read(value);
+        return std::get<uint64_t>(value);
+    }
+    catch (const std::exception& e)
+    {
+        logMsg(std::format("Failed to read {} from {}: {}", property,
+                           effecterPath, e.what()));
+        return std::nullopt;
+    }
+}
+
+/** @brief Dispatch a dump of one PCore.
+ *
+ *  A successful return means the set was handed to the device, never that a
+ *  payload followed. Only pre-dispatch rejections throw.
+ *
+ *  @param[in] effecterPath - Object carrying com.nvidia.PCoreDump.
+ *  @param[in] pcoreId - Selector to dump.
+ *  @param[out] error - Reason text when the call was rejected.
+ *
+ *  @return True when the request was dispatched.
+ */
+bool collectPCore(const std::string& effecterPath, uint64_t pcoreId,
+                  std::string& error)
+{
+    try
+    {
+        sdbusplus::bus_t bus = sdbusplus::bus::new_default();
+        auto method = bus.new_method_call(PLDM_SERVICE, effecterPath.c_str(),
+                                          pcore::pcoreDumpInterface,
+                                          pcore::createDumpMethod);
+        method.append(pcoreId);
+        bus.call(method);
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        error = e.what();
+        return false;
+    }
+}
+
+/** @brief Discard any queued inotify events without acting on them. */
+void drainInotify(int inotifyFd)
+{
+    std::array<char, 4096> buffer{};
+    while (read(inotifyFd, buffer.data(), buffer.size()) > 0)
+    {}
+}
+
+/** @brief Wait for pldmd to stage a payload at path.
+ *
+ *  pldmd publishes by rename, so the file either is not there or is complete;
+ *  existence is therefore the decision and inotify only shortens the wait. The
+ *  watch is armed by the caller before the trigger, and the periodic existence
+ *  check covers an event delivered before the watch or lost in the queue.
+ *
+ *  @param[in] inotifyFd - Watch armed on the staging directory.
+ *  @param[in] path - Staged payload to wait for.
+ *  @param[in] timeoutSec - Seconds to wait before giving up.
+ *
+ *  @return True when the payload appeared within the timeout.
+ */
+bool waitForStagedFile(int inotifyFd, const std::string& path, int timeoutSec)
+{
+    constexpr int POLL_INTERVAL_MS = 2000;
+
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSec);
+
+    for (;;)
+    {
+        if (fs::exists(path))
+        {
+            return true;
+        }
+
+        const auto remainingMs =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline - std::chrono::steady_clock::now())
+                .count();
+        if (remainingMs <= 0)
+        {
+            return false;
+        }
+
+        struct pollfd pfd{inotifyFd, POLLIN, 0};
+        const int waitMs =
+            static_cast<int>(std::min<int64_t>(remainingMs, POLL_INTERVAL_MS));
+
+        const int ret = poll(&pfd, 1, waitMs);
+        if (ret > 0)
+        {
+            drainInotify(inotifyFd);
+        }
+        else if (ret < 0 && errno != EINTR)
+        {
+            logMsg(std::format("Poll error while waiting for {}: {}", path,
+                               strerror(errno)));
+            return fs::exists(path);
+        }
+    }
+}
+
+/** @brief Tally of one PCore collection request. */
+struct PCoreOutcome
+{
+    size_t requested = 0;
+    size_t collected = 0;
+    size_t rejected = 0;   // Collect threw before any wire traffic
+    size_t timedOut = 0;   // dispatched, but no payload within the timeout
+    size_t copyFailed = 0; // payload arrived, staging it locally failed
+};
+
+/** @brief Run the per-selector collection loop for one CPU package.
+ *
+ *  Each iteration clears the staged payload of the previous selector,
+ *  dispatches its own, waits for the replacement and copies it out under a
+ *  name derived from the selector just requested. A selector that fails is
+ *  recorded and skipped: one dead PCore must not discard the rest of a bulk
+ *  collection.
+ *
+ *  @param[in] effecterPath - Object carrying com.nvidia.PCoreDump.
+ *  @param[in] eventDir - pldmd staging directory of this terminus.
+ *  @param[in] selectors - Selectors to collect, in order.
+ *
+ *  @return Counts of what was collected and how the rest failed.
+ */
+PCoreOutcome runPCoreLoop(const std::string& effecterPath,
+                          const std::string& eventDir,
+                          const std::vector<uint64_t>& selectors)
+{
+    PCoreOutcome outcome;
+    outcome.requested = selectors.size();
+
+    const std::string stagedPath =
+        eventDir + "/" + std::string(PCORE_DUMP_EVENT_FILE);
+
+    std::error_code ec;
+    fs::create_directories(eventDir, ec);
+
+    const int inotifyFd = inotify_init1(IN_NONBLOCK);
+    if (inotifyFd < 0)
+    {
+        reportMsg(
+            std::format("Failed to initialize inotify: {}", strerror(errno)));
+        outcome.rejected = selectors.size();
+        return outcome;
+    }
+
+    // Armed before the first trigger, and kept armed across the loop, so no
+    // payload can land in the gap between triggering and watching. IN_MOVED_TO
+    // is required: pldmd publishes with rename, which never reports
+    // IN_CLOSE_WRITE.
+    const int watchFd = inotify_add_watch(inotifyFd, eventDir.c_str(),
+                                          IN_MOVED_TO | IN_CLOSE_WRITE);
+    if (watchFd < 0)
+    {
+        reportMsg(
+            std::format("Failed to watch {}: {}", eventDir, strerror(errno)));
+        close(inotifyFd);
+        outcome.rejected = selectors.size();
+        return outcome;
+    }
+
+    for (const auto selector : selectors)
+    {
+        // Clear the previous payload so the wait below cannot be satisfied by
+        // it, then drop the events that removal and its predecessor queued.
+        if (fs::exists(stagedPath))
+        {
+            fs::remove(stagedPath, ec);
+            if (ec)
+            {
+                reportMsg(std::format(
+                    "PCore {}: failed to clear stale staged file {}: {}",
+                    selector, stagedPath, ec.message()));
+                outcome.rejected++;
+                continue;
+            }
+        }
+        drainInotify(inotifyFd);
+
+        std::string error;
+        if (!collectPCore(effecterPath, selector, error))
+        {
+            reportMsg(std::format("PCore {}: rejected before dispatch: {}",
+                                  selector, error));
+            outcome.rejected++;
+            continue;
+        }
+
+        if (!waitForStagedFile(inotifyFd, stagedPath, timeoutSeconds))
+        {
+            // A firmware rejection after dispatch looks exactly like a payload
+            // that never came; only the pldmd journal tells them apart.
+            reportMsg(std::format(
+                "PCore {}: no payload staged within {}s (see the pldmd journal "
+                "for a completion code)",
+                selector, timeoutSeconds));
+            outcome.timedOut++;
+            continue;
+        }
+
+        const auto outName =
+            std::format("PCoreDump_{}_PCore_{}.bin", targetDevice, selector);
+        const auto outPath = tempPath + "/" + outName;
+
+        fs::copy_file(stagedPath, outPath, fs::copy_options::overwrite_existing,
+                      ec);
+        if (ec)
+        {
+            reportMsg(std::format("PCore {}: failed to copy {} to {}: {}",
+                                  selector, stagedPath, outPath, ec.message()));
+            // copy_file leaves whatever it managed to write behind, and the
+            // archive step packs the whole directory, so a truncated payload
+            // would ship looking exactly like a good one.
+            std::error_code rmEc;
+            fs::remove(outPath, rmEc);
+            outcome.copyFailed++;
+            continue;
+        }
+
+        const auto size = fs::file_size(outPath, ec);
+        reportMsg(std::format("PCore {}: collected {} ({} bytes)", selector,
+                              outName, ec ? 0 : size));
+        outcome.collected++;
+    }
+
+    // The last payload belongs to no further request; leaving it staged would
+    // let the next collection mistake it for its own.
+    fs::remove(stagedPath, ec);
+
+    inotify_rm_watch(inotifyFd, watchFd);
+    close(inotifyFd);
+    return outcome;
+}
+#endif // PCORE_DUMP
 
 std::string getLinkSpeedName(uint8_t speed)
 {
@@ -1063,23 +1580,140 @@ void printUsage()
 {
     printf("cpu-diagnostic-dump version " VERSION "\n");
     printf("Usage: cpu-diagnostic-dump -p <file_path> -i <dump_id> -t "
-           "<temp_path> -d <device_type> [-T <timeout_secs>]\n");
+           "<temp_path> -d <device_type> [-T <timeout_secs>]"
+#ifdef PCORE_DUMP
+           " [-m -c <pcore_ids>]"
+#endif
+           "\n");
     printf("\nOptions:\n");
     printf("  -p <dump_path>     Final dump output directory\n");
     printf("  -i <dump_id>       Unique dump identifier\n");
     printf("  -t <temp_path>     Temporary working directory\n");
     printf("  -d <device_type>   Target device from %s\n",
            PLDM_STATIC_CONFIG_PATH);
-    printf("  -T <timeout_secs>  Event reception timeout (default: 90s)\n");
+    printf("  -T <timeout_secs>  Payload reception timeout, per PCore in "
+           "PCore mode (default: %d)\n",
+           DEFAULT_TIMEOUT_SECONDS);
+#ifdef PCORE_DUMP
+    printf("  -m                 PCore mode: collect raw per-PCore dumps "
+           "instead of the legacy bundle\n");
+    printf("  -c <pcore_ids>     PCore mode selectors: \"%s\" or a "
+           "comma-separated list, e.g. 1,3\n",
+           pcore::allSelectorsToken);
+#endif
 }
+
+/** @brief Parse the -T argument without throwing on junk (D8). */
+bool parseTimeoutArg(const char* arg, int& out)
+{
+    const char* end = arg + strlen(arg);
+    int value = 0;
+    const auto [ptr, ec] = std::from_chars(arg, end, value);
+    if (ec != std::errc{} || ptr != end || value <= 0)
+    {
+        return false;
+    }
+    out = value;
+    return true;
+}
+
+#ifdef PCORE_DUMP
+/** @brief Collect raw per-PCore dumps for one CPU package.
+ *
+ *  @param[in] pldmTarget - Terminus of the CPU named on the command line.
+ *  @param[in] eventDir - pldmd staging directory of that terminus.
+ *  @param[out] collected - Number of payloads written into tempPath.
+ *
+ *  @return exitSuccess when at least one payload was collected, otherwise the
+ *          exit code naming how the request failed.
+ */
+int runPCoreMode(const PldmTarget& pldmTarget, const std::string& eventDir,
+                 size_t& collected)
+{
+    collected = 0;
+
+    // Serialise against direct invocations before touching staging. Scoped to
+    // the terminus and deliberately not to the EID: pldmd stages by terminus
+    // name under a single fixed filename, so two packages sharing a name also
+    // share the staged file and must not collect at the same time.
+    TerminusLock lock(pldmTarget.terminus);
+    if (!lock.acquire(timeoutSeconds))
+    {
+        return exitAllSelectorsFailed;
+    }
+
+    const auto effecterPath =
+        findPCoreEffecterPath(pldmTarget.terminus, pldmTarget.eid);
+    if (effecterPath.empty())
+    {
+        reportMsg(std::format(
+            "{} ({}) exposes no PCore dump effecter; nothing to collect",
+            targetDevice, pldmTarget.terminus));
+        return exitAllSelectorsFailed;
+    }
+
+    const auto minId = readPCoreBound(effecterPath, "MinPCoreId");
+    const auto maxId = readPCoreBound(effecterPath, "MaxPCoreId");
+    if (!minId || !maxId || *minId > *maxId)
+    {
+        reportMsg(std::format("{} advertises no usable selector range",
+                              effecterPath));
+        return exitAllSelectorsFailed;
+    }
+
+    // The dump manager already validated this list; re-checking here keeps a
+    // direct invocation from putting an out-of-range value on the wire.
+    const auto parsed = pcore::parseSelectors(pcoreSelectorArg, *minId, *maxId);
+    if (!parsed)
+    {
+        reportMsg(std::format("Selector '{}' is not within {}..{}",
+                              *parsed.badToken, *minId, *maxId));
+        return exitUsage;
+    }
+
+    const auto selectors = pcore::expandSelectors(parsed.ids, *minId, *maxId);
+    reportMsg(std::format("Collecting PCore dump(s) [{}] for {} ({}), {}s per "
+                          "selector",
+                          pcore::formatSelectors(selectors), targetDevice,
+                          pldmTarget.terminus, timeoutSeconds));
+
+    const auto outcome = runPCoreLoop(effecterPath, eventDir, selectors);
+    collected = outcome.collected;
+
+    reportMsg(std::format(
+        "Collected {} of {} requested PCore(s); {} rejected, {} timed out, "
+        "{} failed to stage",
+        outcome.collected, outcome.requested, outcome.rejected,
+        outcome.timedOut, outcome.copyFailed));
+
+    if (outcome.collected > 0)
+    {
+        return exitSuccess;
+    }
+    // Every selector failed. Name the failure the operator has to act on: a
+    // request that never reached the device, one dispatched and answered by
+    // silence, or payloads that arrived and could not be kept.
+    if (outcome.rejected == 0 && outcome.timedOut == 0)
+    {
+        return exitArchiveFailed;
+    }
+    return outcome.rejected == 0 ? exitAllSelectorsTimedOut
+                                 : exitAllSelectorsFailed;
+}
+#endif // PCORE_DUMP
 
 int main(int argc, char** argv)
 {
-    int result = 0;
+    int result = exitSuccess;
 
     // Parse command line arguments
     int opt;
-    while ((opt = getopt(argc, argv, "p:i:t:d:T:h")) != -1)
+#ifdef PCORE_DUMP
+    constexpr auto optString = "p:i:t:d:T:mc:h";
+#else
+    constexpr auto optString = "p:i:t:d:T:h";
+#endif
+    while ((opt = getopt(argc, argv, optString)) != -1)
     {
         switch (opt)
         {
@@ -1096,12 +1730,26 @@ int main(int argc, char** argv)
                 targetDevice = optarg;
                 break;
             case 'T':
-                timeoutSeconds = std::stoi(optarg);
+                if (!parseTimeoutArg(optarg, timeoutSeconds))
+                {
+                    fprintf(stderr,
+                            "Error: -T needs a positive integer, got '%s'\n",
+                            optarg);
+                    return exitUsage;
+                }
                 break;
+#ifdef PCORE_DUMP
+            case 'm':
+                pcoreMode = true;
+                break;
+            case 'c':
+                pcoreSelectorArg = optarg;
+                break;
+#endif
             case 'h':
             default:
                 printUsage();
-                return (opt == 'h') ? 0 : 1;
+                return (opt == 'h') ? exitSuccess : exitUsage;
         }
     }
 
@@ -1109,7 +1757,7 @@ int main(int argc, char** argv)
         targetDevice.empty())
     {
         printUsage();
-        return 1;
+        return exitUsage;
     }
 
     using std::chrono::duration_cast;
@@ -1118,24 +1766,38 @@ int main(int argc, char** argv)
     auto t1 = high_resolution_clock::now();
 
     std::string tempFolderName = generateTempFolderName(dumpID);
-    std::string tempDir = tempPath + "/CPUDiagnosticDump/";
+    std::string tempDir = tempPath + "/" + modeTempSubdir() + "/";
     tempPath = tempDir + tempFolderName;
 
-    // Create directories
-    if (!fs::exists(tempPath))
+    // Create directories. These run before the try below, so the throwing
+    // overloads would have ended the process by std::terminate rather than a
+    // usage exit if the filesystem were read-only or full.
+    std::error_code dirEc;
+    fs::create_directories(tempPath, dirEc);
+    if (dirEc && !fs::is_directory(tempPath))
     {
-        fs::create_directories(tempPath);
+        fprintf(stderr, "Error: cannot create staging directory '%s': %s\n",
+                tempPath.c_str(), dirEc.message().c_str());
+        return exitUsage;
     }
-    if (!fs::exists(dumpPath))
+
+    // Removes tempPath however this function leaves, including the argument
+    // checks below that return before the archive step.
+    TempDirGuard tempGuard(tempPath);
+
+    fs::create_directories(dumpPath, dirEc);
+    if (dirEc && !fs::is_directory(dumpPath))
     {
-        fs::create_directories(dumpPath);
+        fprintf(stderr, "Error: cannot create dump directory '%s': %s\n",
+                dumpPath.c_str(), dirEc.message().c_str());
+        return exitUsage;
     }
 
     // Load targetDevice validation and PLDM terminus mapping from config
     std::unordered_map<std::string, PldmTarget> deviceToTerminusMap;
     if (!loadDeviceToTerminusMap(PLDM_STATIC_CONFIG_PATH, deviceToTerminusMap))
     {
-        return 1;
+        return exitUsage;
     }
 
     auto it = deviceToTerminusMap.find(targetDevice);
@@ -1153,42 +1815,58 @@ int main(int argc, char** argv)
             first = false;
         }
         fprintf(stderr, "\n");
-        return 1;
+        return exitUsage;
     }
     const auto& pldmTarget = it->second;
     std::string pldmTerminus = pldmTarget.terminus;
 
     std::string eventDir = std::string(EVENT_STAGING_BASE) + "/" + pldmTerminus;
 
-    logMsg(std::format("Starting CPU diagnostic dump collection for {} ({})",
+    logMsg(std::format("Starting {} dump collection for {} ({})", modeName(),
                        targetDevice, pldmTerminus));
 
     try
     {
-        // Step 1: Clear existing staging files
-        clearStagingFiles(eventDir);
+        // Number of artifacts staged for the archive. Zero means there is
+        // nothing worth archiving.
+        size_t produced = 0;
 
-        // Step 2: Trigger all PLDM effecters
-        logMsg("Triggering PLDM effecters...");
-        triggerAllEffecters(pldmTarget);
+#ifdef PCORE_DUMP
+        if (pcoreMode)
+        {
+            result = runPCoreMode(pldmTarget, eventDir, produced);
+        }
+        else
+#endif
+        {
+            // Step 1: Clear existing staging files
+            clearStagingFiles(eventDir);
 
-        // Step 3: Wait for event files
-        std::set<std::string> receivedEvents;
-        int eventCount = waitForEvents(eventDir, receivedEvents);
-        // Expecting 2 events (LTSSM disabled - backend not ready)
-        logMsg(std::format("Received {} of 2 expected events", eventCount));
+            // Step 2: Trigger all PLDM effecters
+            logMsg("Triggering PLDM effecters...");
+            triggerAllEffecters(pldmTarget);
 
-        // Step 4: Create combined JSON dump
-        json dumpJson = createCombinedDump(eventDir, receivedEvents);
+            // Step 3: Wait for event files
+            std::set<std::string> receivedEvents;
+            int eventCount = waitForEvents(eventDir, receivedEvents);
+            // Expecting 2 events (LTSSM disabled - backend not ready)
+            logMsg(std::format("Received {} of 2 expected events", eventCount));
 
-        // Step 5: Write dump file to temp directory
-        std::string outputFilename =
-            std::format("cpu_diagnostic_dump_{}.json", dumpID);
-        std::string outputPath = tempPath + "/" + outputFilename;
-        std::ofstream outFile(outputPath);
-        outFile << dumpJson.dump(2);
-        outFile.close();
-        logMsg(std::format("Created dump file: {}", outputPath));
+            // Step 4: Create combined JSON dump
+            json dumpJson = createCombinedDump(eventDir, receivedEvents);
+
+            // Step 5: Write dump file to temp directory
+            std::string outputFilename =
+                std::format("cpu_diagnostic_dump_{}.json", dumpID);
+            std::string outputPath = tempPath + "/" + outputFilename;
+            std::ofstream outFile(outputPath);
+            outFile << dumpJson.dump(2);
+            outFile.close();
+            logMsg(std::format("Created dump file: {}", outputPath));
+
+            produced = eventCount > 0 ? static_cast<size_t>(eventCount) : 0;
+            result = produced > 0 ? exitSuccess : exitNoEvents;
+        }
 
         // Step 6: Compress and copy to final location
         auto t2 = high_resolution_clock::now();
@@ -1205,53 +1883,67 @@ int main(int argc, char** argv)
             "Execution time: {} hours, {} minutes, {} seconds, {} milliseconds",
             hours, mins, seconds, msecs));
 
-        const std::string archivePath =
-            dumpPath + "/" + tempFolderName + ".tar.xz";
-        int compressionRc = 0;
-        if (eventCount > 0)
+        if (produced > 0)
         {
-            std::vector<std::string> command = {"tar", "-Jcf",  archivePath,
-                                                "-C",  tempDir, tempFolderName};
-
+            const auto archivePath =
+                dumpPath + "/" + tempFolderName + ".tar.xz";
+            // tar writes under a dot-prefixed name in the same directory and
+            // the archive is published by renaming it into place. The dump
+            // manager watches this directory, so writing under the final name
+            // meant a failed tar queued an IN_CLOSE_WRITE for an archive the
+            // cleanup then deleted, and the manager stat()ed a path that had
+            // gone. A same-directory rename is atomic and reports IN_MOVED_TO
+            // exactly once; the failure path only ever removes a name the
+            // manager has been told to ignore (D3).
+            const auto stagingPath =
+                dumpPath + "/." + tempFolderName + ".tar.xz.part";
             logMsg(std::format("Compressing dump to `{}`", archivePath));
-            compressionRc = phosphor::dump::compression::runShellWithLock(
-                phosphor::dump::compression::lockPath, std::move(command));
 
-            if (compressionRc != EXIT_SUCCESS)
+            // Compression is serialized system-wide behind the shared tar
+            // lock, and the command is an argv rather than a shell line, so
+            // the D9 fix is preserved. tar exiting 1 is a warning (a file
+            // changed while being read); the archive is still produced.
+
+            std::error_code ec;
+            std::vector<std::string> command = {"tar", "-Jcf",  stagingPath,
+                                                "-C",  tempDir, tempFolderName};
+            int tarRc = phosphor::dump::compression::runShellWithLock(
+                phosphor::dump::compression::lockPath, std::move(command));
+            if (tarRc != EXIT_SUCCESS && tarRc != EXIT_CODE_TAR_WARNING)
             {
+                // Exiting 0 here left the entry InProgress while the only copy
+                // of the data was deleted by the cleanup below (D3).
                 logMsg(std::format("Compression failed with error code: {}",
-                                   compressionRc));
+                                   tarRc));
+                fs::remove(stagingPath, ec);
+                result = exitArchiveFailed;
+            }
+            else
+            {
+                fs::rename(stagingPath, archivePath, ec);
+                if (ec)
+                {
+                    logMsg(std::format("Failed to publish {} as {}: {}",
+                                       stagingPath, archivePath, ec.message()));
+                    fs::remove(stagingPath, ec);
+                    result = exitArchiveFailed;
+                }
             }
         }
         else
         {
-            logMsg("No events received within timeout.");
+            logMsg("Nothing collected within timeout; no archive produced.");
         }
 
-        // Cleanup only this dump's unique directory. Removing the shared parent
-        // can delete files belonging to another CPU dump running concurrently.
-        fs::remove_all(tempPath);
-
-        // Set exit code based on collection status
-        // Expecting 2 events (LTSSM disabled - backend not ready)
-        if (eventCount > 0 &&
-            (compressionRc == EXIT_SUCCESS ||
-             compressionRc == EXIT_CODE_TAR_WARNING) &&
-            fs::exists(archivePath))
-        {
-            result = EXIT_SUCCESS; // Success or partial: archive produced
-        }
-        else
-        {
-            result = compressionRc != EXIT_SUCCESS ? compressionRc
-                                                   : EXIT_CODE_COMPLETE_FAILURE;
-        }
+        // tempPath is cleaned up by TempDirGuard on every exit path. Removing
+        // the shared parent here destroyed the staging of any collection
+        // running alongside this one (D4).
     }
     catch (const std::exception& e)
     {
         logMsg(std::format("Error: {}", e.what()));
         log<level::ERR>(e.what());
-        result = EXIT_CODE_COMPLETE_FAILURE;
+        result = modeNothingCollectedExit();
     }
 
     return result;

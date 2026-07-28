@@ -81,8 +81,8 @@ class Manager :
         phosphor::dump::Manager(bus, path, baseEntryPath),
         eventLoop(event.get()),
         dumpWatch(
-            eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE | IN_CREATE, EPOLLIN,
-            filePath,
+            eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE | IN_CREATE | IN_MOVED_TO,
+            EPOLLIN, filePath,
             std::bind(
                 std::mem_fn(&phosphor::dump::system::Manager::watchCallback),
                 this, std::placeholders::_1)),
@@ -124,11 +124,38 @@ class Manager :
         }
     }
 
+    /** @brief Release one request's hold on the concurrency gate.
+     *
+     *  Idempotent: the gate is also released when the collector exits and when
+     *  the archive arrives, whichever happens first.
+     *
+     *  @param[in] key - Key inserted for this request by captureDump.
+     */
+    void clearDumpInProgress(const std::string& key);
+
   private:
     /** @brief Create Dump entry d-bus object
      *  @param[in] fullPath - Full path of the Dump file name
      */
     void createEntry(const fs::path& fullPath);
+
+#ifdef PCORE_DUMP
+    /** @brief Validate a PCoreDump request and normalise its selector list.
+     *
+     *  Resolves the named CPU to the pldmd effecter that carries
+     *  com.nvidia.PCoreDump, bounds-checks every requested selector
+     *  against the range that effecter advertises, and rewrites the PCoreIds
+     *  parameter to the de-duplicated list the collector should trigger.
+     *
+     *  @param[in,out] params - Additional arguments for the system dump.
+     *  @param[in] deviceType - CPU package the request names, e.g. "CPU_0".
+     *
+     *  @throws InvalidArgument - The CPU is unknown or exposes no PCore dump
+     *          effecter, or a selector is non-numeric or out of range.
+     */
+    void validatePCoreDumpRequest(phosphor::dump::DumpCreateParams& params,
+                                  const std::string& deviceType);
+#endif
 
     /** @brief Capture System Dump.
      *  @param[in] params - Additional arguments for system dump.

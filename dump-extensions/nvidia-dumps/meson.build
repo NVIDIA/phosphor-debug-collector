@@ -11,6 +11,12 @@ if get_option('retimer-debug-mode').enabled()
     ]
 endif
 
+if get_option('pcore-dump').enabled()
+    phosphor_dump_manager_sources += [
+        'dump-extensions/nvidia-dumps/pcore_dump.cpp',
+    ]
+endif
+
 # Per-collector binaries: all built unconditionally. Platform support for each
 # dump type is declared by Configuration.Dump records in entity-manager, not a
 # build-time flag; an unused collector is never forked at runtime.

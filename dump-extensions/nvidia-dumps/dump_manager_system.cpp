@@ -18,6 +18,9 @@
 #include "dump_manager_system.hpp"
 
 #include "dump_utils.hpp"
+#ifdef PCORE_DUMP
+#include "pcore_dump.hpp"
+#endif
 #include "xyz/openbmc_project/Common/error.hpp"
 #include "xyz/openbmc_project/Dump/Create/error.hpp"
 
@@ -64,6 +67,7 @@ enum class DiagnosticType
     HardwareCheckout,
     CPLD,
     CPUDiagnosticDump,
+    PCoreDump,
     Unknown
 };
 
@@ -84,6 +88,12 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"HardwareCheckout", DiagnosticType::HardwareCheckout},
     {"CPLD", DiagnosticType::CPLD},
     {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump},
+#ifdef PCORE_DUMP
+    // Deliberately absent from SYSTEM_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE:
+    // PCoreDump is reached through its own Processor action, not through
+    // LogService.CollectDiagnosticData.
+    {phosphor::dump::pcore::pcoreDiagnosticType, DiagnosticType::PCoreDump},
+#endif
 };
 
 DiagnosticType getDiagnosticType(const std::string& typeStr)
@@ -200,6 +210,67 @@ std::string buildDumpProgressKey(const phosphor::dump::DumpCreateParams& params)
 
 // TODO: Merge system dump with bmc dump to avoid code duplication.
 
+#ifdef PCORE_DUMP
+void Manager::validatePCoreDumpRequest(phosphor::dump::DumpCreateParams& params,
+                                       const std::string& deviceType)
+{
+    namespace pcore = phosphor::dump::pcore;
+    using INV_ARG =
+        xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME;
+    using INV_VAL =
+        xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
+
+    // The CPU is named by the Redfish URI, so it always reaches PDC as
+    // DeviceType. There is no defaulting: an unnamed CPU is a bad request.
+    if (deviceType.empty())
+    {
+        log<level::ERR>(
+            "PCoreDump: DeviceType is required and must name a CPU package");
+        elog<InvalidArgument>(INV_ARG("DeviceType"), INV_VAL(""));
+    }
+
+    auto target = pcore::resolveEffecter(bus, deviceType);
+    if (!target)
+    {
+        log<level::ERR>(
+            fmt::format(
+                "PCoreDump: {} does not resolve to a terminus exposing a PCore "
+                "dump effecter",
+                deviceType)
+                .c_str());
+        elog<InvalidArgument>(INV_ARG("DeviceType"),
+                              INV_VAL(deviceType.c_str()));
+        return;
+    }
+
+    // An absent or empty PCoreIds is valid and requests every PCore.
+    const auto requested = lookupCreateParam(params, pcore::pcoreIdsKey);
+    const auto selectors =
+        pcore::parseSelectors(requested, target->minId, target->maxId);
+    if (!selectors)
+    {
+        log<level::ERR>(
+            fmt::format(
+                "PCoreDump: selector '{}' in PCoreIds='{}' is not a decimal "
+                "value within {}..{}",
+                *selectors.badToken, requested, target->minId, target->maxId)
+                .c_str());
+        elog<InvalidArgument>(INV_ARG(pcore::pcoreIdsKey),
+                              INV_VAL(selectors.badToken->c_str()));
+        return;
+    }
+
+    // Hand the collector the de-duplicated list so the request the operator
+    // made and the selectors that get triggered cannot drift apart.
+    auto normalized = pcore::formatSelectors(selectors.ids);
+    log<level::INFO>(
+        fmt::format("PCoreDump: {} on {} via {}, requested PCoreIds='{}'",
+                    normalized, deviceType, target->path, requested)
+            .c_str());
+    params[pcore::pcoreIdsKey] = std::move(normalized);
+}
+#endif // PCORE_DUMP
+
 void Manager::limitDumpEntries()
 {
 #if SYSTEM_DUMP_MAX_LIMIT == 0
@@ -289,6 +360,15 @@ sdbusplus::object_path Manager::createDump(
             Manager::dumpInProgress.contains(progressKey) ? "yes" : "no",
             formatCreateDumpParamsSummary(params))
             .c_str());
+
+#ifdef PCORE_DUMP
+    // Validate before the busy gate: a malformed request should read back as
+    // the parameter error it is, not as "another collection is running".
+    if (diagnosticType == DiagnosticType::PCoreDump)
+    {
+        validatePCoreDumpRequest(params, dtRaw);
+    }
+#endif
 
     if (diagnosticType == DiagnosticType::NetIR &&
         progressKey.find(':') == std::string::npos)
@@ -530,6 +610,24 @@ uint32_t cpuDiagnosticDump(const std::string& dumpId,
         "System dump: Error occurred during CPU diagnostic dump execution");
 }
 
+#ifdef PCORE_DUMP
+uint32_t pcoreDump(const std::string& dumpId, const std::string& dumpPath,
+                   const std::string& tempPath, const std::string& deviceType,
+                   const std::string& selectors)
+{
+    // -T is the authoritative per-selector timeout. pldmd holds no timer of
+    // its own, so this is the single collection SLA for the request.
+    return executeDumpCommand(
+        PCORE_DUMP_BIN_PATH, dumpId, dumpPath,
+        {{"-t", tempPath},
+         {"-d", deviceType},
+         {"-m", ""},
+         {"-c", selectors},
+         {"-T", std::to_string(PCORE_DUMP_COLLECTION_TIMEOUT)}},
+        "System dump: Error occurred during PCore dump execution");
+}
+#endif // PCORE_DUMP
+
 // NOLINTEND
 uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
                               const std::string& progressKey)
@@ -582,6 +680,28 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
     params.erase("DiagnosticType");
     params.erase("DeviceID");
     params.erase("DeviceType");
+
+#ifdef PCORE_DUMP
+    // Consumed as an explicit collector argument below, so it must not reach
+    // the residual-argument loop (D1, D11).
+    std::string pcoreSelectors =
+        lookupCreateParam(params, phosphor::dump::pcore::pcoreIdsKey);
+    params.erase(phosphor::dump::pcore::pcoreIdsKey);
+#endif
+
+    // The Originator keys are consumed by extractOriginatorProperties when the
+    // entry is built. Leaving them here makes the residual-argument loop log
+    // them as unknown arguments on every single dump (D11).
+    {
+        using CreateParametersXYZ = sdbusplus::xyz::openbmc_project::Dump::
+            server::Create::CreateParameters;
+        using CreateIfaceXYZ =
+            sdbusplus::xyz::openbmc_project::Dump::server::Create;
+        params.erase(CreateIfaceXYZ::convertCreateParametersToString(
+            CreateParametersXYZ::OriginatorId));
+        params.erase(CreateIfaceXYZ::convertCreateParametersToString(
+            CreateParametersXYZ::OriginatorType));
+    }
 
     auto diagnosticType = getDiagnosticType(diagnosticTypeStr);
 
@@ -644,8 +764,17 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
         std::array<std::string, 3> addArgs;
         for (const auto& param : params)
         {
-            auto kvPair = param.first + "=" +
-                          std::get<std::string>(param.second);
+            // A uint64_t variant here used to abort the forked child with
+            // bad_variant_access before it ever reached execv (D1).
+            auto value = variantAsString(param.second);
+            if (!value)
+            {
+                log<level::ERR>(
+                    "System dump: Unsupported additional argument type",
+                    entry("KEY=%s", param.first.c_str()));
+                continue;
+            }
+            auto kvPair = param.first + "=" + *value;
             if (param.first == "bf_ip")
             {
                 addArgs[0] = kvPair;
@@ -762,6 +891,14 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
                                       deviceType);
                 }
                 break;
+#ifdef PCORE_DUMP
+            case DiagnosticType::PCoreDump:
+                // createDump resolved the CPU and normalised the selector
+                // list, so both are known good by the time the child runs.
+                pcoreDump(id, dumpPath, CPU_DIAGNOSTIC_DUMP_TEMP_PATH,
+                          deviceType, pcoreSelectors);
+                break;
+#endif
             default:
                 log<level::ERR>("System dump: Invalid DiagnosticType");
                 elog<InternalFailure>();
@@ -945,6 +1082,21 @@ void Manager::createEntry(const fs::path& file)
     }
 }
 
+void Manager::clearDumpInProgress(const std::string& key)
+{
+    if (Manager::dumpInProgress.erase(key) == 0)
+    {
+        return;
+    }
+
+    log<level::INFO>(
+        fmt::format("Erasing system dump: dumpInProgress removed key={}, "
+                    "keys_now=[{}] size={}",
+                    key, joinDumpInProgressKeys(Manager::dumpInProgress),
+                    Manager::dumpInProgress.size())
+            .c_str());
+}
+
 void Manager::watchCallback(const UserMap& fileInfo)
 {
     for (const auto& [path, event] : fileInfo)
@@ -963,8 +1115,10 @@ void Manager::watchCallback(const UserMap& fileInfo)
             continue;
         }
 
-        // For any new dump file create dump entry object and inotify watch
-        if (event == IN_CLOSE_WRITE)
+        // For any new dump file create dump entry object and inotify watch.
+        // A collector that publishes its archive atomically renames it into
+        // place, which reports IN_MOVED_TO and never IN_CLOSE_WRITE (D2).
+        if (event == IN_CLOSE_WRITE || event == IN_MOVED_TO)
         {
             if (!std::filesystem::is_directory(path))
             {
@@ -980,7 +1134,8 @@ void Manager::watchCallback(const UserMap& fileInfo)
         else if (event == IN_CREATE && fs::is_directory(path))
         {
             auto watchObj = std::make_unique<Watch>(
-                eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE, EPOLLIN, path,
+                eventLoop, IN_NONBLOCK, IN_CLOSE_WRITE | IN_MOVED_TO, EPOLLIN,
+                path,
                 std::bind(std::mem_fn(&Manager::watchCallback), this,
                           std::placeholders::_1));
 

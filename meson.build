@@ -356,6 +356,18 @@ conf_data.set(
     description: 'Rotate dump when total size of dumps exceed the quota',
 )
 
+# Add PCore dump configuration values to main config.h
+conf_data.set(
+    'PCORE_DUMP',
+    get_option('pcore-dump').enabled(),
+    description: 'PCoreDump diagnostic type for raw per-PCore CPU dumps',
+)
+conf_data.set(
+    'PCORE_DUMP_COLLECTION_TIMEOUT',
+    get_option('PCORE_DUMP_COLLECTION_TIMEOUT'),
+    description: 'Seconds to wait for each staged PCore payload',
+)
+
 if cpp.has_header('poll.h')
     add_project_arguments('-DPLDM_HAS_POLL=1', language: 'cpp')
 endif
