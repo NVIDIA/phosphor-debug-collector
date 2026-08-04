@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -227,9 +228,18 @@ void OEMTypeAllowableValuesIf::populateFDROEMDataTypeAllowableValues(
 {
     std::vector<std::string> oemAllowableValues;
 
-    // FDR dump format is fixed
-    oemAllowableValues.emplace_back(
-        "DiagnosticType=FDR;TimeRangeStart=<yyyy>-<MM>-<dd> <HH>:<mm>:<ss>;TimeRangeEnd=<yyyy>-<MM>-<dd> <HH>:<mm>:<ss>;ExtendedSource=<source-info>");
+    // Append DataFilter values from the Meson build option
+    // FDR_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE (comma-separated), set
+    // per-platform in the bbappend. Same pattern as System dump types.
+    std::vector<std::string> fdrTypes =
+        splitString(FDR_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE, ',');
+    for (const auto& type : fdrTypes)
+    {
+        if (!type.empty())
+        {
+            oemAllowableValues.emplace_back(type);
+        }
+    }
 
     try
     {

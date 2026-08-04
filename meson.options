@@ -416,6 +416,13 @@ option(
 )
 
 option(
+    'FDR_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
+    type: 'string',
+    value: '',
+    description: 'Comma-separated OEM diagnostic data allowable types for FDR dump (set per-platform in bbappend)',
+)
+
+option(
     'FDR_DUMP_TOTAL_SIZE',
     type: 'integer',
     value: 1024,

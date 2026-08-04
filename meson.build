@@ -290,6 +290,11 @@ conf_data.set_quoted(
     get_option('FDR_DUMP_PATH'),
     description: 'Directory where FDR dumps are placed',
 )
+conf_data.set_quoted(
+    'FDR_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
+    get_option('FDR_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE'),
+    description: 'OEM diagnostic data allowable types for FDR dump',
+)
 conf_data.set(
     'FDR_DUMP_MAX_SIZE',
     get_option('FDR_DUMP_MAX_SIZE'),

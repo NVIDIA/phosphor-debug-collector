@@ -31,8 +31,10 @@
 #include <sdeventplus/exception.hpp>
 #include <sdeventplus/source/base.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <regex>
+#include <sstream>
 #include <string>
 
 namespace phosphor
@@ -189,29 +191,17 @@ uint32_t fdrDump(phosphor::dump::DumpCreateParams params)
         }
     }
 
-    // Selective FDR dump: append DataFilter to ExtendedSource so fdr_dump.sh
-    // receives it via -S flag. bmcweb passes DataFilter as a separate D-Bus
-    // param from OEMDiagnosticDataType parsing (e.g. "DataFilter=GpuDump").
-    // fdr_dump.sh already handles DataFilter parsing from the -S string.
-    //
-    // Today the only meaningful value is "GpuDump" (paired with nvidia-fdr
-    // MR 333 GpuDump profile). Empty values are skipped: bmcweb's parser
-    // preserves trailing empty tokens (so "DataFilter=" reaches us as the
-    // empty string), but appending an empty "DataFilter=" to -S would just
-    // be noise.
+    // Append validated DataFilter to ExtendedSource for fdr_dump.sh via -S.
+    // Validation is done in triggerFDRDumpScript() (parent, before fork)
+    // so InvalidArgument propagates as a D-Bus error to bmcweb.
     if (auto search = params.find("DataFilter"); search != params.end())
     {
         if (std::holds_alternative<std::string>(search->second))
         {
             auto dataFilter = std::get<std::string>(params["DataFilter"]);
-            if (!dataFilter.empty())
-            {
-                if (!extended_source.empty())
-                {
-                    extended_source += ";";
-                }
-                extended_source += "DataFilter=" + dataFilter;
-            }
+            if (!extended_source.empty())
+                extended_source += ";";
+            extended_source += "DataFilter=" + dataFilter;
         }
     }
 
@@ -315,6 +305,41 @@ uint32_t Manager::triggerFDRDumpScript(phosphor::dump::DumpCreateParams params)
             xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE;
         elog<InvalidArgument>(INV_ARG("DiagnosticType"),
                               INV_VAL(diagnosticType.c_str()));
+    }
+
+    // Validate DataFilter before fork() so InvalidArgument propagates as a
+    // D-Bus error to bmcweb (HTTP 400) rather than causing an async task
+    // failure after 202 is already sent. Follows same pattern as the
+    // DiagnosticType validation above.
+    if (auto search = params.find("DataFilter"); search != params.end())
+    {
+        if (std::holds_alternative<std::string>(search->second))
+        {
+            auto dataFilter = std::get<std::string>(search->second);
+            std::vector<std::string> validFilters;
+            std::istringstream ss(
+                std::string(FDR_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE));
+            std::string tok;
+            while (std::getline(ss, tok, ','))
+            {
+                auto pos = tok.find("DataFilter=");
+                if (pos != std::string::npos)
+                    validFilters.push_back(tok.substr(pos + 11));
+            }
+            if (dataFilter.empty() ||
+                std::find(validFilters.begin(), validFilters.end(),
+                          dataFilter) == validFilters.end())
+            {
+                log<level::ERR>("Invalid or unsupported DataFilter value",
+                                entry("DATAFILTER=%s", dataFilter.c_str()));
+                using INV_ARG = xyz::openbmc_project::Common::
+                    InvalidArgument::ARGUMENT_NAME;
+                using INV_VAL = xyz::openbmc_project::Common::
+                    InvalidArgument::ARGUMENT_VALUE;
+                elog<InvalidArgument>(INV_ARG("DataFilter"),
+                                      INV_VAL(dataFilter.c_str()));
+            }
+        }
     }
 
     log<level::INFO>(
