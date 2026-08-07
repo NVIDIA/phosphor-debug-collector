@@ -18,6 +18,7 @@
 #include "config.h"
 
 #include "com/nvidia/Dump/AllowableValues/server.hpp"
+#include "dump_utils.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <phosphor-logging/lg2.hpp>
@@ -31,6 +32,7 @@
 #include <optional>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -41,6 +43,35 @@ namespace phosphor
 {
 namespace dump
 {
+
+/** @brief Extract string or decimal from a CreateDump variant value. */
+std::optional<std::string> variantAsString(
+    const phosphor::dump::DumpCreateParams::mapped_type& v);
+
+/** @brief Read a CreateDump param by exact key; empty when absent or unset. */
+std::string lookupCreateParam(const phosphor::dump::DumpCreateParams& params,
+                              std::string_view key);
+
+#ifdef VHMC_HOST
+/** @brief Allowable OEMDiagnosticDataType values for the BMC (Manager) dump,
+ *  parsed from BMC_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE.
+ */
+const std::vector<std::string>& bmcOemAllowableValues();
+
+/** @brief The DiagnosticType of a BMC (Manager) dump request.
+ *  @return Empty when the request has no DiagnosticType parameter, which
+ *          makes it a standard BMC dump rather than an OEM one.
+ *  @throw InvalidArgument when DiagnosticType is present but empty.
+ */
+std::string bmcOemDiagnosticType(const DumpCreateParams& params);
+
+/** @brief Check that a BMC (Manager) OEM dump request has only the create
+ *  parameters it uses: DiagnosticType, Duration, SamplingRate and the
+ *  originator ones.
+ *  @throw InvalidArgument naming the first other parameter.
+ */
+void checkBmcOemDumpParamKeys(const DumpCreateParams& params);
+#endif
 
 using AllowableValuesIface = sdbusplus::server::object::object<
     sdbusplus::com::nvidia::Dump::server::AllowableValues>;
@@ -117,6 +148,12 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
      */
     void populateSystemOEMDataTypeAllowableValues(
         sdbusplus::server::com::nvidia::dump::AllowableValues& iface);
+
+#ifdef VHMC_HOST
+    /** @brief Populate OEM allowable values for BMC (Manager) dump */
+    void populateManagerOEMDataTypeAllowableValues(
+        sdbusplus::server::com::nvidia::dump::AllowableValues& iface);
+#endif
 
 #ifdef FDR_DUMP_EXTENSION
     /** @brief Populate OEM allowable values for FDR dump */

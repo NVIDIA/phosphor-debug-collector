@@ -18,6 +18,11 @@
 #include "oem_dump_utils.hpp"
 
 #include "dump_kinds.hpp"
+#include "xyz/openbmc_project/Common/error.hpp"
+#include "xyz/openbmc_project/Dump/Create/common.hpp"
+
+#include <phosphor-logging/elog-errors.hpp>
+#include <phosphor-logging/elog.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -26,7 +31,9 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <variant>
 #include <vector>
@@ -38,6 +45,36 @@ namespace dump
 
 using MapperGetSubTreeResponse =
     std::map<std::string, std::map<std::string, std::vector<std::string>>>;
+
+std::optional<std::string> variantAsString(
+    const phosphor::dump::DumpCreateParams::mapped_type& v)
+{
+    if (const auto* p = std::get_if<std::string>(&v))
+    {
+        return *p;
+    }
+    if (const auto* p = std::get_if<uint64_t>(&v))
+    {
+        return std::to_string(*p);
+    }
+    return std::nullopt;
+}
+
+std::string lookupCreateParam(const phosphor::dump::DumpCreateParams& params,
+                              std::string_view key)
+{
+    auto it = params.find(std::string(key));
+    if (it == params.end())
+    {
+        return {};
+    }
+    auto s = variantAsString(it->second);
+    if (s && !s->empty())
+    {
+        return *s;
+    }
+    return {};
+}
 
 namespace
 {
@@ -328,6 +365,10 @@ OEMTypeAllowableValuesIf::OEMTypeAllowableValuesIf(sdbusplus::bus_t& bus,
 
     populateSystemOEMDataTypeAllowableValues(*this);
 
+#ifdef VHMC_HOST
+    populateManagerOEMDataTypeAllowableValues(*this);
+#endif
+
 #ifdef FDR_DUMP_EXTENSION
     populateFDROEMDataTypeAllowableValues(*this);
 #endif
@@ -520,6 +561,106 @@ void OEMTypeAllowableValuesIf::populateSystemOEMDataTypeAllowableValues(
     coldStartEnumerate();
     rebuildAllowableValues();
 }
+
+#ifdef VHMC_HOST
+namespace
+{
+
+std::vector<std::string> splitString(const std::string& str, char delimiter)
+{
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream tokenStream(str);
+
+    while (std::getline(tokenStream, token, delimiter))
+    {
+        // Remove leading and trailing whitespace
+        token.erase(0, token.find_first_not_of(' '));
+        token.erase(token.find_last_not_of(' ') + 1);
+        if (!token.empty())
+        {
+            tokens.push_back(token);
+        }
+    }
+    return tokens;
+}
+
+} // namespace
+
+const std::vector<std::string>& bmcOemAllowableValues()
+{
+    static const std::vector<std::string> values =
+        splitString(BMC_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE, ',');
+    return values;
+}
+
+std::string bmcOemDiagnosticType(const DumpCreateParams& params)
+{
+    if (!params.contains("DiagnosticType"))
+    {
+        return {};
+    }
+    std::string diagnosticType = lookupCreateParam(params, "DiagnosticType");
+    if (diagnosticType.empty())
+    {
+        // An OEM request that names no type; never a standard dump, which
+        // would also act on any DumpType or FilePath in the same request.
+        lg2::error("BMC dump DiagnosticType is present but empty");
+        phosphor::logging::elog<
+            sdbusplus::xyz::openbmc_project::Common::Error::InvalidArgument>(
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME(
+                "OEMDiagnosticDataType"),
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE(
+                "DiagnosticType="));
+    }
+    return diagnosticType;
+}
+
+void checkBmcOemDumpParamKeys(const DumpCreateParams& params)
+{
+    using Create = sdbusplus::common::xyz::openbmc_project::dump::Create;
+    const std::string originatorId = Create::convertCreateParametersToString(
+        Create::CreateParameters::OriginatorId);
+    const std::string originatorType = Create::convertCreateParametersToString(
+        Create::CreateParameters::OriginatorType);
+    for (const auto& param : params)
+    {
+        const std::string& key = param.first;
+        if (key == "DiagnosticType" || key == "Duration" ||
+            key == "SamplingRate" || key == originatorId ||
+            key == originatorType)
+        {
+            continue;
+        }
+        lg2::error("Unexpected parameter in a BMC OEM dump request: {KEY}",
+                   "KEY", key);
+        phosphor::logging::elog<
+            sdbusplus::xyz::openbmc_project::Common::Error::InvalidArgument>(
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_NAME(
+                "OEMDiagnosticDataType"),
+            xyz::openbmc_project::Common::InvalidArgument::ARGUMENT_VALUE(
+                key.c_str()));
+    }
+}
+
+void OEMTypeAllowableValuesIf::populateManagerOEMDataTypeAllowableValues(
+    sdbusplus::server::com::nvidia::dump::AllowableValues& iface)
+{
+    try
+    {
+        std::map<DumpType, std::vector<std::string>> oemAllowableValuesMap =
+            iface.oemDataTypeAllowableValues();
+        oemAllowableValuesMap[DumpType::Manager] = bmcOemAllowableValues();
+        iface.oemDataTypeAllowableValues(oemAllowableValuesMap);
+    }
+    catch (const sdbusplus::exception_t& e)
+    {
+        lg2::error("Failed to set OEM allowable values for Manager Dump: "
+                   "ERROR={ERROR}",
+                   "ERROR", e.what());
+    }
+}
+#endif
 
 #ifdef FDR_DUMP_EXTENSION
 void OEMTypeAllowableValuesIf::populateFDROEMDataTypeAllowableValues(
