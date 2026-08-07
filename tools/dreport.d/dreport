@@ -276,8 +276,13 @@ function package()
         dump_dir=$TMP_DIR
     fi
 
-    #tar and compress the files.
-    create_archive "$name_dir" "$(dirname "$name_dir")" "$(basename "$name_dir")"
+    #Tar and compress the files under the global dump compression lock.
+    if ! create_archive "$name_dir" "$(dirname "$name_dir")" \
+        "$(basename "$name_dir")"; then
+        echo "$($TIME_STAMP)" "Could not create the compressed tar file"
+        rm -r "$name_dir"
+        return "$INTERNAL_FAILURE"
+    fi
 
     if [ -f "$HEADER_EXTENSION" ]; then
         echo "Adding Dump Header :"$HEADER_EXTENSION
@@ -287,16 +292,6 @@ function package()
         # It is unclear if this code path is still used.
         cat "$ARCHIVE_PATH" | tee -a "/tmp/dumpheader_$EPOCHTIME" > /dev/null
         mv "/tmp/dumpheader_$EPOCHTIME" "$ARCHIVE_PATH"
-    fi
-
-    # shellcheck disable=SC2181
-    # TODO: Refactor needed, create_archive is executed in both branches.
-    # This check captures the exit status of whichever branch ran.
-    # To be fixed in a separate patch.
-    if [ $? -ne 0 ]; then
-        echo "$($TIME_STAMP)" "Could not create the compressed tar file"
-        rm -r "$name_dir"
-        return $INTERNAL_FAILURE
     fi
 
     #remove the temporary name specific directory

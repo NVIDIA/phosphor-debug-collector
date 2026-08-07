@@ -5,11 +5,11 @@
 
 #include "config.h"
 
+#include "../dump-extensions/nvidia-dumps/tar_compress_lock.hpp"
 #include "nsm_dump_utils.hpp"
 
 #include <fcntl.h>
 #include <sys/stat.h> // for fstat
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include <phosphor-logging/elog-errors.hpp>
@@ -26,6 +26,8 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <utility>
+#include <vector>
 
 #define VERSION "3.2"
 #define SLEEP_DURING_WAIT_SECONDS 1
@@ -732,26 +734,14 @@ int main(int argc, char** argv)
             "Execution time: {} hours, {} minutes, {} seconds, {} milliseconds",
             hours, mins, seconds, msecs));
 
-        std::string command = "tar -Jcf " + dumpPath + '/' + tempFolderName +
-                              ".tar.xz -C " + tempDir + " " + tempFolderName;
+        std::vector<std::string> command = {
+            "tar", "-Jcf",  dumpPath + '/' + tempFolderName + ".tar.xz",
+            "-C",  tempDir, tempFolderName};
 
         logMsg(std::format("Compressing dump to `{}`",
                            dumpPath + '/' + tempFolderName + ".tar.xz"));
-        // NOLINTBEGIN
-        int waitStatus = system(command.c_str());
-        // NOLINTEND
-
-        // system() returns a "wait status", not an exit code; examine it with
-        // the macros described in waitpid(2).
-        if (waitStatus == -1)
-        {
-            // fork/exec failed; the command never ran
-            result = 1;
-        }
-        else
-        {
-            result = WIFEXITED(waitStatus) ? WEXITSTATUS(waitStatus) : 1;
-        }
+        result = phosphor::dump::compression::runShellWithLock(
+            phosphor::dump::compression::lockPath, std::move(command));
 
         if (result != 0)
         {
