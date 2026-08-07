@@ -1,5 +1,7 @@
 #pragma once
 
+#include "config.h"
+
 #include "dump_entry.hpp"
 #include "xyz/openbmc_project/Dump/Entry/BMC/server.hpp"
 #include "xyz/openbmc_project/Dump/Entry/server.hpp"
@@ -169,6 +171,14 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
      * @param[in] dumpPath - The path to the dump directory.
      */
     void updateFromFile(const std::filesystem::path& dumpPath);
+
+#ifdef VHMC_HOST
+    /** @brief Persist AdditionalTypeName alongside the base entry fields. */
+    void serialize() override;
+
+    /** @brief Restore AdditionalTypeName after the base fields are read. */
+    void deserialize(const std::filesystem::path& dumpPath) override;
+#endif
 
     /**
      * @brief Deserialize and create an entry

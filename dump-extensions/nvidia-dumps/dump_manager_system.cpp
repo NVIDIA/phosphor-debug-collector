@@ -16,6 +16,7 @@
  */
 
 #include "dump_manager_system.hpp"
+#include "oem_dump_utils.hpp"
 
 #include "dump_utils.hpp"
 #include "xyz/openbmc_project/Common/error.hpp"
@@ -93,39 +94,6 @@ DiagnosticType getDiagnosticType(const std::string& typeStr)
 
 namespace
 {
-
-/** Extract string or decimal from a CreateDump variant value. */
-std::optional<std::string> variantAsString(
-    const phosphor::dump::DumpCreateParams::mapped_type& v)
-{
-    if (const auto* p = std::get_if<std::string>(&v))
-    {
-        return *p;
-    }
-    if (const auto* p = std::get_if<uint64_t>(&v))
-    {
-        return std::to_string(*p);
-    }
-    return std::nullopt;
-}
-
-/** Read CreateDump param by exact key (Redfish / bmcweb use fixed key names).
- */
-std::string lookupCreateParam(const phosphor::dump::DumpCreateParams& params,
-                              std::string_view key)
-{
-    auto it = params.find(std::string(key));
-    if (it == params.end())
-    {
-        return {};
-    }
-    auto s = variantAsString(it->second);
-    if (s && !s->empty())
-    {
-        return *s;
-    }
-    return {};
-}
 
 /** Single-line summary of CreateDump params for journal logging. */
 std::string formatCreateDumpParamsSummary(

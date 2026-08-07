@@ -18,6 +18,9 @@
 #include <sdeventplus/source/base.hpp>
 
 #include <cmath>
+#ifdef VHMC_HOST
+#include <optional>
+#endif
 
 namespace phosphor
 {
@@ -46,6 +49,13 @@ sdbusplus::message::object_path Manager::createDump(
 
     phosphor::dump::extractOriginatorProperties(params, originatorId,
                                                 originatorType);
+
+#ifdef VHMC_HOST
+    if (auto oemPath = createVhmcOemDump(params, originatorId, originatorType))
+    {
+        return *oemPath;
+    }
+#endif
     using CreateParameters =
         sdbusplus::common::xyz::openbmc_project::dump::Create::CreateParameters;
 

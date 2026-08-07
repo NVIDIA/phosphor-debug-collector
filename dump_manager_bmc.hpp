@@ -11,6 +11,10 @@
 
 #include <filesystem>
 #include <map>
+#ifdef VHMC_HOST
+#include <optional>
+#include <set>
+#endif
 
 namespace phosphor
 {
@@ -107,6 +111,20 @@ class Manager :
      *  @return id - The Dump entry id number.
      */
     uint32_t captureDump(DumpTypes type, const std::string& path);
+
+#ifdef VHMC_HOST
+    std::optional<sdbusplus::message::object_path> createVhmcOemDump(
+        phosphor::dump::DumpCreateParams& params,
+        const std::string& originatorId, originatorTypes originatorType);
+
+    uint32_t captureVhmcOemDump(
+        const std::string& handlerPath, const std::string& diagnosticType,
+        const std::string& duration, const std::string& samplingRate,
+        size_t allowedSize);
+
+    /** @brief OEM DiagnosticTypes with a collection currently in flight. */
+    std::set<std::string> vhmcOemDumpInProgress;
+#endif
 
     /** @brief Remove specified watch object pointer from the
      *        watch map and associated entry from the map.

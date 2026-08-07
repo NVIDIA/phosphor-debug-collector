@@ -16,6 +16,9 @@
  */
 
 #include "oem_dump_utils.hpp"
+#include <string_view>
+#include <variant>
+#include <optional>
 
 #include <algorithm>
 #include <map>
@@ -48,6 +51,36 @@ std::vector<std::string> splitString(const std::string& str, char delimiter)
         }
     }
     return tokens;
+}
+
+std::optional<std::string> variantAsString(
+    const phosphor::dump::DumpCreateParams::mapped_type& v)
+{
+    if (const auto* p = std::get_if<std::string>(&v))
+    {
+        return *p;
+    }
+    if (const auto* p = std::get_if<uint64_t>(&v))
+    {
+        return std::to_string(*p);
+    }
+    return std::nullopt;
+}
+
+std::string lookupCreateParam(const phosphor::dump::DumpCreateParams& params,
+                              std::string_view key)
+{
+    auto it = params.find(std::string(key));
+    if (it == params.end())
+    {
+        return {};
+    }
+    auto s = variantAsString(it->second);
+    if (s && !s->empty())
+    {
+        return *s;
+    }
+    return {};
 }
 
 void OEMTypeAllowableValuesIf::populateDebugInfoDumpTypes(
@@ -221,6 +254,33 @@ void OEMTypeAllowableValuesIf::populateSystemOEMDataTypeAllowableValues(
         populateDebugInfoDumpTypes(iface);
     }
 }
+
+#ifdef VHMC_HOST
+const std::vector<std::string>& bmcOemAllowableValues()
+{
+    static const std::vector<std::string> values =
+        splitString(BMC_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE, ',');
+    return values;
+}
+
+void OEMTypeAllowableValuesIf::populateManagerOEMDataTypeAllowableValues(
+    sdbusplus::server::com::nvidia::dump::AllowableValues& iface)
+{
+    try
+    {
+        std::map<DumpType, std::vector<std::string>> oemAllowableValuesMap =
+            iface.oemDataTypeAllowableValues();
+        oemAllowableValuesMap[DumpType::Manager] = bmcOemAllowableValues();
+        iface.oemDataTypeAllowableValues(oemAllowableValuesMap);
+    }
+    catch (const sdbusplus::exception_t& e)
+    {
+        lg2::error("Failed to set OEM allowable values for Manager Dump: "
+                   "ERROR={ERROR}",
+                   "ERROR", e.what());
+    }
+}
+#endif
 
 #ifdef FDR_DUMP_EXTENSION
 void OEMTypeAllowableValuesIf::populateFDROEMDataTypeAllowableValues(

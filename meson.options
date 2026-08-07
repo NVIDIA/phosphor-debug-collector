@@ -435,6 +435,20 @@ option(
 )
 
 option(
+    'vhmc-host',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Enable vHMC host support (ContainerRuntimeMetrics OEM BMC dump)',
+)
+
+option(
+    'BMC_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
+    type: 'string',
+    value: '',
+    description: 'Comma-separated OEM diagnostic data allowable values for BMC (Manager) dump (set per-platform in bbappend)',
+)
+
+option(
     'FDR_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
     type: 'string',
     value: '',

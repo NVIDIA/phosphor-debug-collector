@@ -290,6 +290,16 @@ conf_data.set_quoted(
     get_option('FDR_DUMP_PATH'),
     description: 'Directory where FDR dumps are placed',
 )
+conf_data.set(
+    'VHMC_HOST',
+    get_option('vhmc-host').enabled(),
+    description: 'vHMC host support (ContainerRuntimeMetrics OEM BMC dump)',
+)
+conf_data.set_quoted(
+    'BMC_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
+    get_option('BMC_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE'),
+    description: 'OEM diagnostic data allowable values for BMC (Manager) dump',
+)
 conf_data.set_quoted(
     'FDR_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE',
     get_option('FDR_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE'),
