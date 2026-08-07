@@ -1,5 +1,41 @@
 #!/usr/bin/env bash
 
+# Serialize tar/xz and tar/zstd across concurrent dump collectors.
+TAR_COMPRESS_LOCK_PATH="${TAR_COMPRESS_LOCK_PATH:-/run/phosphor-dump-tar.compress.lock}"
+TAR_COMPRESS_LOCK_WAIT_SECONDS="${TAR_COMPRESS_LOCK_WAIT_SECONDS:-900}"
+TAR_COMPRESS_LOCK_FAILURE="${TAR_COMPRESS_LOCK_FAILURE:-125}"
+
+with_tar_compress_lock()
+(
+    local deadline=$((SECONDS + TAR_COMPRESS_LOCK_WAIT_SECONDS))
+    local waiting_logged=false
+
+    while ! flock -n 200; do
+        if ! $waiting_logged; then
+            printf 'Waiting up to %s seconds for dump compression lock %s\n' \
+                "$TAR_COMPRESS_LOCK_WAIT_SECONDS" \
+                "$TAR_COMPRESS_LOCK_PATH" >&2
+            waiting_logged=true
+        fi
+        if (( SECONDS >= deadline )); then
+            printf 'Timed out waiting for dump compression lock %s\n' \
+                "$TAR_COMPRESS_LOCK_PATH" >&2
+            exit "$TAR_COMPRESS_LOCK_FAILURE"
+        fi
+        sleep 1
+    done
+    "$@"
+) 200>>"$TAR_COMPRESS_LOCK_PATH"
+
+create_zstd_archive()
+{
+    set -o pipefail
+    if ! tar -cf - -C "$1" "$2" | zstd > "$3"; then
+        rm -f "$3"
+        return 1
+    fi
+}
+
 # @brief Execute the command and save the output into the dreport
 #        packaging, if it is in the user allowed dump size limit.
 # @param $1 Command to be executed.
@@ -104,16 +140,19 @@ function check_size()
         #Exceed the allowed limit,
         #tar and compress the files and check the size
         if [ "$compression_type" = "xz" ]; then
-            tar -Jcf "$name_dir.tar.xz" -C \
-                $(dirname "$name_dir") $(basename "$name_dir")
+            with_tar_compress_lock tar -Jcf "$name_dir.tar.xz" -C \
+                "$(dirname "$name_dir")" "$(basename "$name_dir")"
             if [ $? -ne 0 ]; then
                 log_error "Compression failed for the xz"
+                rm -f "$name_dir.tar.xz"
                 rm -f "$source"
                 return 2  # Return special code for space issues
             fi
             size=$(stat -c%s "$name_dir.tar.xz")
         else
-            tar cf - -C $(dirname "$name_dir") $(basename "$name_dir") | zstd > "$name_dir.zst"
+            with_tar_compress_lock create_zstd_archive \
+                "$(dirname "$name_dir")" "$(basename "$name_dir")" \
+                "$name_dir.zst"
             if [ $? -ne 0 ]; then
                 log_error "Compression failed for the zstd"
                 rm -f "$source"
