@@ -9,6 +9,7 @@
 
 #include <fcntl.h>
 #include <sys/stat.h> // for fstat
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <phosphor-logging/elog-errors.hpp>
@@ -711,6 +712,9 @@ int main(int argc, char** argv)
         {
             logMsg(e.what());
             log<level::ERR>(e.what());
+            std::error_code ec;
+            std::filesystem::remove_all(tempPath, ec);
+            std::filesystem::remove(dumpPath, ec);
             return 1;
         }
 
@@ -734,8 +738,20 @@ int main(int argc, char** argv)
         logMsg(std::format("Compressing dump to `{}`",
                            dumpPath + '/' + tempFolderName + ".tar.xz"));
         // NOLINTBEGIN
-        result = system(command.c_str());
+        int waitStatus = system(command.c_str());
         // NOLINTEND
+
+        // system() returns a "wait status", not an exit code; examine it with
+        // the macros described in waitpid(2).
+        if (waitStatus == -1)
+        {
+            // fork/exec failed; the command never ran
+            result = 1;
+        }
+        else
+        {
+            result = WIFEXITED(waitStatus) ? WEXITSTATUS(waitStatus) : 1;
+        }
 
         if (result != 0)
         {
