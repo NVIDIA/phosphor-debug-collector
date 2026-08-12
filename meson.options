@@ -17,6 +17,25 @@ option(
 )
 
 option(
+    'NSM_DUMP_OBJECT_WAIT_TIMEOUT_SEC',
+    type: 'integer',
+    min: 1,
+    value: 60,
+    description: '''Seconds nsm-dump-tool waits for a device's
+        com.nvidia.Dump.DebugInfo object to appear before failing the dump;
+        raise it on platforms with slower NSM enumeration''',
+)
+
+option(
+    'NSM_DUMP_OBJECT_WAIT_INTERVAL_SEC',
+    type: 'integer',
+    min: 1,
+    value: 1,
+    description: '''Seconds between DebugInfo re-checks while nsm-dump-tool
+        waits; sets the resolution of NSM_DUMP_OBJECT_WAIT_TIMEOUT_SEC''',
+)
+
+option(
     'rot-dump-collector',
     type: 'feature',
     value: 'disabled',

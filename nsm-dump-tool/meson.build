@@ -1,3 +1,5 @@
+# '..' resolves to both the source root and the build root, where the
+# generated config.h (wait timeout / poll interval) lives.
 incdir = include_directories('..')
 sources = ['main.cpp', 'nsm_dump_utils.cpp']
 fmt_dep = dependency('fmt', required: false)
@@ -18,5 +20,6 @@ executable(
     'nsm-dump-tool',
     sources,
     dependencies: [sdbusplus_dep, fmt_dep],
+    include_directories: incdir,
     install: true,
 )

@@ -316,6 +316,18 @@ conf_data.set(
     description: 'Rotate dump when total size of dumps exceed the quota',
 )
 
+# Add nsm-dump-tool configuration values to main config.h
+conf_data.set(
+    'NSM_DUMP_OBJECT_WAIT_TIMEOUT_SEC',
+    get_option('NSM_DUMP_OBJECT_WAIT_TIMEOUT_SEC'),
+    description: 'Seconds nsm-dump-tool waits for a device DebugInfo object',
+)
+conf_data.set(
+    'NSM_DUMP_OBJECT_WAIT_INTERVAL_SEC',
+    get_option('NSM_DUMP_OBJECT_WAIT_INTERVAL_SEC'),
+    description: 'Seconds between DebugInfo object re-checks while waiting',
+)
+
 # Add ROT dump configuration values to main config.h
 conf_data.set_quoted(
     'ROT_DUMP_MCTP_EID_CSV_PATH',
