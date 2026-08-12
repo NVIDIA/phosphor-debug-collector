@@ -1,3 +1,5 @@
+# '..' resolves to both the source root and the build root, where the
+# generated config.h (wait timeout / poll interval) lives.
 incdir = include_directories('..')
 sources = ['main.cpp', 'nsm_dump_utils.cpp']
 fmt_dep = dependency('fmt', required: false)
@@ -18,6 +20,7 @@ executable(
     'nsm-dump-tool',
     sources,
     dependencies: [sdbusplus_dep, phosphor_logging_dep, fmt_dep],
+    include_directories: incdir,
     # Only install when the feature is explicitly enabled. When built solely
     # because tests are enabled (CI compile coverage), skip installation.
     install: get_option('nsm-dump-tool').allowed(),

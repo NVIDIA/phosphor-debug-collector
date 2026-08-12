@@ -3,6 +3,8 @@
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  */
 
+#include "config.h"
+
 #include "nsm_dump_utils.hpp"
 
 #include <fcntl.h>
@@ -16,6 +18,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
@@ -23,7 +26,7 @@
 #include <fstream>
 #include <iostream>
 
-#define VERSION "3.1"
+#define VERSION "3.2"
 #define SLEEP_DURING_WAIT_SECONDS 1
 
 #ifndef NSM_DUMP_ASYNC_STATUS_DBUS_TIMEOUT_US
@@ -34,6 +37,17 @@ namespace
 {
 constexpr std::array<unsigned, 3> kAsyncStatusRetryBackoffSec{2, 4, 8};
 constexpr size_t kAsyncStatusRetryPhases = kAsyncStatusRetryBackoffSec.size();
+
+// The DebugInfo object only appears once nsmd has enumerated that device.
+constexpr unsigned kDumpObjectWaitTimeoutSec = NSM_DUMP_OBJECT_WAIT_TIMEOUT_SEC;
+constexpr unsigned kDumpObjectWaitIntervalSec =
+    NSM_DUMP_OBJECT_WAIT_INTERVAL_SEC;
+static_assert(kDumpObjectWaitIntervalSec >= 1,
+              "poll interval must be at least 1 s");
+static_assert(kDumpObjectWaitIntervalSec <= kDumpObjectWaitTimeoutSec,
+              "poll interval must not exceed the wait timeout");
+// Bound each call; the sd-bus default (25 s) would overrun the poll deadline.
+constexpr uint64_t kDumpObjectLookupCallTimeoutUs = 5'000'000; // 5 s
 
 bool isAsyncStatusDBusTimeout(
     const sdbusplus::exception::SdBusError& e) noexcept
@@ -214,8 +228,11 @@ OperationStatus getEraseStatus(std::string objectPath)
     return Success;
 }
 
+// logIfMissing=false suppresses the per-attempt error logs for retrying
+// callers; the reason comes back through outLastError instead.
 std::string getDBusObject(const std::string& targetDevice, DataType dataType,
-                          DumpType dumpType)
+                          DumpType dumpType, bool logIfMissing = true,
+                          std::string* outLastError = nullptr)
 {
     sdbusplus::bus_t bus = sdbusplus::bus::new_default();
 
@@ -245,7 +262,7 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType,
             break;
     }
 
-    auto reply = bus.call(mapper);
+    auto reply = bus.call(mapper, kDumpObjectLookupCallTimeoutUs);
 
     reply.read(paths);
     for (auto& path : paths)
@@ -259,7 +276,8 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType,
                                      "SupportedDumpType");
             try
             {
-                auto statusReply = bus.call(GetDumpTypeMethod);
+                auto statusReply =
+                    bus.call(GetDumpTypeMethod, kDumpObjectLookupCallTimeoutUs);
                 std::variant<std::string> dumpTypeResponse;
                 statusReply.read(dumpTypeResponse);
                 std::string response(std::get<std::string>(dumpTypeResponse));
@@ -285,15 +303,103 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType,
             }
             catch (const sdbusplus::exception::SdBusError& e)
             {
-                std::string errorStr("Function getDBusObject failed");
-                log<level::ERR>(errorStr.c_str());
-                log<level::ERR>(e.what());
+                if (outLastError != nullptr)
+                {
+                    *outLastError =
+                        std::format("SupportedDumpType read failed on {}: {}",
+                                    path, e.what());
+                }
+                if (logIfMissing)
+                {
+                    std::string errorStr("Function getDBusObject failed");
+                    log<level::ERR>(errorStr.c_str());
+                    log<level::ERR>(e.what());
+                }
+                else
+                {
+                    log<level::DEBUG>(
+                        std::format("getDBusObject: SupportedDumpType read "
+                                    "failed on {}: {}",
+                                    path, e.what())
+                            .c_str());
+                }
             }
         }
     }
 
-    std::string errorStr("D-Bus path not found for ");
-    errorStr += targetDevice;
+    if (logIfMissing)
+    {
+        std::string errorStr("D-Bus path not found for ");
+        errorStr += targetDevice;
+        log<level::ERR>(errorStr.c_str());
+    }
+
+    return {};
+}
+
+// An invalid targetDevice is indistinguishable from a not-yet-enumerated one,
+// so it costs the full timeout before failing.
+std::string waitForDBusObject(const std::string& targetDevice,
+                              DataType dataType, DumpType dumpType)
+{
+    using std::chrono::seconds;
+    using std::chrono::steady_clock;
+
+    const auto start = steady_clock::now();
+    const auto deadline = start + seconds(kDumpObjectWaitTimeoutSec);
+
+    std::string lastError;
+    bool waiting = false;
+
+    for (;;)
+    {
+        try
+        {
+            auto objectPath = getDBusObject(targetDevice, dataType, dumpType,
+                                            /*logIfMissing=*/false, &lastError);
+            if (!objectPath.empty())
+            {
+                if (waiting)
+                {
+                    logMsg(std::format(
+                        "Device {} became ready after {} s — proceeding",
+                        targetDevice,
+                        std::chrono::duration_cast<seconds>(
+                            steady_clock::now() - start)
+                            .count()));
+                }
+                return objectPath;
+            }
+        }
+        catch (const sdbusplus::exception::SdBusError& e)
+        {
+            // Unreachable mapper counts as not-ready-yet.
+            lastError = e.what();
+        }
+
+        if (steady_clock::now() >= deadline)
+        {
+            break;
+        }
+
+        if (!waiting)
+        {
+            logMsg(std::format(
+                "Device {} has no dump object yet (nsmd may still be enumerating it) — waiting up to {} s",
+                targetDevice, kDumpObjectWaitTimeoutSec));
+            waiting = true;
+        }
+
+        sleep(kDumpObjectWaitIntervalSec);
+    }
+
+    auto errorStr =
+        std::format("D-Bus path not found for {} after waiting {} s",
+                    targetDevice, kDumpObjectWaitTimeoutSec);
+    if (!lastError.empty())
+    {
+        errorStr += std::format("; last D-Bus error: {}", lastError);
+    }
     log<level::ERR>(errorStr.c_str());
 
     return {};
@@ -478,12 +584,13 @@ void getDumpData(std::string objectPath, DataType dataType, DumpType dumpType)
 
 void dumpData(DumpType dumpType)
 {
-    auto objectPath = getDBusObject(targetDevice, DataType::Dump, dumpType);
+    // DebugInfo is mandatory for every dump, so wait rather than fail outright.
+    auto objectPath = waitForDBusObject(targetDevice, DataType::Dump, dumpType);
     if (objectPath.empty())
     {
-        throw std::runtime_error(
-            "D-Bus path with DebugInfo interface not found for " +
-            targetDevice);
+        throw std::runtime_error(std::format(
+            "D-Bus path with DebugInfo interface not found for {} after waiting {} s — device not ready",
+            targetDevice, kDumpObjectWaitTimeoutSec));
     }
 
     logMsg(std::format("Starting getting dump data for target device: {}",
