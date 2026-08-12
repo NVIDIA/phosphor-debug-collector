@@ -20,6 +20,8 @@
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -35,8 +37,9 @@
 #define SLEEP_DURING_WAIT_SECONDS 1
 #define DEFAULT_TIMEOUT_SECONDS 90
 #define CMET_CHANNEL_COUNT 64
+// Sanity cap only; the real host bridge count is derived from the payload size.
 #define MAX_HOST_BRIDGES 8
-#define MAX_ROOT_PORTS_PER_HB 16
+#define MAX_ROOT_PORTS_PER_HB 8
 #define PCIE_MAX_LANES_PER_RP 16
 
 using json = nlohmann::json;
@@ -93,6 +96,15 @@ const std::map<uint8_t, std::string> linkSpeedNames = {
 // Payload structures (packed)
 #pragma pack(push, 1)
 
+// Per-CMET-channel info. The device emits these as an array of
+// {count, status} pairs (cmet_info_channel[i]), NOT as two separate
+// count[64]/status[64] arrays.
+struct CmetChannelInfo
+{
+    uint32_t count;  // Errors found on this channel
+    uint32_t status; // Channel status bitfield, see parseErrorCounterPayload()
+};
+
 struct ErrorCounterPayload
 {
     uint32_t cpuCorrectedErrors;
@@ -102,10 +114,10 @@ struct ErrorCounterPayload
     uint32_t dramUncorrectedErrors;
     uint32_t pagesRetired;
     uint32_t otherSocCorrectedErrors;
-    uint32_t cmetCount[CMET_CHANNEL_COUNT];
-    uint32_t cmetStatus[CMET_CHANNEL_COUNT];
+    CmetChannelInfo cmetInfo[CMET_CHANNEL_COUNT];
     uint32_t cmetSpareCount;
 };
+static_assert(sizeof(ErrorCounterPayload) == 544);
 
 #if 0
 // LTSSM History data structure disabled - backend not ready
@@ -120,6 +132,15 @@ struct PcieLtssmData
 };
 #endif
 
+#pragma pack(pop)
+
+// PCIe telemetry payload structures.
+//
+// Unlike the CPER error counters, the SatMC pcie_generic_telemetry_data payload
+// is emitted with the device compiler's natural alignment, NOT packed. The
+// explicit padding members below reproduce that layout byte for byte, and the
+// static_asserts pin the resulting sizes to what the device actually sends.
+
 // PCIe Telemetry payload header
 struct PcieTelemetryHeader
 {
@@ -130,23 +151,34 @@ struct PcieTelemetryHeader
     uint16_t ssvid;     // Subsystem Vendor ID
 };
 constexpr size_t PCIE_TELEMETRY_HEADER_SIZE = sizeof(PcieTelemetryHeader);
+static_assert(PCIE_TELEMETRY_HEADER_SIZE == 16);
+
+// PCIe Root Port EQ telemetry values (pcie_rp_eq_values).
+// eomStatus/txStatus are pcie_eq_status_t enums on the device, i.e. 4-byte
+// ints, so numLanes is followed by three bytes of padding.
+struct PcieRpEqValues
+{
+    uint16_t laneEom[PCIE_MAX_LANES_PER_RP];     // Per-lane EOM (SLRG)
+    uint8_t laneTxPreset[PCIE_MAX_LANES_PER_RP]; // Per-lane TX EQ preset
+    uint8_t numLanes;                            // Number of valid lane entries
+    uint8_t reserved[3];
+    uint32_t eomStatus; // pcie_eq_status_t: EOM (SLRG) collection status
+    uint32_t txStatus;  // pcie_eq_status_t: TX preset (SLTP) collection status
+};
+static_assert(sizeof(PcieRpEqValues) == 60);
 
 // PCIe Root Port Telemetry Data structure (per root port)
 struct PcieRpTelemetryData
 {
-    uint8_t isEnabled;    // Whether root port is enabled
+    uint8_t isEnabled;    // Whether root port is enabled (bool on the device)
     uint8_t rpNum;        // Root port number (link number)
+    uint8_t reserved0[2]; // Padding ahead of the 4-byte aligned sbdf
     uint32_t sbdf;        // Segment/Bus/Device/Function address
     uint8_t linkWidth;    // Current negotiated link width (lanes)
     uint8_t linkSpeed;    // Current negotiated link speed (GT/s)
     uint8_t maxLinkSpeed; // Maximum supported link speed
     uint8_t maxLinkWidth; // Maximum supported link width
-    // EQ values
-    uint16_t laneEom[PCIE_MAX_LANES_PER_RP];     // Per-lane EOM (SLRG)
-    uint8_t laneTxPreset[PCIE_MAX_LANES_PER_RP]; // Per-lane TX EQ preset
-    uint8_t numLanes;                            // Number of valid lane entries
-    uint8_t eomStatus; // pcie_eq_status_t: EOM (SLRG) collection status
-    uint8_t txStatus;  // pcie_eq_status_t: TX preset (SLTP) collection status
+    PcieRpEqValues eqValues;
     // Per-RP error counts since boot
     uint32_t ceCount;
     uint32_t ueFatalCount;
@@ -160,18 +192,19 @@ struct PcieRpTelemetryData
     uint32_t ueNonfatalCount;
     uint32_t urCount;
 };
+static_assert(sizeof(PcieRpTelemetryData) == 116);
 
 // PCIe Host Bridge Telemetry Data structure (per host bridge)
 struct PcieHbTelemetryData
 {
-    uint8_t isEnabled;  // Whether host bridge is enabled
-    uint32_t hbNum;     // Host bridge number
-    uint64_t egressBw;  // Egress bandwidth (bytes/s)
-    uint64_t ingressBw; // Ingress bandwidth (bytes/s)
+    uint8_t isEnabled;    // Whether host bridge is enabled (bool on the device)
+    uint8_t reserved0[3]; // Padding ahead of the 4-byte aligned hbNum
+    uint32_t hbNum;       // Host bridge number
+    uint64_t egressBw;    // Egress bandwidth (bytes/s)
+    uint64_t ingressBw;   // Ingress bandwidth (bytes/s)
     PcieRpTelemetryData rootPorts[MAX_ROOT_PORTS_PER_HB];
 };
-
-#pragma pack(pop)
+static_assert(sizeof(PcieHbTelemetryData) == 952);
 
 void logMsg(const std::string& msg)
 {
@@ -478,6 +511,12 @@ void clearStagingFiles(const std::string& eventDir)
 
 std::string getLinkSpeedName(uint8_t speed)
 {
+    // Speed 0 means the link never trained. Report that distinctly so it is
+    // not confused with a speed encoding the tool does not recognise.
+    if (speed == 0)
+    {
+        return "NotTrained";
+    }
     auto it = linkSpeedNames.find(speed);
     return it != linkSpeedNames.end() ? it->second : "Unknown";
 }
@@ -526,16 +565,21 @@ json parseErrorCounterPayload(const std::vector<uint8_t>& data)
     json cmetChannels = json::array();
     for (int i = 0; i < CMET_CHANNEL_COUNT; i++)
     {
-        const uint32_t st = payload->cmetStatus[i];
+        const uint32_t st = payload->cmetInfo[i].status;
+        const bool disabled = (st & 0x04) != 0;
         json channel;
         channel["channel"] = i;
-        channel["errors"] = payload->cmetCount[i];
+        channel["errors"] = payload->cmetInfo[i].count;
         channel["status"] = std::format("0x{:08X}", st);
         channel["enabled"] = (st & 0x01) != 0;
         channel["spare"] = (st & 0x02) != 0;
-        channel["disabled"] = (st & 0x04) != 0;
-        // Bits 3-4: disable reason (valid when channel is disabled)
-        channel["disable_reason"] = disableReasons[(st >> 3) & 0x03];
+        channel["disabled"] = disabled;
+        // Bits 3-4: disable reason, only meaningful when the channel is
+        // permanently disabled.
+        if (disabled)
+        {
+            channel["disable_reason"] = disableReasons[(st >> 3) & 0x03];
+        }
         // Bits 5-7: SOCAMM module index [0-7]
         channel["socamm_module_index"] = (st >> 5) & 0x07;
         cmetChannels.push_back(channel);
@@ -613,10 +657,37 @@ json parsePcieTelemetryPayload(const std::vector<uint8_t>& data)
     static const std::array<const char*, 4> eqStatusNames = {
         "valid", "speed_too_low", "link_down", "mnoc_fail"};
 
+    // The device sends one PcieHbTelemetryData per host bridge in the socket;
+    // the count is implied by the payload size rather than carried in the
+    // header, so derive it instead of assuming a fixed number.
+    const size_t hbBytes = data.size() - PCIE_TELEMETRY_HEADER_SIZE;
+    const size_t hbRecords = hbBytes / sizeof(PcieHbTelemetryData);
+    const size_t hbCount = std::min<size_t>(hbRecords, MAX_HOST_BRIDGES);
+    if (hbBytes % sizeof(PcieHbTelemetryData) != 0)
+    {
+        result["data_valid"] = false;
+        result["error"] = std::format(
+            "Unexpected PCIe telemetry payload size {} ({} trailing bytes "
+            "after {} host bridge records of {} bytes)",
+            data.size(), hbBytes % sizeof(PcieHbTelemetryData), hbRecords,
+            sizeof(PcieHbTelemetryData));
+    }
+    else if (hbRecords > MAX_HOST_BRIDGES)
+    {
+        // Report the bridges that fit rather than dropping them silently: a
+        // payload this size means the device layout has outgrown the tool.
+        result["data_valid"] = false;
+        result["error"] = std::format(
+            "PCIe telemetry payload carries {} host bridge records, more than "
+            "the {} this tool supports; only the first {} are reported",
+            hbRecords, MAX_HOST_BRIDGES, hbCount);
+    }
+    result["host_bridge_count"] = hbCount;
+
     json hostBridges = json::array();
     size_t offset = PCIE_TELEMETRY_HEADER_SIZE;
 
-    for (int h = 0; h < MAX_HOST_BRIDGES; h++)
+    for (size_t h = 0; h < hbCount; h++)
     {
         if (offset + sizeof(PcieHbTelemetryData) > data.size())
         {
@@ -647,23 +718,26 @@ json parsePcieTelemetryPayload(const std::vector<uint8_t>& data)
             rp["max_link_width"] = std::format("x{}", rpData.maxLinkWidth);
 
             // EQ values: only emit lanes in [0, numLanes)
+            const auto& eqData = rpData.eqValues;
             const uint8_t nLanes = std::min(
-                rpData.numLanes, static_cast<uint8_t>(PCIE_MAX_LANES_PER_RP));
+                eqData.numLanes, static_cast<uint8_t>(PCIE_MAX_LANES_PER_RP));
             json laneEom = json::array();
             json laneTxPreset = json::array();
             for (int l = 0; l < nLanes; l++)
             {
-                laneEom.push_back(rpData.laneEom[l]);
-                laneTxPreset.push_back(rpData.laneTxPreset[l]);
+                laneEom.push_back(eqData.laneEom[l]);
+                laneTxPreset.push_back(eqData.laneTxPreset[l]);
             }
             json eq;
-            eq["num_lanes"] = rpData.numLanes;
+            eq["num_lanes"] = eqData.numLanes;
             eq["lane_eom"] = laneEom;
             eq["lane_tx_preset"] = laneTxPreset;
-            const uint8_t eomIdx = rpData.eomStatus < 4 ? rpData.eomStatus : 3;
-            const uint8_t txIdx = rpData.txStatus < 4 ? rpData.txStatus : 3;
-            eq["eom_status"] = eqStatusNames[eomIdx];
-            eq["tx_status"] = eqStatusNames[txIdx];
+            eq["eom_status"] = eqData.eomStatus < eqStatusNames.size()
+                                   ? eqStatusNames[eqData.eomStatus]
+                                   : "unknown";
+            eq["tx_status"] = eqData.txStatus < eqStatusNames.size()
+                                  ? eqStatusNames[eqData.txStatus]
+                                  : "unknown";
             rp["eq_values"] = eq;
 
             rp["ce_count"] = rpData.ceCount;
