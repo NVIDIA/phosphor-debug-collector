@@ -470,6 +470,13 @@ option(
 )
 
 option(
+    'fdr-dump-timeout-seconds',
+    type: 'integer',
+    value: 2700,
+    description: 'FDR dump script hard timeout in seconds. Must exceed fdr_dump.sh FILE_ADDITION_TIME_LIMIT (2340).',
+)
+
+option(
     'COMPRESSION_TYPE',
     type: 'string',
     value: 'xz',

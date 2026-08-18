@@ -29,6 +29,8 @@
 
 #include <experimental/filesystem>
 #include <map>
+#include <set>
+#include <string>
 
 namespace phosphor
 {
@@ -107,10 +109,12 @@ class Manager :
      */
     void createDumpFailed(int id)
     {
-        auto entry = entries[id].get();
-        if (entry != nullptr)
+        // Use find() — entries[id] would insert a null entry if id is missing,
+        // which limitDumpEntries() would later dereference without a null check.
+        auto it = entries.find(id);
+        if (it != entries.end() && it->second != nullptr)
         {
-            dynamic_cast<phosphor::dump::FDR::Entry*>(entries[id].get())
+            dynamic_cast<phosphor::dump::FDR::Entry*>(it->second.get())
                 ->setFailedStatus();
         }
     }
@@ -161,6 +165,48 @@ class Manager :
      *         entries.
      */
     void limitDumpEntries();
+
+    /** @brief Single-flight protection set — key "FDR" present while a dump
+     *         is running or terminating. Checked in createDump() BEFORE
+     *         limitDumpEntries() to prevent eviction of the active entry.
+     *         Same pattern as System/NetIR dump (dump_manager_system.hpp).
+     */
+    std::set<std::string> dumpInProgress;
+
+    /** @brief Per-entry archive/child-result coordination state.
+     *
+     *  Completion follows one of two paths depending on signal order:
+     *    - inotify-first: createEntry() sets archiveReady=true and returns;
+     *      Child::Callback finds archiveReady=true and marks Completed.
+     *    - exit-first: Child::Callback finds archiveReady=false and performs
+     *      a filesystem scan to locate the archive, then marks Completed.
+     */
+    struct EntryCompletionState
+    {
+        bool archiveReady{false};
+        bool archiveError{false};
+        fs::path archivePath{};
+        uint64_t archiveSize{0};
+        /** @brief Timestamp parsed from archive filename (microseconds since
+         *         epoch, matching the format used by Entry::update()). Used by
+         *         both completion paths so callback order does not affect the
+         *         stored timestamp. */
+        uint64_t archiveTimestamp{0};
+        /** @brief True only for Collect action — expects an archive. False for
+         *         Clean/GenBirthCert which clear the key on terminal exit
+         *         without waiting for IN_CLOSE_WRITE. */
+        bool expectsArchive{false};
+    };
+
+    /** @brief Per-entry completion state map keyed by entry ID. */
+    std::map<uint32_t, EntryCompletionState> entryCompletionMap;
+
+    /** @brief Kill the process group and register an async cleanup Child
+     *         source to reap the child without blocking the event loop.
+     *         Erases entryCompletionMap and dumpInProgress on all paths.
+     */
+    void killAndCleanup(pid_t pid, pid_t pgid, uint32_t entryId,
+                        const std::string& progressKey);
 };
 
 } // namespace FDR

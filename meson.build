@@ -327,6 +327,15 @@ conf_data.set(
     get_option('NSM_DUMP_OBJECT_WAIT_INTERVAL_SEC'),
     description: 'Seconds between DebugInfo object re-checks while waiting',
 )
+assert(
+    get_option('fdr-dump-timeout-seconds') >= 2700,
+    'fdr-dump-timeout-seconds must be >= 2700 (SADD NFR-01 minimum; FILE_ADDITION_TIME_LIMIT in fdr_dump.sh is 2340 s)',
+)
+conf_data.set(
+    'FDR_DUMP_TIMEOUT_SECONDS',
+    get_option('fdr-dump-timeout-seconds'),
+    description: 'FDR dump script hard timeout in seconds',
+)
 
 # Add ROT dump configuration values to main config.h
 conf_data.set_quoted(
