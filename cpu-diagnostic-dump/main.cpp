@@ -8,6 +8,8 @@
  * - PCIe Root Port Performance Data
  */
 
+#include "../dump-extensions/nvidia-dumps/tar_compress_lock.hpp"
+
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/inotify.h>
@@ -31,6 +33,7 @@
 #include <iostream>
 #include <set>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #define VERSION "1.0"
@@ -50,6 +53,8 @@ namespace fs = std::filesystem;
 constexpr auto EVENT_STAGING_BASE = "/var/lib/pldm_events";
 constexpr auto PLDM_STATIC_CONFIG_PATH =
     "/usr/share/pldm/pldm_static_configuration.json";
+constexpr int EXIT_CODE_TAR_WARNING = 1;
+constexpr int EXIT_CODE_COMPLETE_FAILURE = 2;
 
 // Event file names (written by pldmd for OEM event classes)
 // Files in /var/lib/pldm_events/<terminus>/
@@ -1200,22 +1205,22 @@ int main(int argc, char** argv)
             "Execution time: {} hours, {} minutes, {} seconds, {} milliseconds",
             hours, mins, seconds, msecs));
 
+        const std::string archivePath =
+            dumpPath + "/" + tempFolderName + ".tar.xz";
+        int compressionRc = 0;
         if (eventCount > 0)
         {
-            std::string command =
-                "tar -Jcf " + dumpPath + "/" + tempFolderName + ".tar.xz -C " +
-                tempDir + " " + tempFolderName;
+            std::vector<std::string> command = {"tar", "-Jcf",  archivePath,
+                                                "-C",  tempDir, tempFolderName};
 
-            logMsg(std::format("Compressing dump to `{}`",
-                               dumpPath + "/" + tempFolderName + ".tar.xz"));
-            // NOLINTBEGIN
-            int tarRc = system(command.c_str());
-            // NOLINTEND
+            logMsg(std::format("Compressing dump to `{}`", archivePath));
+            compressionRc = phosphor::dump::compression::runShellWithLock(
+                phosphor::dump::compression::lockPath, std::move(command));
 
-            if (tarRc != 0)
+            if (compressionRc != EXIT_SUCCESS)
             {
                 logMsg(std::format("Compression failed with error code: {}",
-                                   tarRc));
+                                   compressionRc));
             }
         }
         else
@@ -1228,20 +1233,24 @@ int main(int argc, char** argv)
 
         // Set exit code based on collection status
         // Expecting 2 events (LTSSM disabled - backend not ready)
-        if (eventCount == 0)
+        if (eventCount > 0 &&
+            (compressionRc == EXIT_SUCCESS ||
+             compressionRc == EXIT_CODE_TAR_WARNING) &&
+            fs::exists(archivePath))
         {
-            result = 2; // Complete failure: no archive produced
+            result = EXIT_SUCCESS; // Success or partial: archive produced
         }
         else
         {
-            result = 0; // Success or partial: archive produced
+            result = compressionRc != EXIT_SUCCESS ? compressionRc
+                                                   : EXIT_CODE_COMPLETE_FAILURE;
         }
     }
     catch (const std::exception& e)
     {
         logMsg(std::format("Error: {}", e.what()));
         log<level::ERR>(e.what());
-        result = 2;
+        result = EXIT_CODE_COMPLETE_FAILURE;
     }
 
     return result;

@@ -17,10 +17,11 @@
 
 #include "collector_helpers.hpp"
 
+#include "tar_compress_lock.hpp"
+
 #include <phosphor-logging/lg2.hpp>
 
 #include <chrono>
-#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <string>
@@ -48,12 +49,10 @@ bool makeTarball(const std::string& outDir, const std::string& stageDir)
     std::string parent = stage.parent_path().string();
     fs::path archive = fs::path(outDir) / (stem + ".tar.xz");
 
-    // tar+xz the staging dir as a single top-level "<stem>/" entry. Paths are
-    // daemon-controlled (no user input).
-    std::string cmd = "tar -C '" + parent + "' -Jcf '" + archive.string() +
-                      "' '" + stem + "'";
-    // NOLINTNEXTLINE(cert-env33-c)
-    int rc = std::system(cmd.c_str());
+    // tar+xz the staging dir as a single top-level "<stem>/" entry.
+    int rc = phosphor::dump::compression::runShellWithLock(
+        phosphor::dump::compression::lockPath,
+        {"tar", "-C", parent, "-Jcf", archive.string(), stem});
 
     std::error_code ec;
     fs::remove_all(stage, ec); // best-effort staging cleanup

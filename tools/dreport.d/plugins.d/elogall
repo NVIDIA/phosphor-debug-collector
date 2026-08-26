@@ -8,31 +8,14 @@
 . "$DREPORT_INCLUDE"/functions
 
 desc="elog"
+file_name="elogall.log"
 
-busctl_output=$(busctl --list --no-pager tree \
-    xyz.openbmc_project.Logging)
-busctl_status=$?
-
-if [ "$busctl_status" -ne 0 ]; then
-    log_error "$desc: busctl returned status $busctl_status"
-    exit 1
-fi
-
-entries=$(echo "$busctl_output" | grep \
-    '/xyz/openbmc_project/logging/entry/')
-
-#check for elog entries.
-if [ -z "$entries" ]; then
-    log_info "No $desc entries"
-    exit 0
-fi
-
+# No "busctl tree" pre-check: it walks every entry, so one erased mid-walk
+# fails the whole collection. This single reply just omits it instead.
 command="busctl call --verbose --no-pager \
                 xyz.openbmc_project.Logging \
                 /xyz/openbmc_project/logging \
                 org.freedesktop.DBus.ObjectManager \
                 GetManagedObjects"
-
-file_name="elogall.log"
 
 add_cmd_output "$command" "$file_name" "$desc"

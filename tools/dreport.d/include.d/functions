@@ -34,6 +34,33 @@ case "${DUMP_COMPRESSION:-xz}" in
         ;;
 esac
 
+# Serialize tar compression across concurrent dump collectors.
+TAR_COMPRESS_LOCK_PATH="${TAR_COMPRESS_LOCK_PATH:-/run/phosphor-dump-tar.compress.lock}"
+TAR_COMPRESS_LOCK_WAIT_SECONDS="${TAR_COMPRESS_LOCK_WAIT_SECONDS:-900}"
+TAR_COMPRESS_LOCK_FAILURE="${TAR_COMPRESS_LOCK_FAILURE:-125}"
+
+with_tar_compress_lock()
+(
+    local deadline=$((SECONDS + TAR_COMPRESS_LOCK_WAIT_SECONDS))
+    local waiting_logged=false
+
+    while ! flock -n 200; do
+        if ! $waiting_logged; then
+            printf 'Waiting up to %s seconds for dump compression lock %s\n' \
+                "$TAR_COMPRESS_LOCK_WAIT_SECONDS" \
+                "$TAR_COMPRESS_LOCK_PATH" >&2
+            waiting_logged=true
+        fi
+        if (( SECONDS >= deadline )); then
+            printf 'Timed out waiting for dump compression lock %s\n' \
+                "$TAR_COMPRESS_LOCK_PATH" >&2
+            exit "$TAR_COMPRESS_LOCK_FAILURE"
+        fi
+        sleep 1
+    done
+    "$@"
+) 200>>"$TAR_COMPRESS_LOCK_PATH"
+
 # @brief Create a compressed tar archive
 # @param $1 Output file path (without extension)
 # @param $2 Source directory (parent dir for -C)
@@ -45,17 +72,28 @@ function create_archive()
     local src_dir="$2"
     local base_name="$3"
     local archive_file="${output_base}.${ARCHIVE_EXT}"
+    local result
 
     case "${DUMP_COMPRESSION:-xz}" in
         zstd)
-            tar -cf - -C "$src_dir" "$base_name" | zstd > "$archive_file"
+            # shellcheck disable=SC2016
+            with_tar_compress_lock bash -o pipefail -c \
+                'tar -cf - -C "$1" "$2" | zstd > "$3"' _ \
+                "$src_dir" "$base_name" "$archive_file"
+            result=$?
             ;;
         *)
-            tar ${TAR_COMPRESS_FLAG} -cf "$archive_file" -C "$src_dir" "$base_name"
+            with_tar_compress_lock tar "$TAR_COMPRESS_FLAG" -cf \
+                "$archive_file" -C "$src_dir" "$base_name"
+            result=$?
             ;;
     esac
 
     ARCHIVE_PATH="$archive_file"
+    if (( result != 0 )); then
+        rm -f "$ARCHIVE_PATH"
+    fi
+    return "$result"
 }
 
 # @brief Execute the command and save the output into the dreport
@@ -160,8 +198,8 @@ function check_size()
     if [ $((size + cur_dump_size)) -gt "$dump_size" ]; then
         #Exceed the allowed limit,
         #tar and compress the files and check the size
-        create_archive "$name_dir" "$(dirname "$name_dir")" "$(basename "$name_dir")"
-        if [ $? -ne 0 ]; then
+        if ! create_archive "$name_dir" "$(dirname "$name_dir")" \
+            "$(basename "$name_dir")"; then
             log_error "Compression failed"
             rm -f "$source"
             return 2  # Return special code for space issues
