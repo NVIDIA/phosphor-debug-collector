@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <cstring>
 #include "create_dump_dbus.hpp"
 
 #include "../config.h"
+
+#include <cstring>
 
 #define FMT_HEADER_ONLY
 
