@@ -46,3 +46,27 @@ foreach t : tests
         workdir: meson.current_source_dir(),
     )
 endforeach
+
+ramoops_manager = declare_dependency(
+    sources: [dump_types_hpp, '../ramoops_manager.cpp'],
+)
+
+test(
+    'ramoops_manager_test',
+    executable(
+        'ramoops_manager_test',
+        'ramoops_manager_test.cpp',
+        include_directories: ['.', '../'],
+        implicit_include_directories: false,
+        dependencies: [
+            gtest_dep,
+            gmock_dep,
+            ramoops_manager,
+            phosphor_dbus_interfaces_dep,
+            phosphor_logging_dep,
+            sdbusplus_dep,
+            sdeventplus_dep,
+        ],
+    ),
+    workdir: meson.current_source_dir(),
+)
