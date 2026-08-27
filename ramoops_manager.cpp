@@ -12,7 +12,6 @@
 #include <xyz/openbmc_project/Dump/Create/server.hpp>
 
 #include <filesystem>
-#include <set>
 
 namespace phosphor
 {
@@ -75,38 +74,34 @@ void Manager::createError()
 
 void Manager::createHelper(const std::vector<std::string>& files)
 {
-    constexpr auto MAPPER_BUSNAME = "xyz.openbmc_project.ObjectMapper";
-    constexpr auto MAPPER_PATH = "/xyz/openbmc_project/object_mapper";
-    constexpr auto MAPPER_INTERFACE = "xyz.openbmc_project.ObjectMapper";
     constexpr auto DUMP_CREATE_IFACE = "xyz.openbmc_project.Dump.Create";
 
+    // The unit is ordered after the dump manager which owns its bus name
+    // once registered so no mapper dependency is needed.
     auto b = sdbusplus::bus::new_default();
-    auto mapper = b.new_method_call(MAPPER_BUSNAME, MAPPER_PATH,
-                                    MAPPER_INTERFACE, "GetObject");
-    mapper.append(BMC_DUMP_OBJPATH, std::set<std::string>({DUMP_CREATE_IFACE}));
-
-    std::map<std::string, std::set<std::string>> mapperResponse;
+    auto m = b.new_method_call(DUMP_BUSNAME, BMC_DUMP_OBJPATH,
+                               DUMP_CREATE_IFACE, "CreateDump");
+    m.append(createDumpParams(files));
     try
     {
-        auto mapperResponseMsg = b.call(mapper);
-        mapperResponseMsg.read(mapperResponse);
+        b.call_noreply(m);
     }
     catch (const sdbusplus::exception_t& e)
     {
-        lg2::error("Failed to parse dump create message, error: {ERROR}",
-                   "ERROR", e);
-        return;
+        lg2::error("Failed to create ramoops dump, errormsg: {ERROR}", "ERROR",
+                   e);
     }
-    if (mapperResponse.empty())
-    {
-        lg2::error("Error reading mapper response");
-        return;
-    }
+}
 
-    const auto& host = mapperResponse.cbegin()->first;
-    auto m = b.new_method_call(host.c_str(), BMC_DUMP_OBJPATH,
-                               DUMP_CREATE_IFACE, "CreateDump");
+phosphor::dump::DumpCreateParams Manager::createDumpParams(
+    const std::vector<std::string>& files)
+{
     phosphor::dump::DumpCreateParams params;
+    if (files.empty())
+    {
+        lg2::error("Cannot build CreateDump params: files list is empty");
+        return params;
+    }
     using CreateParameters =
         sdbusplus::common::xyz::openbmc_project::dump::Create::CreateParameters;
     using DumpType =
@@ -117,16 +112,7 @@ void Manager::createHelper(const std::vector<std::string>& files)
         DumpIntr::convertDumpTypeToString(DumpType::Ramoops);
     params[DumpIntr::convertCreateParametersToString(
         CreateParameters::FilePath)] = files.front();
-    m.append(params);
-    try
-    {
-        b.call_noreply(m);
-    }
-    catch (const sdbusplus::exception_t& e)
-    {
-        lg2::error("Failed to create ramoops dump, errormsg: {ERROR}", "ERROR",
-                   e);
-    }
+    return params;
 }
 
 } // namespace ramoops

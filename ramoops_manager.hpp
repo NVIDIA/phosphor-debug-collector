@@ -2,6 +2,8 @@
 
 #include "config.h"
 
+#include "dump_manager.hpp"
+
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -30,6 +32,14 @@ class Manager
      *  @param[in] filePath - Path where the ramoops are stored.
      */
     Manager(const std::string& filePath);
+
+    /** @brief Build the CreateDump parameters for a ramoops dump request.
+     *  @param [in] files - ramoops files list
+     *  @return the parameters to pass to the dump manager's CreateDump
+     *          D-Bus method
+     */
+    static phosphor::dump::DumpCreateParams createDumpParams(
+        const std::vector<std::string>& files);
 
   private:
     /** @brief Helper function for initiating dump request using
