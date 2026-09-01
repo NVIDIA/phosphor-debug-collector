@@ -15,8 +15,9 @@
 // Probe whether `targetDevice`'s inventory path exposes a given D-Bus
 // interface. Lets the caller skip optional NetIR features (LogInfo,
 // Erase) when nsmd has not exposed them for the device class.
-// Matches the device name as a complete '/'-delimited path segment, so
-// "GPU1" does not spuriously match "GPU10".
+// Resolve each inventory path with the same DeviceType naming rule used for
+// AllowableValues, including parent-chassis qualification when needed.
+// Compare complete selectors to avoid substring collisions.
 bool deviceHasInterface(const std::string& targetDevice,
                         const std::string& iface);
 

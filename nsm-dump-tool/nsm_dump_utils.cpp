@@ -5,6 +5,8 @@
 
 #include "nsm_dump_utils.hpp"
 
+#include "nsm_device_utils.hpp"
+
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/lg2.hpp>
@@ -17,32 +19,6 @@
 #include <vector>
 
 using namespace phosphor::logging;
-
-namespace
-{
-// True when `dev` appears in `path` as a complete '/'-delimited segment.
-// Substring matching (path.find) would let "GPU1" match ".../GPU10".
-bool pathHasDeviceSegment(const std::string& path, const std::string& dev)
-{
-    if (dev.empty())
-    {
-        return false;
-    }
-    size_t pos = 0;
-    while ((pos = path.find(dev, pos)) != std::string::npos)
-    {
-        const bool startOk = (pos == 0) || (path[pos - 1] == '/');
-        const size_t end = pos + dev.size();
-        const bool endOk = (end == path.size()) || (path[end] == '/');
-        if (startOk && endOk)
-        {
-            return true;
-        }
-        pos = end;
-    }
-    return false;
-}
-} // namespace
 
 bool deviceHasInterface(const std::string& targetDevice,
                         const std::string& iface)
@@ -71,7 +47,7 @@ bool deviceHasInterface(const std::string& targetDevice,
     }
     for (const auto& path : paths)
     {
-        if (pathHasDeviceSegment(path, targetDevice))
+        if (phosphor::dump::nsm::pathMatchesDeviceSelector(path, targetDevice))
         {
             log<level::DEBUG>(
                 std::format(

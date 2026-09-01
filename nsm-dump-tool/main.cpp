@@ -6,6 +6,7 @@
 #include "config.h"
 
 #include "../dump-extensions/nvidia-dumps/tar_compress_lock.hpp"
+#include "nsm_device_utils.hpp"
 #include "nsm_dump_utils.hpp"
 
 #include <fcntl.h>
@@ -237,6 +238,11 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType,
                           DumpType dumpType, bool logIfMissing = true,
                           std::string* outLastError = nullptr)
 {
+    if (outLastError != nullptr)
+    {
+        outLastError->clear();
+    }
+
     sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
 
     std::string rootPath("/xyz/openbmc_project/inventory/system");
@@ -268,10 +274,19 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType,
     auto reply = bus.call(mapper, kDumpObjectLookupCallTimeoutUs);
 
     reply.read(paths);
-    for (auto& path : paths)
+    constexpr std::array matchOrder{
+        phosphor::dump::nsm::DeviceSelectorMatch::Exact,
+        phosphor::dump::nsm::DeviceSelectorMatch::Legacy};
+    for (const auto expectedMatch : matchOrder)
     {
-        if (path.find(targetDevice) != std::string::npos)
+        for (auto& path : paths)
         {
+            if (phosphor::dump::nsm::deviceSelectorMatch(path, targetDevice) !=
+                expectedMatch)
+            {
+                continue;
+            }
+
             auto GetDumpTypeMethod =
                 bus.new_method_call("xyz.openbmc_project.NSM", path.c_str(),
                                     "org.freedesktop.DBus.Properties", "Get");
@@ -330,8 +345,34 @@ std::string getDBusObject(const std::string& targetDevice, DataType dataType,
         }
     }
 
+    std::string derivedSelectors;
+    for (const auto& path : paths)
+    {
+        if (!derivedSelectors.empty())
+        {
+            derivedSelectors += ", ";
+        }
+        derivedSelectors +=
+            std::format("{} -> {}", path,
+                        phosphor::dump::nsm::deviceSelectorFromPath(path));
+    }
+    const auto selectorSummary =
+        std::format("derived selector candidates=[{}]", derivedSelectors);
+    if (outLastError != nullptr)
+    {
+        if (!outLastError->empty())
+        {
+            *outLastError += "; ";
+        }
+        *outLastError += selectorSummary;
+    }
+
     if (logIfMissing)
     {
+        log<level::DEBUG>(
+            std::format("getDBusObject: target={} lookup miss; {}",
+                        targetDevice, selectorSummary)
+                .c_str());
         std::string errorStr("D-Bus path not found for ");
         errorStr += targetDevice;
         log<level::ERR>(errorStr.c_str());
@@ -390,6 +431,13 @@ std::string waitForDBusObject(const std::string& targetDevice,
             logMsg(std::format(
                 "Device {} has no dump object yet (nsmd may still be enumerating it) — waiting up to {} s",
                 targetDevice, kDumpObjectWaitTimeoutSec));
+            if (!lastError.empty())
+            {
+                log<level::DEBUG>(
+                    std::format("getDBusObject: target={} lookup miss; {}",
+                                targetDevice, lastError)
+                        .c_str());
+            }
             waiting = true;
         }
 
@@ -401,7 +449,7 @@ std::string waitForDBusObject(const std::string& targetDevice,
                     targetDevice, kDumpObjectWaitTimeoutSec);
     if (!lastError.empty())
     {
-        errorStr += std::format("; last D-Bus error: {}", lastError);
+        errorStr += std::format("; last lookup detail: {}", lastError);
     }
     log<level::ERR>(errorStr.c_str());
 

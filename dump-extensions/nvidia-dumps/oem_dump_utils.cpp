@@ -16,14 +16,14 @@
  */
 
 #include "oem_dump_utils.hpp"
-#include <string_view>
-#include <variant>
-#include <optional>
 
 #include <algorithm>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <variant>
 #include <vector>
 
 namespace phosphor
@@ -132,10 +132,8 @@ void OEMTypeAllowableValuesIf::populateDebugInfoDumpTypes(
                             {
                                 std::string dumpType =
                                     std::get<std::string>(value);
-                                sdbusplus::message::object_path dumpDebugInfoId(
-                                    path);
-                                std::string dumpDebugInfoName =
-                                    dumpDebugInfoId.filename();
+                                auto dumpDebugInfoName =
+                                    nsm::deviceSelectorFromPath(path);
 
                                 if (auto it =
                                         debugInfoDumpTypeMapping.find(dumpType);

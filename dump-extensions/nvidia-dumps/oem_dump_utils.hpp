@@ -19,6 +19,7 @@
 
 #include "com/nvidia/Dump/AllowableValues/server.hpp"
 #include "dump_utils.hpp"
+#include "nsm_device_utils.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <phosphor-logging/lg2.hpp>
@@ -133,10 +134,9 @@ class OEMTypeAllowableValuesIf : public OEMDataTypeAllowableValuesObject
                         {
                             try
                             {
-                                auto path = msg.get_path();
-                                std::string dumpDebugInfoName =
-                                    sdbusplus::message::object_path(path)
-                                        .filename();
+                                auto dumpDebugInfoName =
+                                    nsm::deviceSelectorFromPath(msg.get_path());
+
                                 std::string diagTypeStr =
                                     "DiagnosticType=" + it->second +
                                     ";DeviceType=" + dumpDebugInfoName;
