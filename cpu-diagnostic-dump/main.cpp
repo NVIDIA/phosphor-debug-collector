@@ -1228,8 +1228,9 @@ int main(int argc, char** argv)
             logMsg("No events received within timeout.");
         }
 
-        // Cleanup temp directory
-        fs::remove_all(tempDir);
+        // Cleanup only this dump's unique directory. Removing the shared parent
+        // can delete files belonging to another CPU dump running concurrently.
+        fs::remove_all(tempPath);
 
         // Set exit code based on collection status
         // Expecting 2 events (LTSSM disabled - backend not ready)
