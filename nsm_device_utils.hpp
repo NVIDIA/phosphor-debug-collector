@@ -4,6 +4,8 @@
  */
 #pragma once
 
+#include "config.h"
+
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -93,11 +95,13 @@ inline std::size_t longestStemOverlap(std::string_view chassisStem,
  *
  * This naming transform is a compatibility convention shared by AllowableValues
  * generation and nsm-dump-tool lookup; it is not an EM or NSM schema contract.
- * NetworkAdapter selectors use the parent chassis index while preserving
- * descriptive stems; additional generic adapters retain a local sub-index.
+ * NetworkAdapter leaves remain unchanged when disambiguation is disabled.
+ * When enabled, selectors are derived using the parent chassis name and index.
  * Unparseable paths fall back to the leaf.
  */
-inline std::string deviceSelectorFromPath(std::string_view path)
+inline std::string deviceSelectorFromPath(
+    std::string_view path,
+    bool disambiguateAdapterLeaves = NSM_DISAMBIGUATE_NET_ADAPTER_LEAVES != 0)
 {
     const auto adaptersPos = path.find(detail::networkAdapters);
     if (adaptersPos == std::string_view::npos)
@@ -114,6 +118,10 @@ inline std::string deviceSelectorFromPath(std::string_view path)
     const auto leaf = path.substr(leafStart, leafEnd == std::string_view::npos
                                                  ? std::string_view::npos
                                                  : leafEnd - leafStart);
+    if (!disambiguateAdapterLeaves)
+    {
+        return std::string(leaf);
+    }
     if (chassisStart == std::string_view::npos)
     {
         return std::string(leaf);
@@ -162,7 +170,10 @@ inline std::string deviceSelectorFromPath(std::string_view path)
     }
     selector += '_';
     selector += chassisIndex;
-    if (leafIndex != "0")
+    // Equal indexes mirror only with stem overlap; CX_7/NIC_7 stays distinct.
+    const bool leafIndexMirrorsChassis =
+        overlap != 0 && leafIndex == chassisIndex;
+    if (leafIndex != "0" && !leafIndexMirrorsChassis)
     {
         selector += '_';
         selector += leafIndex;
@@ -178,15 +189,17 @@ enum class DeviceSelectorMatch
 };
 
 /** Classify a path match so callers can prefer exact selectors. */
-inline DeviceSelectorMatch deviceSelectorMatch(std::string_view path,
-                                               std::string_view selector)
+inline DeviceSelectorMatch deviceSelectorMatch(
+    std::string_view path, std::string_view selector,
+    bool disambiguateAdapterLeaves = NSM_DISAMBIGUATE_NET_ADAPTER_LEAVES != 0)
 {
     if (selector.empty())
     {
         return DeviceSelectorMatch::None;
     }
 
-    const auto resolved = deviceSelectorFromPath(path);
+    const auto resolved =
+        deviceSelectorFromPath(path, disambiguateAdapterLeaves);
     if (resolved == selector)
     {
         return DeviceSelectorMatch::Exact;
@@ -198,10 +211,12 @@ inline DeviceSelectorMatch deviceSelectorMatch(std::string_view path,
 }
 
 /** Match a stable selector or a legacy platform-prefixed inventory leaf. */
-inline bool pathMatchesDeviceSelector(std::string_view path,
-                                      std::string_view selector)
+inline bool pathMatchesDeviceSelector(
+    std::string_view path, std::string_view selector,
+    bool disambiguateAdapterLeaves = NSM_DISAMBIGUATE_NET_ADAPTER_LEAVES != 0)
 {
-    return deviceSelectorMatch(path, selector) != DeviceSelectorMatch::None;
+    return deviceSelectorMatch(path, selector, disambiguateAdapterLeaves) !=
+           DeviceSelectorMatch::None;
 }
 
 } // namespace phosphor::dump::nsm

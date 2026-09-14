@@ -327,6 +327,11 @@ conf_data.set(
 )
 
 # Add nsm-dump-tool configuration values to main config.h
+conf_data.set10(
+    'NSM_DISAMBIGUATE_NET_ADAPTER_LEAVES',
+    get_option('nsm-disambiguate-net-adapter-leaves').enabled(),
+    description: 'Disambiguate duplicate NSM NetworkAdapter leaves using the parent chassis',
+)
 conf_data.set(
     'NSM_DUMP_OBJECT_WAIT_TIMEOUT_SEC',
     get_option('NSM_DUMP_OBJECT_WAIT_TIMEOUT_SEC'),

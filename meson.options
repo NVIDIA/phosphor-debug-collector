@@ -17,6 +17,13 @@ option(
 )
 
 option(
+    'nsm-disambiguate-net-adapter-leaves',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Disambiguate duplicate NSM NetworkAdapter leaves using the parent chassis',
+)
+
+option(
     'NSM_DUMP_OBJECT_WAIT_TIMEOUT_SEC',
     type: 'integer',
     min: 1,
