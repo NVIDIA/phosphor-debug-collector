@@ -409,6 +409,12 @@ int main(int argc, char** argv)
                 report(reportFile,
                        "IROT/VROT collection failed or no devices found");
             }
+            else
+            {
+                // rot_dump exits non-zero unless it collected something,
+                // so a zero status is a success on its own.
+                anyOk = true;
+            }
         }
     }
 
