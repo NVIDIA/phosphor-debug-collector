@@ -386,6 +386,17 @@ sdbusplus::message::object_path Manager::createDump(
         elog<Unavailable>();
     }
 
+    // Ensure HardwareCheckout and FirmwareAttributes do not run together
+    if ((diagnosticFamilyInProgress(Manager::dumpInProgress,
+                                    "HardwareCheckout") &&
+         diagnosticType == DiagnosticType::FirmwareAttributes) ||
+        (diagnosticFamilyInProgress(Manager::dumpInProgress,
+                                    "FirmwareAttributes") &&
+         diagnosticType == DiagnosticType::HardwareCheckout))
+    {
+        elog<Unavailable>();
+    }
+
     auto id = captureDump(params, progressKey);
 
     // Entry Object path.
