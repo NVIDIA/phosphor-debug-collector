@@ -173,7 +173,8 @@ class Manager :
     void removeWatch(const fs::path& path);
 
     /** @brief Calculate per dump allowed size based on the available
-     *        size in the dump location.
+     *        size in the dump location. With auto-wrap, first delete the
+     *        oldest finished dumps until the reserve fits.
      *  @returns dump size in kilobytes.
      */
     size_t getAllowedSize();
