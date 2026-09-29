@@ -144,6 +144,11 @@ int main()
         commit<InternalFailure>();
         return -1;
     }
+    catch (const std::exception& e)
+    {
+        lg2::error("Unhandled exception: {WHAT}", "WHAT", e.what());
+        throw;
+    }
 
     return 0;
 }
