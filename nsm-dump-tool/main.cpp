@@ -700,6 +700,7 @@ void dumpData(DumpType dumpType)
 }
 
 int main(int argc, char** argv)
+try
 {
     int result = 0;
     if (argc <= 7)
@@ -805,4 +806,9 @@ int main(int argc, char** argv)
     }
 
     return result;
+}
+catch (const std::exception& e)
+{
+    logMsg(std::string("Unhandled exception: ") + e.what());
+    return EXIT_FAILURE;
 }

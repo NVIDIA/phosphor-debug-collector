@@ -6,6 +6,7 @@
 #include <phosphor-logging/lg2.hpp>
 
 int main()
+try
 {
     std::filesystem::path filePath(SYSTEMD_PSTORE_PATH);
     if (!std::filesystem::exists(filePath))
@@ -18,4 +19,9 @@ int main()
     phosphor::dump::ramoops::Manager manager(SYSTEMD_PSTORE_PATH);
 
     return EXIT_SUCCESS;
+}
+catch (const std::exception& e)
+{
+    lg2::error("Unhandled exception: {WHAT}", "WHAT", e.what());
+    return EXIT_FAILURE;
 }
