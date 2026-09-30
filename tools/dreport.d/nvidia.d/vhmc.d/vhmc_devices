@@ -1,0 +1,28 @@
+#!/bin/bash
+#
+# config: 2 30
+# @brief: vHMC device diagnostics
+#
+
+. $DREPORT_INCLUDE/functions
+
+file_name="vhmc-devices.log"
+
+desc="device list"
+command="ls -l /dev/"
+add_cmd_output "$command" "$file_name" "$desc"
+
+desc="i2c devices"
+command="ls /dev/ | grep i2c"
+add_cmd_output "$command" "$file_name" "$desc"
+
+i2c_buses=$(ls /dev/ 2>/dev/null | grep "^i2c-" | sed 's/i2c-//')
+if [ -n "$i2c_buses" ]; then
+    for bus in $i2c_buses; do
+        desc="i2c bus $bus detection"
+        command="i2cdetect -y $bus"
+        add_cmd_output "$command" "$file_name" "$desc"
+    done
+else
+    log_info "No i2c buses found"
+fi

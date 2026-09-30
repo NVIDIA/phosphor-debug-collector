@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# config: 2 30
+# @brief: vHMC MCTP diagnostics
+#
+
+. $DREPORT_INCLUDE/functions
+
+file_name="vhmc-mctp.log"
+
+desc="mctp endpoints"
+command="mctp-list-eps"
+add_cmd_output "$command" "$file_name" "$desc"
+
