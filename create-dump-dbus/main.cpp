@@ -33,7 +33,7 @@ void dispose(int s)
     delete server; // make sure destructor is called (free socket file)
 }
 
-void help()
+static void help()
 {
     std::cout << "create_dump_dbus utility, supported arguments:" << std::endl;
     std::cout << "--help, -h:             ";
@@ -55,28 +55,36 @@ void help()
                  "default: ";
     std::cout << CreateDumpDbus::systemDumpPath << std::endl;
     std::cout << "--type, -t:             ";
-    std::cout << "client mode only; sets dump type, supported types: ";
-    std::cout << CreateDumpDbus::printSupportedTypes();
-    std::cout << "." << std::endl;
+    std::cout << "client mode only; sets dump type: 'all', 'BMC' (default) "
+                 "or a type from --list, e.g. 'ROT' or "
+                 "'NetIR;DeviceType=GPU_0' (quote types containing ';')"
+              << std::endl;
+    std::cout << "--list, -l:             ";
+    std::cout << "client mode only; prints the dump types supported on "
+                 "this platform and exits"
+              << std::endl;
 }
 
 int main(int argc, char** argv)
 {
-    struct option opts[] = {{"help", no_argument, NULL, 'h'},
-                            {"server", no_argument, NULL, 's'},
-                            {"bmc-dump-path", required_argument, NULL, 'p'},
-                            {"system-dump-path", required_argument, NULL, 'q'},
-                            {"type", required_argument, NULL, 't'},
-                            {0, 0, 0, 0}};
+    struct option opts[] = {
+        {"help", no_argument, NULL, 'h'},
+        {"server", no_argument, NULL, 's'},
+        {"bmc-dump-path", required_argument, NULL, 'p'},
+        {"system-dump-path", required_argument, NULL, 'q'},
+        {"type", required_argument, NULL, 't'},
+        {"list", no_argument, NULL, 'l'},
+        {0, 0, 0, 0}};
 
     int c = 0;
     int option_index = 0;
     bool serverMode = false;
+    bool listTypes = false;
     std::string bmcPath;
     std::string systemPath;
     std::string type;
-    while ((c = getopt_long(argc, argv,
-                            "hsp:q:t:", static_cast<struct option*>(opts),
+    while ((c = getopt_long(argc, argv, "hsp:q:t:l",
+                            static_cast<struct option*>(opts),
                             &option_index)) != -1)
     {
         switch (c)
@@ -99,6 +107,10 @@ int main(int argc, char** argv)
 
             case 't':
                 type = std::string(optarg);
+                break;
+
+            case 'l':
+                listTypes = true;
                 break;
 
             default:
@@ -164,35 +176,19 @@ int main(int argc, char** argv)
             std::cerr << "Client mode, dump path arguments are ignored"
                       << std::endl;
         }
-        if (!type.empty())
+        CreateDumpDbus client;
+        if (listTypes)
         {
-            bool supported = false;
-            for (auto& d : SUPPORTED_DUMP_TYPES)
-            {
-                if (d == type)
-                {
-                    supported = true;
-                    break;
-                }
-            }
-            if (!supported)
-            {
-                std::cerr << "Dump type '" << type
-                          << "' is not supported. Supported types: ";
-                std::cerr << CreateDumpDbus::printSupportedTypes();
-                std::cerr << "." << std::endl;
-                std::cerr << "Exiting." << std::endl;
-                exit(-1);
-            }
+            return client.doListTypesCall();
         }
-        else
+        // the server validates the type against the platform's dump types
+        if (type.empty())
         {
             std::cerr << "No dump type specified, defaulting to 'BMC'"
                       << std::endl;
-            type = "BMC";
+            type = DEFAULT_DUMP_TYPE;
         }
-        CreateDumpDbus client;
-        client.doCreateDumpCall(type);
+        return client.doCreateDumpCall(type);
     }
 
     return 0;

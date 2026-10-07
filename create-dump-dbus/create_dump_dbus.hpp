@@ -16,8 +16,9 @@
  */
 #pragma once
 
-#include <sstream>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace phosphor
@@ -48,12 +49,22 @@ constexpr std::string_view CREATE_DUMP_CMD = "CREATE_DUMP";
 /** command responded by server ends communication */
 constexpr std::string_view END_CMD = "END";
 
-/** supported dump types */
-const std::vector<std::string> SUPPORTED_DUMP_TYPES{"all", "BMC", "EROT",
-                                                    "FPGA", "SelfTest"};
+/** end of communication when the request failed */
+constexpr std::string_view END_ERROR_CMD = "END_ERROR";
+
+/** command by which the client asks for the supported dump types */
+constexpr std::string_view LIST_TYPES_CMD = "LIST_DUMP_TYPES";
+
+/** dump types handled by the tool itself, not read from the dump manager */
+constexpr std::string_view ALL_DUMP_TYPE = "all";
+constexpr std::string_view BMC_DUMP_TYPE = "BMC";
 
 /** default dump type used when no type is specified by the client / user */
-constexpr std::string_view DEFAULT_DUMP_TYPE = "BMC";
+constexpr std::string_view DEFAULT_DUMP_TYPE = BMC_DUMP_TYPE;
+
+/** system dump types used when the dump manager doesn't publish them */
+const std::vector<std::string> LEGACY_SYSTEM_DUMP_TYPES{
+    "DiagnosticType=EROT", "DiagnosticType=FPGA", "DiagnosticType=SelfTest"};
 
 /**
  * @brief handles error message in CreateDumpDbus
@@ -87,8 +98,17 @@ class CreateDumpDbus
   public:
     ~CreateDumpDbus();
 
-    /** @brief calls CreateDump method on dbus */
-    void doCreateDumpCall(const std::string& type);
+    /** @brief calls CreateDump method on dbus
+     *
+     *  @return EXIT_SUCCESS, or EXIT_FAILURE if the request failed
+     */
+    int doCreateDumpCall(const std::string& type);
+
+    /** @brief asks the server for the dump types supported on this platform
+     *
+     *  @return EXIT_SUCCESS, or EXIT_FAILURE if the request failed
+     */
+    int doListTypesCall();
 
     /** @brief launches create-dump-dbus server that waits for request */
     void launchServer();
@@ -99,20 +119,41 @@ class CreateDumpDbus
     /** @brief path to which debug collector saves system dump files */
     static std::string systemDumpPath;
 
-    /** @brief creates a comma-separated list of all supported dump types */
-    static std::string printSupportedTypes()
-    {
-        std::ostringstream oss;
-        int types = static_cast<int>(SUPPORTED_DUMP_TYPES.size());
-        for (int i = 0; i < types - 1; ++i)
-        {
-            oss << "'" << SUPPORTED_DUMP_TYPES[i] << "', ";
-        }
-        oss << "'" << SUPPORTED_DUMP_TYPES[types - 1] << "'";
-        return oss.str();
-    }
-
   private:
+    /** @brief sends a command to the server and prints its responses
+     *
+     *  @return EXIT_SUCCESS, or EXIT_FAILURE if the server reported an error
+     */
+    int sendCommand(const std::string& command);
+
+    /** @brief reads the system dump types the dump manager advertises (the
+     *         Redfish OEMDiagnosticDataType AllowableValues)
+     *  @param [in] fd - file descriptor of the socket, for error messages
+     *
+     *  @return "DiagnosticType=<type>[;<key>=<value>...]" strings,
+     *          LEGACY_SYSTEM_DUMP_TYPES if the list isn't published, or
+     *          nullopt if it can't be read
+     */
+    static std::optional<std::vector<std::string>> getSystemDumpTypes(int fd);
+
+    /** @brief maps a requested system dump type to a supported one
+     *  @param [in] requested - "<type>[;<key>=<value>...]" or the same with
+     *                          a "DiagnosticType=" prefix
+     *  @param [in] systemTypes - supported system dump types
+     *
+     *  @return the matching supported type, or empty if not supported
+     */
+    static std::string resolveDumpType(
+        const std::string& requested,
+        const std::vector<std::string>& systemTypes);
+
+    /** @brief sends the supported dump types to the client
+     *  @param [in] fd - file descriptor of the socket
+     *
+     *  @return true on success
+     */
+    static bool processListRequest(int fd);
+
     /** @brief closes connection and free resources */
     void dispose();
 
@@ -151,7 +192,7 @@ class CreateDumpDbus
 
     /** @brief calls the CreateDump method on dbus
      *  @param [in] response - response message from dbus (or error message)
-     *  @param [in] type - dump type
+     *  @param [in] type - "BMC" or a system dump type from getSystemDumpTypes
      *
      *  @return on success 0, on failure -1
      */
@@ -160,14 +201,18 @@ class CreateDumpDbus
     /** @brief creates dump and copies it to target location
      *  @param [in] fd - file descriptor of the socket
      *  @param [in] type - dump type
+     *
+     *  @return true if the dump was created and copied
      */
-    static void processSingleDump(int fd, const std::string& type);
+    static bool processSingleDump(int fd, const std::string& type);
 
     /** @brief clears previously created dumps and processes the requested ones
      *  @param [in] fd - file descriptor of the socket
      *  @param [in] type - dump type
+     *
+     *  @return true if the type is supported and every dump succeeded
      */
-    static void processDumpRequest(int fd, const std::string& type);
+    static bool processDumpRequest(int fd, const std::string& type);
 
     /** @brief socket descriptors */
     int fd = -1;

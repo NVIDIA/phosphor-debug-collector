@@ -34,10 +34,17 @@
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/exception.hpp>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <functional>
 #include <iostream>
+#include <iterator>
+#include <map>
+#include <optional>
+#include <sstream>
+#include <variant>
 #include <vector>
 
 namespace phosphor
@@ -227,16 +234,25 @@ int CreateDumpDbus::createDump(const std::string& type, std::string& response)
 
     std::string path;
     std::map<std::string, std::variant<std::string, uint64_t>> params;
-    params["DumpType"] = type;
-    std::map<std::string, std::string> paramMap{};
-    if (type.empty() || type == "BMC")
+    if (type.empty() || type == BMC_DUMP_TYPE)
     {
         path = std::string(MAPPER_PATH_PREFIX) + "bmc";
+        params["DumpType"] = std::string(BMC_DUMP_TYPE);
     }
     else
     {
         path = std::string(MAPPER_PATH_PREFIX) + "system";
-        params["DiagnosticType"] = type;
+        // "k1=v1;k2=v2" -> {k1: v1, k2: v2}, same as bmcweb does for Redfish
+        std::istringstream iss(type);
+        std::string token;
+        while (std::getline(iss, token, ';'))
+        {
+            auto pos = token.find('=');
+            if (pos != std::string::npos)
+            {
+                params[token.substr(0, pos)] = token.substr(pos + 1);
+            }
+        }
     }
 
     auto bus = bus::new_default();
@@ -269,10 +285,11 @@ int CreateDumpDbus::createDump(const std::string& type, std::string& response)
     return ret;
 }
 
-void CreateDumpDbus::processSingleDump(int fd, const std::string& type)
+bool CreateDumpDbus::processSingleDump(int fd, const std::string& type)
 {
     std::string response;
     int cDumpResult = CreateDumpDbus::createDump(type, response);
+    bool success = false;
     if (cDumpResult == 0)
     {
         sendMsg(
@@ -282,17 +299,150 @@ void CreateDumpDbus::processSingleDump(int fd, const std::string& type)
                 type, response));
         sendMsg(fd, "Waiting for dump creation to finish...");
         std::string path = response;
-        CreateDumpDbus::copyDumpToTmpDir(path, response);
+        success = CreateDumpDbus::copyDumpToTmpDir(path, response) == 0;
         sendMsg(fd, response);
     }
     else
     {
         sendMsg(fd, response);
     }
+    return success;
 }
 
-void CreateDumpDbus::processDumpRequest(int fd, const std::string& type)
+std::optional<std::vector<std::string>> CreateDumpDbus::getSystemDumpTypes(
+    int fd)
 {
+    constexpr auto ALLOWABLE_VALUES_PATH =
+        "/xyz/openbmc_project/dump/oem_allowable_values";
+    constexpr auto ALLOWABLE_VALUES_INTERFACE =
+        "com.nvidia.Dump.AllowableValues";
+    constexpr auto ALLOWABLE_VALUES_PROPERTY = "OEMDataTypeAllowableValues";
+    constexpr std::string_view SYSTEM_KEY_SUFFIX = ".DumpType.System";
+
+    try
+    {
+        auto b = bus::new_default();
+        auto m = b.new_method_call(DUMP_BUSNAME, ALLOWABLE_VALUES_PATH,
+                                   "org.freedesktop.DBus.Properties", "Get");
+        m.append(ALLOWABLE_VALUES_INTERFACE, ALLOWABLE_VALUES_PROPERTY);
+        auto reply = b.call(m);
+
+        std::variant<std::map<std::string, std::vector<std::string>>> value;
+        reply.read(value);
+
+        // keys are DumpType enums serialized as strings
+        for (const auto& [key, types] : std::get<0>(value))
+        {
+            if (key.ends_with(SYSTEM_KEY_SUFFIX))
+            {
+                return types;
+            }
+        }
+        return std::vector<std::string>{};
+    }
+    catch (const exception::SdBusError& e)
+    {
+        // only a dump manager that doesn't publish the list gets the legacy one
+        constexpr std::array<std::string_view, 3> NOT_PUBLISHED{
+            "org.freedesktop.DBus.Error.UnknownObject",
+            "org.freedesktop.DBus.Error.UnknownInterface",
+            "org.freedesktop.DBus.Error.UnknownProperty"};
+        if (std::ranges::find(NOT_PUBLISHED, std::string_view(e.name())) !=
+            NOT_PUBLISHED.end())
+        {
+            log<level::INFO>(
+                fmt::format("System dump types not published, using legacy "
+                            "list: {}",
+                            e.what())
+                    .c_str());
+            return LEGACY_SYSTEM_DUMP_TYPES;
+        }
+        auto err =
+            fmt::format("Failed to read supported dump types: {}", e.what());
+        sendMsg(fd, err);
+        log<level::ERR>(err.c_str());
+        return std::nullopt;
+    }
+}
+
+std::string CreateDumpDbus::resolveDumpType(
+    const std::string& requested, const std::vector<std::string>& systemTypes)
+{
+    constexpr std::string_view DIAG_TYPE_PREFIX = "DiagnosticType=";
+
+    std::string type = requested;
+    if (!type.starts_with(DIAG_TYPE_PREFIX))
+    {
+        type.insert(0, DIAG_TYPE_PREFIX);
+    }
+    // ROT replaced EROT, accept either name for the one the platform lists
+    if (std::ranges::find(systemTypes, type) == systemTypes.end())
+    {
+        if (type == "DiagnosticType=EROT")
+        {
+            type = "DiagnosticType=ROT";
+        }
+        else if (type == "DiagnosticType=ROT")
+        {
+            type = "DiagnosticType=EROT";
+        }
+    }
+
+    if (std::ranges::find(systemTypes, type) != systemTypes.end())
+    {
+        return type;
+    }
+    return {};
+}
+
+bool CreateDumpDbus::processListRequest(int fd)
+{
+    auto systemTypes = CreateDumpDbus::getSystemDumpTypes(fd);
+    if (!systemTypes)
+    {
+        return false;
+    }
+    sendMsg(fd, std::string(ALL_DUMP_TYPE));
+    sendMsg(fd, std::string(BMC_DUMP_TYPE));
+    for (const auto& t : *systemTypes)
+    {
+        sendMsg(fd, t);
+    }
+    return true;
+}
+
+bool CreateDumpDbus::processDumpRequest(int fd, const std::string& type)
+{
+    std::vector<std::string> types{std::string(BMC_DUMP_TYPE)};
+    if (type != BMC_DUMP_TYPE)
+    {
+        auto systemTypes = CreateDumpDbus::getSystemDumpTypes(fd);
+        if (!systemTypes)
+        {
+            return false;
+        }
+        if (type == ALL_DUMP_TYPE)
+        {
+            types.insert(types.end(), systemTypes->begin(), systemTypes->end());
+        }
+        else
+        {
+            auto resolved = CreateDumpDbus::resolveDumpType(type, *systemTypes);
+            if (resolved.empty())
+            {
+                sendMsg(fd, fmt::format("Dump type '{}' is not supported on "
+                                        "this platform. Run with --list to "
+                                        "see the supported types.",
+                                        type));
+                log<level::ERR>(
+                    fmt::format("Unsupported dump type requested: {}", type)
+                        .c_str());
+                return false;
+            }
+            types = {std::move(resolved)};
+        }
+    }
+
     sendMsg(fd, "Deleting existing dump files...");
     std::filesystem::path tmpDir(TMP_DIR_PATH);
     if (std::filesystem::exists(tmpDir))
@@ -322,20 +472,13 @@ void CreateDumpDbus::processDumpRequest(int fd, const std::string& type)
             }
         }
     }
-    if (type == "all")
+    // keep going after a failed dump, but report the request as failed
+    bool success = true;
+    for (const auto& t : types)
     {
-        for (const auto& d : SUPPORTED_DUMP_TYPES)
-        {
-            if (d != "all")
-            {
-                CreateDumpDbus::processSingleDump(fd, d);
-            }
-        }
+        success = CreateDumpDbus::processSingleDump(fd, t) && success;
     }
-    else
-    {
-        CreateDumpDbus::processSingleDump(fd, type);
-    }
+    return success;
 }
 
 void CreateDumpDbus::launchServer()
@@ -479,52 +622,35 @@ void CreateDumpDbus::launchServer()
                 return 0;
             }
 
-            std::string command(buffer.begin(), buffer.end());
+            std::string command(buffer.begin(), buffer.begin() + ret);
             std::istringstream iss(command);
             std::vector<std::string> tokens{
                 std::istream_iterator<std::string>{iss},
                 std::istream_iterator<std::string>{}};
-            if (tokens.size() != 0 && tokens[0] == std::string(CREATE_DUMP_CMD))
+            bool success = false;
+            if (tokens.size() != 0 && tokens[0] == std::string(LIST_TYPES_CMD))
             {
-                std::string type;
+                success = CreateDumpDbus::processListRequest(fd);
+            }
+            else if (tokens.size() != 0 &&
+                     tokens[0] == std::string(CREATE_DUMP_CMD))
+            {
+                std::string type(DEFAULT_DUMP_TYPE);
                 if (tokens.size() > 1)
                 {
-                    tokens[1].erase(
-                        std::remove_if(tokens[1].begin(), tokens[1].end(),
-                                       [](const auto& c) -> bool {
-                                           return !std::isalnum(c);
-                                       }),
-                        tokens[1].end());
-                    for (const auto& d : SUPPORTED_DUMP_TYPES)
-                    {
-                        if (d == tokens[1])
-                        {
-                            type = d;
-                            break;
-                        }
-                    }
-                    if (type.empty())
-                    {
-                        sendMsg(fd, "Invalid dump type requested");
-                        log<level::ERR>(
-                            fmt::format("Invalid dump type requested: {}",
-                                        tokens[1])
-                                .c_str());
-                    }
+                    // dump types look like "NetIR;DeviceType=GPU_0"
+                    type = tokens[1];
+                    std::erase_if(type, [](unsigned char c) {
+                        return std::isalnum(c) == 0 && c != '=' && c != ';' &&
+                               c != '_' && c != '-';
+                    });
                 }
-                else
-                {
-                    type = DEFAULT_DUMP_TYPE;
-                }
-                if (!type.empty())
-                {
-                    log<level::INFO>(
-                        fmt::format("Processing dump request, type: {}", type)
-                            .c_str());
-                    CreateDumpDbus::processDumpRequest(fd, type);
-                }
+                log<level::INFO>(
+                    fmt::format("Processing dump request, type: {}", type)
+                        .c_str());
+                success = CreateDumpDbus::processDumpRequest(fd, type);
             }
-            sendMsg(fd, std::string(END_CMD));
+            sendMsg(fd, std::string(success ? END_CMD : END_ERROR_CMD));
             close(fd);
 
             return 0;
@@ -553,7 +679,22 @@ void CreateDumpDbus::launchServer()
     }
 }
 
-void CreateDumpDbus::doCreateDumpCall(const std::string& type)
+int CreateDumpDbus::doCreateDumpCall(const std::string& type)
+{
+    std::string command(CREATE_DUMP_CMD);
+    if (!type.empty())
+    {
+        command += " " + type;
+    }
+    return sendCommand(command);
+}
+
+int CreateDumpDbus::doListTypesCall()
+{
+    return sendCommand(std::string(LIST_TYPES_CMD));
+}
+
+int CreateDumpDbus::sendCommand(const std::string& command)
 {
     struct sockaddr_un addr;
     std::vector<unsigned char> buffer(BUFFER_SIZE);
@@ -578,13 +719,9 @@ void CreateDumpDbus::doCreateDumpCall(const std::string& type)
         exit(EXIT_FAILURE);
     }
 
-    std::string command(CREATE_DUMP_CMD);
-    if (!type.empty())
-    {
-        command += " " + type;
-    }
     sendMsg(dataSocket, command);
 
+    int result = EXIT_FAILURE;
     while (true)
     {
         buffer.clear();
@@ -597,10 +734,16 @@ void CreateDumpDbus::doCreateDumpCall(const std::string& type)
             exit(EXIT_FAILURE);
         }
 
-        std::string response(buffer.begin(), buffer.end());
+        std::string response(buffer.begin(), buffer.begin() + ret);
 
-        if (response.rfind(END_CMD) != std::string::npos)
+        // a closed socket without an end marker is a failure too
+        if (ret == 0 || response == END_ERROR_CMD)
         {
+            break;
+        }
+        if (response == END_CMD)
+        {
+            result = EXIT_SUCCESS;
             break;
         }
 
@@ -608,6 +751,7 @@ void CreateDumpDbus::doCreateDumpCall(const std::string& type)
     }
 
     close(dataSocket);
+    return result;
 }
 
 void CreateDumpDbus::sendMsg(int fd, const std::string& msg)
