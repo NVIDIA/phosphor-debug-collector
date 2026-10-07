@@ -178,6 +178,11 @@ conf_data.set(
     get_option('SYSTEM_DUMP_MAX_LIMIT'),
     description: 'Total system dumps to be retained on bmc',
 )
+conf_data.set(
+    'SYSTEM_DUMP_AUTO_WRAP',
+    get_option('system-dump-auto-wrap').enabled(),
+    description: 'Delete the oldest system dumps when the size quota is reached',
+)
 conf_data.set_quoted(
     'RESOURCE_DUMP_OBJPATH',
     get_option('RESOURCE_DUMP_OBJPATH'),

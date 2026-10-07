@@ -168,6 +168,27 @@ std::string joinDumpInProgressKeys(const std::set<std::string>& keys)
 /** Monotonic suffix for synthetic progress keys when params are empty. */
 std::atomic<uint64_t> g_anonymousProgressSeq{1};
 
+/** Size of the regular files under dir in KB; unreadable files count as 0. */
+uintmax_t dirSizeKb(const fs::path& dir)
+{
+    uintmax_t bytes = 0;
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(dir, ec), end; !ec && it != end;
+         it.increment(ec))
+    {
+        std::error_code sizeEc;
+        if (!it->is_directory(sizeEc))
+        {
+            auto fileSize = it->file_size(sizeEc);
+            if (!sizeEc)
+            {
+                bytes += fileSize;
+            }
+        }
+    }
+    return bytes / 1024;
+}
+
 } // namespace
 
 /** True if any in-progress key matches family or "family:..." scoped prefix. */
@@ -1200,20 +1221,58 @@ size_t Manager::getAllowedSize()
     using namespace sdbusplus::xyz::openbmc_project::Dump::Create::Error;
     using Reason = xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
 
-    size_t size = 0;
+    auto usedKb = dirSizeKb(dumpDir);
 
-    // Current size of the dump directory
-    for (const auto& p : fs::recursive_directory_iterator(dumpDir))
+#ifdef SYSTEM_DUMP_AUTO_WRAP
+    static_assert(SYSTEM_DUMP_TOTAL_SIZE >= SYSTEM_DUMP_MIN_SPACE_REQD);
+    constexpr uintmax_t budgetKb =
+        SYSTEM_DUMP_TOTAL_SIZE - SYSTEM_DUMP_MIN_SPACE_REQD;
+
+    if (usedKb > budgetKb)
     {
-        if (!fs::is_directory(p))
+        // Entries are keyed by increasing id, so begin() is the oldest dump.
+        for (auto it = entries.begin();
+             usedKb > budgetKb && it != entries.end();)
         {
-            size += fs::file_size(p);
+            auto& entry = *it->second;
+            // delete_() erases the entry from the map, so step past it first.
+            ++it;
+            // Its collector is still writing and it holds the dumpInProgress
+            // gate.
+            if (entry.status() == OperationStatus::InProgress)
+            {
+                continue;
+            }
+            auto id = entry.getDumpId();
+            entry.delete_();
+            // A failed entry has no file, so delete_() leaves its directory.
+            std::error_code ec;
+            fs::remove_all(fs::path(dumpDir) / std::to_string(id), ec);
+
+            auto nowKb = dirSizeKb(dumpDir);
+            log<level::INFO>(
+                fmt::format("System dump quota: deleted dump {} to free {} KB, "
+                            "{} KB used of {} KB budget",
+                            id, usedKb > nowKb ? usedKb - nowKb : 0, nowKb,
+                            budgetKb)
+                    .c_str());
+            usedKb = nowKb;
+        }
+
+        if (usedKb > budgetKb)
+        {
+            log<level::ERR>(
+                fmt::format(
+                    "System dump quota: {} KB used of {} KB budget with no "
+                    "finished dump left to delete; the rest is in-progress "
+                    "dumps or files not owned by any entry",
+                    usedKb, budgetKb)
+                    .c_str());
         }
     }
+#endif // SYSTEM_DUMP_AUTO_WRAP
 
-    // Convert to KB
-    size = size / 1024;
-
+    auto size = static_cast<size_t>(usedKb);
     size = (size > SYSTEM_DUMP_TOTAL_SIZE ? 0 : SYSTEM_DUMP_TOTAL_SIZE - size);
 
     if (size < SYSTEM_DUMP_MIN_SPACE_REQD)
