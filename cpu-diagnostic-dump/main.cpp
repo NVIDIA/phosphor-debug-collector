@@ -73,7 +73,7 @@ constexpr auto PLDM_STATIC_CONFIG_PATH =
 constexpr int EXIT_CODE_TAR_WARNING = 1;
 
 // Event file names (written by pldmd for OEM event classes)
-// Files in /var/lib/pldm_events/<terminus>/
+// Files in /var/lib/pldm_events/<terminus>/CPU_<cpuIndex>/
 constexpr auto CPER_ERROR_COUNT_EVENT_FILE = "CPERErrorCount_0_0.bin";
 // LTSSM event collection disabled - backend not ready
 // constexpr auto PCIE_LTSSM_EVENT_FILE = "PCIeLTSSM_0_0.bin";
@@ -130,6 +130,7 @@ struct PldmTarget
 {
     std::string terminus;
     int eid = -1;
+    int cpuIndex = 0;
 };
 
 // Tool state
@@ -523,6 +524,7 @@ bool loadDeviceToTerminusMap(const std::string& configPath,
         PldmTarget target{
             .terminus = terminusInfo["TerminusName"].get<std::string>(),
             .eid = terminusInfo["EID"].get<int>(),
+            .cpuIndex = terminusInfo["CpuIndex"].get<int>(),
         };
 
         if (!seenTargets.emplace(target.terminus, target.eid).second)
@@ -1285,13 +1287,6 @@ int waitForEvents(const std::string& eventDir,
         }
     }
 
-    if (receivedEvents.size() >= 2)
-    {
-        inotify_rm_watch(inotifyFd, watchFd);
-        close(inotifyFd);
-        return 0;
-    }
-
     // Poll for new events with periodic file existence check as fallback
     struct pollfd pfd;
     pfd.fd = inotifyFd;
@@ -1561,9 +1556,7 @@ int runPCoreMode(const PldmTarget& pldmTarget, const std::string& eventDir,
     collected = 0;
 
     // Serialise against direct invocations before touching staging. Scoped to
-    // the terminus and deliberately not to the EID: pldmd stages by terminus
-    // name under a single fixed filename, so two packages sharing a name also
-    // share the staged file and must not collect at the same time.
+    // the terminus, so CPUs sharing one also take turns.
     TerminusLock lock(pldmTarget.terminus);
     if (!lock.acquire(timeoutSeconds))
     {
@@ -1748,7 +1741,9 @@ int main(int argc, char** argv)
     const auto& pldmTarget = it->second;
     std::string pldmTerminus = pldmTarget.terminus;
 
-    std::string eventDir = std::string(EVENT_STAGING_BASE) + "/" + pldmTerminus;
+    // pldmd stages per CPU, as CPUs can share a terminus (e.g. VR-C2).
+    std::string eventDir = std::format("{}/{}/CPU_{}", EVENT_STAGING_BASE,
+                                       pldmTerminus, pldmTarget.cpuIndex);
 
     logMsg(std::format("Starting {} dump collection for {} ({})", modeName(),
                        targetDevice, pldmTerminus));
