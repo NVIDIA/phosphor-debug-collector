@@ -57,6 +57,7 @@ enum class DiagnosticType
     EROT,
     ROT,
     SMA,
+    LPU,
     NVSwitch,
     NVLinkManagementNIC,
     GPU_SXM,
@@ -68,6 +69,7 @@ enum class DiagnosticType
     HardwareCheckout,
     CPLD,
     CPUDiagnosticDump,
+    LPUHealth,
     PCoreDump,
     Unknown
 };
@@ -78,6 +80,7 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"EROT", DiagnosticType::EROT},
     {"ROT", DiagnosticType::ROT},
     {"SMA", DiagnosticType::SMA},
+    {"LPU", DiagnosticType::LPU},
     {"Net_NVSwitch", DiagnosticType::NVSwitch},
     {"Net_NVLinkManagementNIC", DiagnosticType::NVLinkManagementNIC},
     {"Net_GPU_SXM", DiagnosticType::GPU_SXM},
@@ -89,6 +92,7 @@ const std::unordered_map<std::string, DiagnosticType> diagnosticTypeMap = {
     {"HardwareCheckout", DiagnosticType::HardwareCheckout},
     {"CPLD", DiagnosticType::CPLD},
     {"CPUDiagnosticsData", DiagnosticType::CPUDiagnosticDump},
+    {"LPUHealth", DiagnosticType::LPUHealth},
 #ifdef PCORE_DUMP
     // Deliberately absent from SYSTEM_DUMP_OEM_DIAGNOSTIC_ALLOWABLE_TYPE:
     // PCoreDump is reached through its own Processor action, not through
@@ -528,11 +532,25 @@ uint32_t fpgaRegDump(const std::string& dumpId, const std::string& dumpPath)
         "System dump: Error occurred during FPGA register dump execution");
 }
 
+uint32_t lpuHealthDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    return executeDumpCommand(
+        LPU_HEALTH_DUMP_BIN_PATH, dumpId, dumpPath, {},
+        "System dump: Error occurred during LPU health dump execution");
+}
+
 uint32_t smaRegDump(const std::string& dumpId, const std::string& dumpPath)
 {
     return executeDumpCommand(
         SMA_DUMP_BIN_PATH, dumpId, dumpPath, {},
         "System dump: Error occurred during SMA register dump execution");
+}
+
+uint32_t lpuLogDump(const std::string& dumpId, const std::string& dumpPath)
+{
+    return executeDumpCommand(
+        LPU_DUMP_BIN_PATH, dumpId, dumpPath, {},
+        "System dump: Error occurred during LPU log dump execution");
 }
 
 uint32_t nsmDump(const std::string& dumpId, const std::string& dumpPath,
@@ -824,6 +842,9 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
             case DiagnosticType::SMA:
                 smaRegDump(id, dumpPath);
                 break;
+            case DiagnosticType::LPU:
+                lpuLogDump(id, dumpPath);
+                break;
             case DiagnosticType::EROT:
             case DiagnosticType::ROT:
                 erotDump(id, dumpPath);
@@ -891,6 +912,9 @@ uint32_t Manager::captureDump(phosphor::dump::DumpCreateParams params,
                 break;
             case DiagnosticType::CPLD:
                 cpldRegDump(id, dumpPath);
+                break;
+            case DiagnosticType::LPUHealth:
+                lpuHealthDump(id, dumpPath);
                 break;
             case DiagnosticType::CPUDiagnosticDump:
                 if (deviceType.empty())
