@@ -45,6 +45,8 @@ inline const std::unordered_map<std::string, DumpKind>& dumpKinds()
         {"GPUDiag", {"GPUDeviceDiagnostics", true}},
         {"CPUDiag", {"CPUDiagnosticsData", true}},
         {"NetIR", {"NetIR", true}},
+        {"LPU", {"LPU", false}},
+        {"LPUHealth", {"LPUHealth", false}},
     };
     return table;
 }

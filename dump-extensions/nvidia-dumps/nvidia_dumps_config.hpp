@@ -41,6 +41,8 @@ constexpr auto CPU_DIAGNOSTIC_DUMP_BIN_PATH =
 constexpr auto NSM_DUMP_BIN_PATH = "/usr/bin/nsm-dump-tool";
 
 // Existing binaries / config files not in scope for per-type C++ migration.
+constexpr auto LPU_HEALTH_DUMP_BIN_PATH = "/usr/bin/lpu_health_dump.sh";
+constexpr auto LPU_DUMP_BIN_PATH = "/usr/bin/lpu_dump.sh";
 constexpr auto SELFTEST_DAT_CFG_PATH = "/usr/share/oobaml/dat.json";
 constexpr auto RETIMER_LTSSM_DUMP_BIN_PATH = "/usr/bin/retimerLtssmDump.sh";
 constexpr auto RETIMER_REGISTER_DUMP_BIN_PATH =
