@@ -139,11 +139,6 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
                                     100.0F)
                                  : 100.0F;
                 progress(static_cast<uint8_t>(100 - timeProgress));
-                std::string m =
-                    "Dump is " + std::to_string(100 - timeProgress) + " " +
-                    std::to_string(now) + " " + std::to_string(limit) + +" " +
-                    std::to_string(timeProgress);
-                log<level::ERR>(m.c_str());
 
                 bool completed = phosphor::dump::Entry::status() ==
                                  OperationStatus::Completed;
@@ -235,6 +230,11 @@ class Entry : virtual public phosphor::dump::Entry, virtual public EntryIfaces
     void setFailedStatus()
     {
         status(phosphor::dump::OperationStatus::Failed);
+        // The timer only stops on Completed or timeout, so stop it here.
+        if (progressTimer)
+        {
+            progressTimer->stop();
+        }
     }
 
     /** @brief Method to get entry's dump type
