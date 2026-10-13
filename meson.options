@@ -267,6 +267,13 @@ option(
 )
 
 option(
+    'system-dump-auto-wrap',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Delete the oldest system dumps when the size quota is reached',
+)
+
+option(
     'dump-rotate-config',
     type: 'feature',
     value: 'disabled',

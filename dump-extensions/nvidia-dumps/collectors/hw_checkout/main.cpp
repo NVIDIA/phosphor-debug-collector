@@ -33,6 +33,7 @@
 namespace
 {
 constexpr auto HW_CHECKOUT_SH = "/usr/bin/hw_checkout.sh";
+constexpr auto HW_CHECKOUT_JSON = "/tmp/hw_checkout_output.json";
 } // namespace
 
 int main(int argc, char** argv)
@@ -66,11 +67,35 @@ int main(int argc, char** argv)
     std::string subsystems = hmc ? args.hmcArgs : args.bmcArgs;
     std::string label = hmc ? "hmc" : "bmc";
     std::string checkerLog = std::format("{}/{}_checker.log", stage, label);
+    // The name the HAT Robot suite and the legacy wrappers both expect.
+    std::string jsonResults = stage + "/hw_checkout_output.json";
 
-    // hw_checkout.sh writes its detailed log to /tmp/hmc_checker.log.
+    // Clear stale JSON so a failed run stages nothing, not last run's.
+    const int rmRc = runExternal(std::format("rm -f {}", HW_CHECKOUT_JSON));
+    if (rmRc != 0)
+    {
+        lg2::warning("Failed to clear {FILE} (rc={RC}); a stale result from an "
+                     "earlier dump may be staged",
+                     "FILE", HW_CHECKOUT_JSON, "RC", rmRc);
+    }
+
+    // Exit code is not checked: not interpretable uniformly across platforms.
+    // Verdicts are in the output.
     runExternal(
-        std::format("{} {} > {} 2>&1; cp /tmp/hmc_checker.log {} 2>/dev/null",
-                    HW_CHECKOUT_SH, subsystems, consoleLog, checkerLog));
+        std::format("{} {} > {} 2>&1", HW_CHECKOUT_SH, subsystems, consoleLog));
+    runExternal(
+        std::format("cp /tmp/hmc_checker.log {} 2>/dev/null", checkerLog));
+
+    // Stage the JSON as the legacy wrappers do. `test ! -e` keeps "platform
+    // writes no JSON" distinct from a copy that actually failed.
+    const int jsonRc =
+        runExternal(std::format("test ! -e {} || cp {} {}", HW_CHECKOUT_JSON,
+                                HW_CHECKOUT_JSON, jsonResults));
+    if (jsonRc != 0)
+    {
+        lg2::warning("Failed to stage {FILE} (rc={RC})", "FILE",
+                     HW_CHECKOUT_JSON, "RC", jsonRc);
+    }
     if (!hmc)
     {
         // Relabel HMC->BMC in the checker log (mirrors hw_checkout_dump.sh).
