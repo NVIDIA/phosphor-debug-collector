@@ -71,6 +71,31 @@ test(
     workdir: meson.current_source_dir(),
 )
 
+# lookupCreateParam() and the BMC (Manager) OEM allowable values live in the
+# NVIDIA dump extension; the allowable-values case only runs with vhmc-host.
+if get_option('nvidia-dumps-extension').enabled()
+    test(
+        'oem_dump_utils_test',
+        executable(
+            'oem_dump_utils_test',
+            'oem_dump_utils_test.cpp',
+            '../dump-extensions/nvidia-dumps/oem_dump_utils.cpp',
+            dump_types_hpp,
+            include_directories: ['.', '../'],
+            implicit_include_directories: false,
+            dependencies: [
+                gtest_dep,
+                gmock_dep,
+                phosphor_dbus_interfaces_dep,
+                phosphor_logging_dep,
+                sdbusplus_dep,
+                sdeventplus_dep,
+            ],
+        ),
+        workdir: meson.current_source_dir(),
+    )
+endif
+
 # PCore selector handling is header-only and shared by the dump manager and
 # cpu-diagnostic-dump, so it is tested without either of their dependencies.
 # Built whenever tests are enabled, not only under -Dpcore-dump=enabled, so CI
