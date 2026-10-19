@@ -15,10 +15,6 @@
  * limitations under the License.
  */
 
-// nv-collector-hw-checkout - runs hw_checkout.sh with the platform subsystem
-// list and copies out the checker log. HMC: `hmc gpu cpu sma`, keep
-// hmc_checker.log. BMC: `bmc fpga`, copy to bmc_checker.log + sed HMC->BMC.
-
 #include "collectors/common/collector_helpers.hpp"
 #include "collectors/common/collector_main.hpp"
 #include "dump_kinds.hpp"
@@ -26,6 +22,7 @@
 #include <phosphor-logging/lg2.hpp>
 
 #include <cstdlib>
+#include <filesystem>
 #include <format>
 #include <string>
 #include <vector>
@@ -34,6 +31,8 @@ namespace
 {
 constexpr auto HW_CHECKOUT_SH = "/usr/bin/hw_checkout.sh";
 constexpr auto HW_CHECKOUT_JSON = "/tmp/hw_checkout_output.json";
+// Optional platform MCTP status report; runs when installed
+constexpr auto MCTP_STATUS_SH = "/usr/bin/dump_mctp_status.sh";
 } // namespace
 
 int main(int argc, char** argv)
@@ -95,6 +94,27 @@ int main(int argc, char** argv)
     {
         lg2::warning("Failed to stage {FILE} (rc={RC})", "FILE",
                      HW_CHECKOUT_JSON, "RC", jsonRc);
+    }
+
+    // Optional MCTP status report into stage; no-op if the helper is absent.
+    {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        if (fs::exists(MCTP_STATUS_SH, ec))
+        {
+            const int mctpRc = runExternal(
+                std::format("{} {} > /dev/null 2>&1", MCTP_STATUS_SH, stage));
+            if (mctpRc != 0)
+            {
+                lg2::warning("{TOOL} failed (rc={RC})", "TOOL", MCTP_STATUS_SH,
+                             "RC", mctpRc);
+            }
+        }
+        else if (ec)
+        {
+            lg2::warning("Failed to stat {TOOL}: {ERR}", "TOOL", MCTP_STATUS_SH,
+                         "ERR", ec.message());
+        }
     }
     if (!hmc)
     {

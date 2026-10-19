@@ -62,7 +62,7 @@ struct CheckoutArgs
 inline const std::unordered_map<std::string, CheckoutArgs>& checkoutArgs()
 {
     static const std::unordered_map<std::string, CheckoutArgs> table = {
-        {"HwCheckout", {"hmc gpu cpu sma", "bmc fpga"}},
+        {"HwCheckout", {"", ""}},
         {"FwAttrs", {"firmware", "firmware"}},
     };
     return table;
