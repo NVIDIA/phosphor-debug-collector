@@ -22,6 +22,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <format>
@@ -788,6 +789,8 @@ int main(int argc, char** argv)
 
         logMsg(std::format("Compressing dump to `{}`",
                            dumpPath + '/' + tempFolderName + ".tar.xz"));
+        // tar -J runs xz; -0 is ~14x faster than default -6
+        setenv("XZ_OPT", "-0", 1);
         result = phosphor::dump::compression::runShellWithLock(
             phosphor::dump::compression::lockPath, std::move(command));
 
