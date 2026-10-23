@@ -262,25 +262,28 @@ uint32_t Manager::captureVhmcOemDump(
     else if (pid > 0)
     {
         auto entryId = lastEntryId + 1;
-        Child::Callback callback =
-            [this, pid, entryId, diagnosticType](Child&, const siginfo_t* si) {
-                // WSTOPPED also notifies on stop/continue; only exit is
-                // terminal.
-                if (si->si_code != CLD_EXITED && si->si_code != CLD_KILLED &&
-                    si->si_code != CLD_DUMPED)
-                {
-                    return;
-                }
-                this->vhmcOemDumpInProgress.erase(diagnosticType);
-                if (si->si_status != 0)
-                {
-                    lg2::error(
-                        "OEM diagnostic dump process failed: status {STATUS}",
-                        "STATUS", si->si_status);
-                    this->createDumpFailed(static_cast<int>(entryId));
-                }
-                this->childPtrMap.erase(pid);
-            };
+        Child::Callback callback = [this, pid, entryId, diagnosticType](
+                                       Child& source, const siginfo_t* si) {
+            // WSTOPPED also reports a stop (not a continue: there is no
+            // WCONTINUED); only an exit is terminal. The Child source is
+            // one-shot and already disabled here, so re-arm it on a stop,
+            // or the later exit is never seen.
+            if (si->si_code != CLD_EXITED && si->si_code != CLD_KILLED &&
+                si->si_code != CLD_DUMPED)
+            {
+                source.set_enabled(sdeventplus::source::Enabled::OneShot);
+                return;
+            }
+            this->vhmcOemDumpInProgress.erase(diagnosticType);
+            if (si->si_status != 0)
+            {
+                lg2::error(
+                    "OEM diagnostic dump process failed: status {STATUS}",
+                    "STATUS", si->si_status);
+                this->createDumpFailed(static_cast<int>(entryId));
+            }
+            this->childPtrMap.erase(pid);
+        };
         try
         {
             childPtrMap.emplace(pid,
