@@ -239,12 +239,16 @@ uint32_t Manager::captureVhmcOemDump(
     {
         auto entryId = lastEntryId + 1;
         Child::Callback callback = [this, pid, entryId,
-                                    diagnosticType](Child&,
+                                    diagnosticType](Child& source,
                                                     const siginfo_t* si) {
-            // WSTOPPED also notifies on stop/continue; only exit is terminal.
+            // WSTOPPED also reports a stop (not a continue: there is no
+            // WCONTINUED); only an exit is terminal. The Child source is
+            // one-shot and already disabled here, so re-arm it on a stop,
+            // or the later exit is never seen.
             if (si->si_code != CLD_EXITED && si->si_code != CLD_KILLED &&
                 si->si_code != CLD_DUMPED)
             {
+                source.set_enabled(sdeventplus::source::Enabled::OneShot);
                 return;
             }
             this->vhmcOemDumpInProgress.erase(diagnosticType);
