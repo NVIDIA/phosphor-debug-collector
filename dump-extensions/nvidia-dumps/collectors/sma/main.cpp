@@ -32,8 +32,6 @@
 namespace
 {
 constexpr auto MCTP_VDM_UTIL = "/usr/bin/mctp-vdm-util";
-// download_log writes its binary payload here, not to stdout.
-constexpr auto MCTP_LOG_FILE = "/var/mctp-vdm-output.bin";
 } // namespace
 
 int main(int argc, char** argv)
@@ -84,14 +82,15 @@ int main(int argc, char** argv)
     {
         std::string outPath = stage + "/" + tgt.name + "_sma_dump.bin";
         // Logged verbatim into the report on failure.
-        std::string cmddump = std::string(MCTP_VDM_UTIL) +
-                              " -c download_log -t " + std::to_string(tgt.eid);
-        // Capture the binary log from MCTP_LOG_FILE; touch empty file on
-        // failure.
-        std::string cmd = std::format(
-            "rm -f {0}; {1} >/dev/null 2>&1; rc=$?; "
-            "if [ -f {0} ]; then mv -f {0} {2}; else touch {2}; fi; exit $rc",
-            MCTP_LOG_FILE, cmddump, outPath);
+        std::string cmddump =
+            std::string(MCTP_VDM_UTIL) + " -c download_log -t " +
+            std::to_string(tgt.eid) + " -f " + outPath;
+        // download_log writes the binary log to the -f file (unique per
+        // target, so concurrent collectors can't clobber the default output
+        // file); touch empty file on failure.
+        std::string cmd = std::format("rm -f {0}; {1} >/dev/null 2>&1; rc=$?; "
+                                      "[ -f {0} ] || touch {0}; exit $rc",
+                                      outPath, cmddump);
         if (runExternal(cmd) == 0)
         {
             anyOk = true;

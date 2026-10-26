@@ -38,8 +38,6 @@
 namespace
 {
 constexpr auto MCTP_VDM_UTIL = "/usr/bin/mctp-vdm-util";
-// mctp-vdm-util writes the download_log binary payload to this fixed file.
-constexpr auto MCTP_LOG_FILE = "/var/mctp-vdm-output.bin";
 // OCP-Recovery sweep tooling (CMS/OOBHUB); runs when OCPRecovery records exist.
 constexpr auto OCP_RECOVERY_TOOL = "/usr/bin/ocp-recovery-tool";
 constexpr auto I2C_TRANSFER = "i2ctransfer";
@@ -170,13 +168,14 @@ int main(int argc, char** argv)
         std::string outBase = stage + "/" + tgt.name;
         std::string eid = std::to_string(tgt.eid);
 
-        // download_log writes binary to MCTP_LOG_FILE; move on success, touch a
+        // download_log writes binary to the -f file (per-target, so concurrent
+        // collectors can't clobber the default output file); touch a
         // placeholder on failure for a deterministic file set.
         const std::string dlDest = outBase + "_dump.bin";
         std::string dlCmd = std::format(
-            "rm -f {0}; {1} -c download_log -t {2} >/dev/null 2>&1; rc=$?; "
-            "if [ -f {0} ]; then mv -f {0} {3}; else touch {3}; fi; exit $rc",
-            MCTP_LOG_FILE, MCTP_VDM_UTIL, eid, dlDest);
+            "rm -f {0}; {1} -c download_log -t {2} -f {0} >/dev/null 2>&1; "
+            "rc=$?; [ -f {0} ] || touch {0}; exit $rc",
+            dlDest, MCTP_VDM_UTIL, eid);
         if (runExternal(dlCmd) == 0)
         {
             anyOk = true;
