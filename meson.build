@@ -370,11 +370,6 @@ conf_data.set(
     get_option('FAULTLOG_DUMP_TOTAL_SIZE'),
     description: 'Total size of the dump in kilo bytes',
 )
-conf_data.set(
-    'FAULTLOG_DUMP_ROTATION',
-    get_option('faultlog-dump-rotation').enabled(),
-    description: 'Rotate dump when total size of dumps exceed the quota',
-)
 
 # Add PCore dump configuration values to main config.h
 conf_data.set(

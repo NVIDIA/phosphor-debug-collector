@@ -353,13 +353,6 @@ option(
 )
 
 option(
-    'faultlog-dump-rotation',
-    type: 'feature',
-    value: 'disabled',
-    description: 'Rotate dump when total size of dumps exceed the quota',
-)
-
-option(
     'CPER_DUMP_BIN_PATH',
     type: 'string',
     value: '/usr/bin/cper_dump.sh',

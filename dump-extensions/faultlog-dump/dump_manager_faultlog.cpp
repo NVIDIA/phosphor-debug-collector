@@ -89,7 +89,6 @@ void Manager::limitTotalDumpSize()
     }
 
     // Reached to maximum limit
-#ifdef FAULTLOG_DUMP_ROTATION
     log<level::ERR>("Not enough space: Deleting oldest dumps");
 
     // Delete the oldest dumps till free size is enough
@@ -113,11 +112,6 @@ void Manager::limitTotalDumpSize()
             xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
         elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
     }
-#else
-    using namespace sdbusplus::xyz::openbmc_project::Dump::Create::Error;
-    using Reason = xyz::openbmc_project::Dump::Create::QuotaExceeded::REASON;
-    elog<QuotaExceeded>(Reason("Not enough space: Delete old dumps"));
-#endif
 }
 
 sdbusplus::object_path Manager::createDump(
