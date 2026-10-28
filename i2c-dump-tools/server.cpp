@@ -6,7 +6,7 @@
 // them block by block in the I2C mailbox for hmc-dump-client to copy. Polls
 // the control EEPROM every second for a request.
 //
-// The mailbox EEPROMs are I2C target backends that hmc-mailboxd creates; the
+// The mailbox EEPROMs are I2C target backends that platform-init creates; the
 // server finds them in sysfs by their target address. A platform with another
 // mailbox layout passes it on the command line:
 //   --control-eeprom <path>     control EEPROM (default: target at 0x45)

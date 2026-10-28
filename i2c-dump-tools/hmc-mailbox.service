@@ -1,0 +1,14 @@
+[Unit]
+Description=HMC side of the BMC-HMC I2C mailbox commands
+# platform_init.service creates the mailbox EEPROMs and reports ready
+# once the HMC is up.
+Requires=platform_init.service
+After=platform_init.service
+
+[Service]
+Type=simple
+ExecStart=@bindir@/hmc-mailbox
+SyslogIdentifier=hmc-mailbox
+
+[Install]
+WantedBy=multi-user.target

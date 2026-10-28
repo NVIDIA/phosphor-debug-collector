@@ -241,6 +241,15 @@ option(
 )
 
 option(
+    'hmc-mailbox',
+    type: 'feature',
+    value: 'auto',
+    description: '''HMC side of the BMC<->HMC I2C mailbox commands
+        (hmc-mailbox); auto builds it unless openpower-dumps-extension is
+        enabled''',
+)
+
+option(
     'openpower-dumps-extension',
     type: 'feature',
     value: 'disabled',

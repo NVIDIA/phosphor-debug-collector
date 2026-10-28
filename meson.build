@@ -517,10 +517,11 @@ subdir('host-transport-extensions')
 #pick any architecture specific dumps
 subdir('dump-extensions')
 
-# The BMC<->HMC I2C dump tools. 'auto' leaves them out of OpenPower builds.
-if get_option('i2c-dump-tools').disable_auto_if(
-    get_option('openpower-dumps-extension').allowed(),
-).allowed()
+# The BMC<->HMC I2C mailbox tools. 'auto' leaves them out of OpenPower builds.
+openpower_dumps = get_option('openpower-dumps-extension').allowed()
+i2c_dump_tools = get_option('i2c-dump-tools').disable_auto_if(openpower_dumps)
+hmc_mailbox = get_option('hmc-mailbox').disable_auto_if(openpower_dumps)
+if i2c_dump_tools.allowed() or hmc_mailbox.allowed()
     subdir('i2c-dump-tools')
 endif
 

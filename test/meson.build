@@ -137,3 +137,16 @@ test(
     ),
     workdir: meson.current_source_dir(),
 )
+
+# hmc-mailbox's configuration file and runtime detection.
+test(
+    'hmc_mailbox_config_test',
+    executable(
+        'hmc_mailbox_config_test',
+        'hmc_mailbox_config_test.cpp',
+        include_directories: ['.', '../'],
+        implicit_include_directories: false,
+        dependencies: [gtest_dep, gmock_dep, phosphor_logging_dep],
+    ),
+    workdir: meson.current_source_dir(),
+)

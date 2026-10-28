@@ -2,14 +2,15 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES.
 // All rights reserved.
 
-// The I2C mailbox hmc-dump-client (BMC) and hmc-dump-server (HMC) talk over:
-// two I2C target EEPROMs the HMC exposes to the BMC.
+// The I2C mailbox between the BMC and the HMC: two I2C target EEPROMs the HMC
+// exposes to the BMC. hmc-dump-client (BMC) and hmc-dump-server (HMC) move
+// dumps over it; hmc-mailbox (HMC) carries out the BMC's other commands.
 //
-// Control EEPROM: byte 0 takes start/stop of the dump server, byte 1 the
-// opcode, bytes 2-17 arguments, byte 18 the request flag, byte 19 is set
-// while the command runs, byte 20 holds the return code, bytes 21-36 the
-// result. Data EEPROM: staged dump block size at 0x700 (big-endian), data at
-// 0x704.
+// Control EEPROM: byte 0 takes hmc-mailbox's command, among them start/stop
+// of the dump server, byte 1 the dump opcode, bytes 2-17 arguments, byte 18
+// the request flag, byte 19 is set while the command runs, byte 20 holds the
+// return code, bytes 21-36 the result. Data EEPROM: staged dump block size at
+// 0x700 (big-endian), data at 0x704.
 
 #pragma once
 
