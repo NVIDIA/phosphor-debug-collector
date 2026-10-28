@@ -31,6 +31,8 @@ namespace
 {
 constexpr auto HW_CHECKOUT_SH = "/usr/bin/hw_checkout.sh";
 constexpr auto HW_CHECKOUT_JSON = "/tmp/hw_checkout_output.json";
+// Shared log hmc_checker.sh appends to; cleared before each run
+constexpr auto HMC_CHECKER_LOG = "/tmp/hmc_checker.log";
 // Optional platform MCTP status report; runs when installed
 constexpr auto MCTP_STATUS_SH = "/usr/bin/dump_mctp_status.sh";
 } // namespace
@@ -76,6 +78,14 @@ int main(int argc, char** argv)
         lg2::warning("Failed to clear {FILE} (rc={RC}); a stale result from an "
                      "earlier dump may be staged",
                      "FILE", HW_CHECKOUT_JSON, "RC", rmRc);
+    }
+
+    // Start with an empty checker log so the archive holds only this run.
+    const int logRc = runExternal(std::format(": > {}", HMC_CHECKER_LOG));
+    if (logRc != 0)
+    {
+        lg2::warning("Failed to clear {FILE} (rc={RC})", "FILE",
+                     HMC_CHECKER_LOG, "RC", logRc);
     }
 
     // Exit code is not checked: not interpretable uniformly across platforms.
