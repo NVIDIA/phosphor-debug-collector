@@ -30,6 +30,7 @@ endif
 nvidia_collectors_incdir = include_directories(
     '.',
     'collectors',
+    '../..',
 )
 
 nvidia_collector_dep = [
