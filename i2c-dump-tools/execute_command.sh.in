@@ -1,0 +1,3 @@
+#!/bin/sh
+# Entry point i2c-dump-util users call; hmc-dump-client does the work.
+exec @bindir@/hmc-dump-client exec "$@"

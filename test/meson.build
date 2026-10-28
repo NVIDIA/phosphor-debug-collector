@@ -124,3 +124,16 @@ test(
     ),
     workdir: meson.current_source_dir(),
 )
+
+# The I2C mailbox tools' configuration file reader.
+test(
+    'conf_file_test',
+    executable(
+        'conf_file_test',
+        'conf_file_test.cpp',
+        include_directories: ['.', '../'],
+        implicit_include_directories: false,
+        dependencies: [gtest_dep, gmock_dep],
+    ),
+    workdir: meson.current_source_dir(),
+)
