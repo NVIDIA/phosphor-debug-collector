@@ -73,7 +73,7 @@ test(
 
 # lookupCreateParam() and the BMC (Manager) OEM allowable values live in the
 # NVIDIA dump extension; the allowable-values case only runs with vhmc-host.
-if get_option('nvidia-dumps-extension').enabled()
+if not get_option('openpower-dumps-extension').allowed()
     test(
         'oem_dump_utils_test',
         executable(

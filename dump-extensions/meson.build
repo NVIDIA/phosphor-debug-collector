@@ -2,10 +2,8 @@
 
 if get_option('openpower-dumps-extension').allowed()
     subdir('openpower-dumps')
-elif get_option('nvidia-dumps-extension').enabled()
-    subdir('nvidia-dumps')
 else
-    subdir('default')
+    subdir('nvidia-dumps')
 endif
 
 if get_option('faultlog-dump-extension').enabled()

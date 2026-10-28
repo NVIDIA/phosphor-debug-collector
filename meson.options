@@ -232,13 +232,6 @@ option(
 )
 
 option(
-    'nvidia-dumps-extension',
-    type: 'feature',
-    value: 'enabled',
-    description: 'Enable Nvidia system specific dumps',
-)
-
-option(
     'openpower-dumps-extension',
     type: 'feature',
     value: 'disabled',
