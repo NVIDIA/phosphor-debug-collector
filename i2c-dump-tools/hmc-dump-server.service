@@ -1,0 +1,13 @@
+[Unit]
+Description=HMC dump server
+After=hmc-boot-complete.service
+After=create-dump-dbus.service
+
+[Service]
+Restart=no
+RemainAfterExit=true
+Type=simple
+ExecStart=@bindir@/hmc-dump-server
+SyslogIdentifier=hmc-dump-server
+
+[Install]

@@ -111,3 +111,16 @@ test(
     ),
     workdir: meson.current_source_dir(),
 )
+
+# The hmc-dump-server pieces that need neither D-Bus nor the HMC mailbox.
+test(
+    'hmc_dump_server_test',
+    executable(
+        'hmc_dump_server_test',
+        'hmc_dump_server_test.cpp',
+        include_directories: ['.', '../'],
+        implicit_include_directories: false,
+        dependencies: [gtest_dep, gmock_dep],
+    ),
+    workdir: meson.current_source_dir(),
+)

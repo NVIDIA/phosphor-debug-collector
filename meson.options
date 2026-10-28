@@ -232,6 +232,15 @@ option(
 )
 
 option(
+    'i2c-dump-tools',
+    type: 'feature',
+    value: 'auto',
+    description: '''BMC<->HMC I2C dump tools (hmc-dump-client and
+        hmc-dump-server); auto builds them unless openpower-dumps-extension
+        is enabled''',
+)
+
+option(
     'openpower-dumps-extension',
     type: 'feature',
     value: 'disabled',
