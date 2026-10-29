@@ -1,0 +1,25 @@
+#!/bin/bash
+#
+# IRoT/VRoT data via rot_dump (no-op without /usr/bin/rot_dump).
+
+# shellcheck source=tools/dreport.d/include.d/functions_dump_log
+source "$DREPORT_INCLUDE"/functions_dump_log
+
+function take_irot_dumps()
+{
+    if [ ! -x /usr/bin/rot_dump ]; then
+        return 0
+    fi
+
+    dump_log_msg "Starting IRoT data collection..."
+    irot_tmp=$(mktemp -d -t irot_dump.XXXXXX)
+    if ! timeout 30 /usr/bin/rot_dump -o "$irot_tmp"; then
+        dump_log_msg "IRoT/VRoT collection failed or no devices found"
+    fi
+    for f in "$irot_tmp"/*; do
+        [ -f "$f" ] || continue
+        add_copy_file "$f" "IRoT Dump"
+    done
+    rm -rf "$irot_tmp"
+    dump_log_msg "IRoT data collection completed"
+}

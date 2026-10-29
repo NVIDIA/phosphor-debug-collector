@@ -1,0 +1,9 @@
+#!/bin/bash
+#
+# Timestamped progress line for the device dump helpers
+# (functions_erot_dump, functions_irot_dump, functions_cpld_dump).
+
+function dump_log_msg()
+{
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$(basename "$0")]: $1"
+}

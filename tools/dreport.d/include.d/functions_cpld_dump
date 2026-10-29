@@ -1,0 +1,49 @@
+#!/bin/bash
+#
+# CPLD register table (0x00-0xff of the CPLD at 0x31, register page
+# 0x25) on CPLD_I2C_BUS from /etc/platform_config (bus 5 without it).
+
+# shellcheck source=tools/dreport.d/include.d/functions_dump_log
+source "$DREPORT_INCLUDE"/functions_dump_log
+
+PLATFORM_CONFIG_FILE="/etc/platform_config"
+
+function take_cpld_dump_internal()
+{
+    echo -n "Offset "
+    for col in {0..15}; do
+        printf "%02x " "$col"
+    done
+    echo
+
+    if [ -f "$PLATFORM_CONFIG_FILE" ]; then
+        # shellcheck disable=SC1090
+        source "$PLATFORM_CONFIG_FILE"
+    else
+        CPLD_I2C_BUS=5
+    fi
+
+    for ((row=0; row<=240; row+=16)); do
+        printf "0x%02x:  " $row
+        for ((col=0; col<16; col++)); do
+            hex_offset=$(printf "%02x" $((row + col)))
+            raw_output=$(i2ctransfer -f -y "$CPLD_I2C_BUS" w2@0x31 0x25 "0x$hex_offset" r1 2>/dev/null)
+            byte=$(echo "$raw_output" | awk 'match($0, /0x[0-9a-fA-F]{2}/) {print substr($0, RSTART+2, 2)}')
+            if [[ $byte =~ ^[0-9a-fA-F]{2}$ ]]; then
+                printf "%02x " "0x$byte"
+            else
+                printf '%s' '-- '
+            fi
+        done
+        echo
+    done
+}
+
+function take_cpld_dump()
+{
+    dump_log_msg "Starting CPLD data collection..."
+    timeout 20s bash -c "source $DREPORT_INCLUDE/functions_cpld_dump; take_cpld_dump_internal" > /tmp/cpld_dump.log
+    add_copy_file "/tmp/cpld_dump.log" "CPLD Dump"
+    rm -rf /tmp/cpld_dump.log
+    dump_log_msg "CPLD data collection completed"
+}

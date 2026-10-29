@@ -1,0 +1,93 @@
+#!/bin/bash
+#
+# ERoT logs via MCTP download_log, one per ERoT. Targets come from
+# /etc/erot-dump.conf, one "<eid> <name>" per line; without that file
+# the ERoT dump is a no-op.
+
+# shellcheck source=tools/dreport.d/include.d/functions_dump_log
+source "$DREPORT_INCLUDE"/functions_dump_log
+
+declare -a dump_eids=()
+declare -A erot_names=()
+if [ -r /etc/erot-dump.conf ]; then
+    while read -r eid name; do
+        [[ -z "$eid" || "$eid" == \#* ]] && continue
+        dump_eids+=("$eid")
+        erot_names[$eid]="$name"
+    done < /etc/erot-dump.conf
+fi
+
+function take_erot_dumps()
+{
+    declare -a pids
+    timeout_seconds=30
+    start_time=$(date +%s)
+
+    dump_log_msg "Starting EROT data collection..."
+    for device_id in "${dump_eids[@]}"; do
+        device_name="${erot_names[$device_id]}"
+        device_file_name="/tmp/$device_name.log"
+
+        : > "$device_file_name"
+
+        (
+            if timeout "$timeout_seconds" mctp-vdm-util -t "$device_id" -c download_log -f "$device_file_name"; then
+                dump_log_msg "Success creating erot dump for $device_name"
+                touch "${device_file_name}.done"
+            else
+                status=$?
+                if [ $status -eq 124 ]; then
+                    dump_log_msg "Timeout occurred while running erot dump for $device_name"
+                    echo "Timeout occurred while running erot dump" > "$device_file_name"
+                else
+                    dump_log_msg "Error occurred while running erot dump for $device_name (status: $status)"
+                    echo "Error occurred while running erot dump (status: $status)" > "$device_file_name"
+                fi
+                touch "${device_file_name}.done"
+            fi
+        ) &
+        pids+=($!)
+    done
+
+    dump_log_msg "Waiting for EROT data collection to complete..."
+    while true; do
+        elapsed=$(($(date +%s) - start_time))
+        if [ $elapsed -ge $timeout_seconds ]; then
+            dump_log_msg "Timeout reached. Stopping collection..."
+            break
+        fi
+
+        all_completed=true
+        for device_id in "${dump_eids[@]}"; do
+            if [ ! -f "/tmp/${erot_names[$device_id]}.log.done" ]; then
+                all_completed=false
+                break
+            fi
+        done
+        if [ "$all_completed" = true ]; then
+            dump_log_msg "All EROT dumps have completed"
+            break
+        fi
+        sleep 0.5
+    done
+
+    for pid in "${pids[@]}"; do
+        kill -9 "$pid" 2>/dev/null || true
+    done
+
+    dump_log_msg "Processing EROT dump files..."
+    for device_id in "${dump_eids[@]}"; do
+        device_name="${erot_names[$device_id]}"
+        device_file_name="/tmp/$device_name.log"
+        if [ -f "$device_file_name" ]; then
+            add_copy_file "$device_file_name" "$device_name Dump"
+        else
+            dump_log_msg "Warning: $device_file_name not found"
+        fi
+    done
+
+    rm -f /tmp/erot_*.log
+    for device_id in "${dump_eids[@]}"; do
+        rm -f "/tmp/${erot_names[$device_id]}.log.done"
+    done
+}
