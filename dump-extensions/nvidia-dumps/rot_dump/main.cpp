@@ -5,6 +5,8 @@
  * ROT dump collector. Invoked by erot_dump.sh with -o <dir>
  * to collect discovery-based IROT/VROT entries (NSM via nsmd
  * D-Bus Raw API) into an existing workspace directory.
+ * Optional -e <eid> (repeatable) collects only those EIDs;
+ * discovery still runs, unmatched endpoints are skipped.
  */
 
 #include "config.h"
@@ -19,9 +21,9 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -65,6 +67,8 @@ constexpr uint8_t NSM_MSG_FORMAT_VERSION = 1;
 constexpr uint8_t NSM_DEVICE_ROLE = 0;
 
 constexpr int PROBE_TIMEOUT_MS = 1000;
+constexpr uint8_t MCTP_EID_MIN = 8;
+constexpr uint8_t MCTP_EID_MAX = 254;
 
 struct NsmDeviceInfo
 {
@@ -707,10 +711,12 @@ static std::unordered_map<uint32_t, std::string> loadEidNameMap(
 }
 
 // Discover ROT targets via D-Bus (MCTP endpoints with PCI VDM + DCD probe).
+// If wanted is non-empty, skip other EIDs before PCI-VDM / RoT probes.
 using EidNamePair = std::pair<uint32_t, std::string>;
 static std::vector<EidNamePair> discoverRotTargets(
     sdbusplus::bus_t& bus, NsmDbusClient& client,
-    const std::unordered_map<uint32_t, std::string>& eidNameMap)
+    const std::unordered_map<uint32_t, std::string>& eidNameMap,
+    const std::set<uint32_t>& wanted)
 {
     std::vector<EidNamePair> targets;
     const char* mapperService = "xyz.openbmc_project.ObjectMapper";
@@ -774,6 +780,11 @@ static std::vector<EidNamePair> discoverRotTargets(
             eid = std::get<uint16_t>(eidVar);
         }
         else
+        {
+            continue;
+        }
+
+        if (!wanted.empty() && !wanted.contains(eid))
         {
             continue;
         }
@@ -939,23 +950,56 @@ static bool collectBootStatusForEid(NsmDbusClient& client,
     return true;
 }
 
+static bool parseEidArg(const char* arg, uint32_t& eid)
+{
+    if (arg == nullptr || *arg == '\0')
+    {
+        return false;
+    }
+
+    uint32_t parsed = 0;
+    const char* end = arg + std::strlen(arg);
+    const auto [ptr, ec] = std::from_chars(arg, end, parsed);
+    if (ec != std::errc{} || ptr != end || parsed < MCTP_EID_MIN ||
+        parsed > MCTP_EID_MAX)
+    {
+        return false;
+    }
+
+    eid = parsed;
+    return true;
+}
+
 int main(int argc, char* argv[])
 {
     std::string outputDirArg;
+    std::set<uint32_t> eids;
 
     int c;
-    while ((c = getopt(argc, argv, "ho:")) != -1)
+    while ((c = getopt(argc, argv, "ho:e:")) != -1)
     {
         switch (c)
         {
             case 'h':
                 std::cout
-                    << "Usage: rot_dump [-h] -o <output_dir>\n"
-                       "  -o  (required) directory to place IROT/VROT files\n";
+                    << "Usage: rot_dump [-h] -o <output_dir> [-e <eid>]\n"
+                       "  -o  (required) directory to place IROT/VROT files\n"
+                       "  -e  collect only this MCTP EID (repeatable)\n";
                 return 0;
             case 'o':
                 outputDirArg = optarg;
                 break;
+            case 'e':
+            {
+                uint32_t eid = 0;
+                if (!parseEidArg(optarg, eid))
+                {
+                    std::cerr << "invalid EID '" << optarg << "'\n";
+                    return 1;
+                }
+                eids.insert(eid);
+                break;
+            }
             default:
                 return 1;
         }
@@ -970,14 +1014,13 @@ int main(int argc, char* argv[])
     fs::path outputDir(outputDirArg);
     fs::create_directories(outputDir);
 
-    bool anyOutput = false;
-
     sdbusplus::bus_t bus = sdbusplus::bus::new_default();
     NsmDbusClient nsmClient(bus);
     auto eidNameMap = loadEidNameMap(MCTP_EID_CSV_PATH);
     std::vector<EidNamePair> rotTargets =
-        discoverRotTargets(bus, nsmClient, eidNameMap);
+        discoverRotTargets(bus, nsmClient, eidNameMap, eids);
 
+    std::set<uint32_t> collected;
     for (const auto& [eid, name] : rotTargets)
     {
         bool targetProducedOutput = false;
@@ -989,10 +1032,34 @@ int main(int argc, char* argv[])
         {
             targetProducedOutput = true;
         }
-        anyOutput = anyOutput || targetProducedOutput;
+        if (targetProducedOutput)
+        {
+            collected.insert(eid);
+        }
     }
 
-    if (!anyOutput)
+    if (!eids.empty())
+    {
+        bool missing = false;
+        for (uint32_t eid : eids)
+        {
+            if (!collected.contains(eid))
+            {
+                std::cerr << "No ROT data collected for EID " << eid
+                          << std::endl;
+                missing = true;
+            }
+        }
+        if (missing)
+        {
+            if (!collected.empty())
+            {
+                pruneIntermediateArtifacts(outputDir);
+            }
+            return 1;
+        }
+    }
+    else if (collected.empty())
     {
         std::cerr << "No ROT data collected from NSM discovery" << std::endl;
         return 1;
