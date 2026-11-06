@@ -1194,6 +1194,20 @@ void Manager::removeWatch(const fs::path& path)
 
 void Manager::restore()
 {
+    // Leftover nsm-dump-tool staging from reboot or dump-manager restart.
+    for (const char* sub : {"NetIR_dump", "Diagnostics_dump"})
+    {
+        const fs::path root = fs::path(NSM_DUMP_TEMP_PATH) / sub;
+        std::error_code ec;
+        fs::remove_all(root, ec);
+        if (ec)
+        {
+            log<level::ERR>(fmt::format("Failed to remove staging {}: {}",
+                                        root.string(), ec.message())
+                                .c_str());
+        }
+    }
+
     fs::path dir(dumpDir);
     if (!fs::exists(dir) || fs::is_empty(dir))
     {
