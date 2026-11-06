@@ -1,21 +1,19 @@
 #!/bin/bash
 #
 # config: 24 60
-# @brief: Collect Journal pretty log information.
+# @brief: Collect Journal export log information.
 #
 
 # shellcheck source=tools/dreport.d/include.d/functions
 . "$DREPORT_INCLUDE"/functions
 
-desc="Journal pretty log"
-file_name="journal-pretty.log.zst"
+desc="Journal export log"
+file_name="journal.export.zst"
 out_file="$name_dir/$file_name"
-command="journalctl --namespace=* -o json-pretty"
+command="journalctl --namespace=* -o export"
 
-# json-pretty of a large journal expands ~10-20x. Stream it straight through
-# zstd so the uncompressed text is never fully staged; only the compressed
-# file grows on disk. zstd is fast and low-memory on the BMC. The pipeline
-# exit status is zstd's, checked directly (PIPESTATUS is unreliable here).
+# Export is ~4x faster than json-pretty and keeps every field. To read it:
+# zstd -dc <file> | systemd-journal-remote -o d/j.journal -; journalctl -D d
 if eval "$command" 2>/dev/null | zstd -q -c >"$out_file" && [ -s "$out_file" ]; then
     if check_size "$out_file"; then
         log_info "Collected $desc"
