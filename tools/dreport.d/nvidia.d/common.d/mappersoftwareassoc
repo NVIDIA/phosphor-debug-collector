@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+#
+# config: 2 20
+# @brief: Collect ObjectMapper association endpoints under the software tree.
+#
+
+# shellcheck source=tools/dreport.d/include.d/functions
+. "$DREPORT_INCLUDE"/functions
+
+desc="mapper software associations"
+file_name="mapper-software-associations.log"
+
+MAPPER_SVC="xyz.openbmc_project.ObjectMapper"
+MAPPER_PATH="/xyz/openbmc_project/object_mapper"
+MAPPER_IFACE="xyz.openbmc_project.ObjectMapper"
+ASSOC_IFACE="xyz.openbmc_project.Association"
+SW_ROOT="/xyz/openbmc_project/software"
+
+# @brief: Print the object paths in a busctl "as N ..." reply, one per line.
+__paths_from_reply() {
+    grep -oE '"[^"]+"' | tr -d '"'
+}
+
+# @brief: List mapper association objects under SW_ROOT.
+#         Falls back to probing ActiveSlot/InactiveSlot per software object.
+#         Returns 1 if neither mapper query succeeds.
+__assoc_paths() {
+    local reply paths obj rc=1
+
+    if reply=$(busctl call "$MAPPER_SVC" "$MAPPER_PATH" "$MAPPER_IFACE" \
+        GetSubTreePaths sias "$SW_ROOT" 0 1 "$ASSOC_IFACE" 2>/dev/null); then
+        rc=0
+        paths=$(__paths_from_reply <<< "$reply")
+        if [ -n "$paths" ]; then
+            printf '%s\n' "$paths"
+            return 0
+        fi
+    fi
+
+    if reply=$(busctl call "$MAPPER_SVC" "$MAPPER_PATH" "$MAPPER_IFACE" \
+        GetSubTreePaths sias "$SW_ROOT" 1 0 2>/dev/null); then
+        rc=0
+        __paths_from_reply <<< "$reply" | while read -r obj; do
+            printf '%s/ActiveSlot\n%s/InactiveSlot\n' "$obj" "$obj"
+        done
+    fi
+
+    return "$rc"
+}
+
+# @brief: Print one association's endpoints; flag slot lists with >1 entry.
+__dump_endpoints() {
+    local path=$1 out count
+
+    printf '%s\n' "$path"
+    if ! out=$(busctl get-property "$MAPPER_SVC" "$path" "$ASSOC_IFACE" \
+        endpoints 2>&1); then
+        printf '    ERROR: %s\n' "$out"
+        return
+    fi
+    printf '    %s\n' "$out"
+
+    count=$(awk '{print $2}' <<< "$out")
+    case "$path" in
+        */ActiveSlot | */InactiveSlot)
+            if [ "${count:-0}" -gt 1 ] 2>/dev/null; then
+                printf '    WARNING: %s endpoints, expected 1\n' "$count"
+            fi
+            ;;
+    esac
+}
+
+__collect() {
+    local paths path
+
+    if ! paths=$(__assoc_paths); then
+        return 1
+    fi
+    if [ -z "$paths" ]; then
+        printf 'No mapper associations found under %s\n' "$SW_ROOT"
+        return
+    fi
+
+    while read -r path; do
+        __dump_endpoints "$path"
+    done <<< "$paths"
+}
+
+add_cmd_output "__collect" "$file_name" "$desc"
