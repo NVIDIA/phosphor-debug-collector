@@ -94,18 +94,16 @@ void CreateDumpDbus::waitForDumpCreation(const std::string& entryPath)
         "xyz.openbmc_project.Common.Progress.OperationStatus.Completed";
 
     int fails = 0;
-    unsigned time_p = 0;
+    // manager's 3600 s entry limit plus two of its 45 s progress ticks
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::minutes(60) + std::chrono::seconds(90);
 
     while (true)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-        // if dump collector will not change status after 30 minutes throws
-        // exception
-        if (time_p > 1000 * 60 * 30)
-        {
-            throw CreateDumpDbusException("Dump creation timed out.");
-        }
+        // sampled before the read so a final status read follows the deadline
+        const bool expired = std::chrono::steady_clock::now() > deadline;
 
         try
         {
@@ -141,7 +139,10 @@ void CreateDumpDbus::waitForDumpCreation(const std::string& entryPath)
             }
         }
 
-        time_p += 50;
+        if (expired)
+        {
+            throw CreateDumpDbusException("Dump creation timed out.");
+        }
     }
 }
 
